@@ -15,3 +15,14 @@ def test_kill_unkill(tmp_path):
     assert (tmp_path / "KILL").exists()
     main(["--home", str(tmp_path), "unkill"])
     assert not (tmp_path / "KILL").exists()
+
+
+def test_backtest_demo_writes_report(tmp_path, capsys):
+    assert main(["--home", str(tmp_path), "backtest", "--demo", "--symbol", "BTC-EUR", "--bars", "800"]) == 0
+    out = capsys.readouterr().out
+    assert "NEP-DATA" in out and "BTC-EUR" in out
+    assert list((tmp_path / "reports").glob("backtest-*-demo.md"))
+
+
+def test_backtest_without_data_fails_cleanly(tmp_path):
+    assert main(["--home", str(tmp_path), "backtest"]) == 1

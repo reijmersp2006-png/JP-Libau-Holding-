@@ -32,3 +32,22 @@ jobs:
       - run: jplh doctor
       - run: jplh collect --limit 48
       - run: jplh status
+
+  backtest:
+    # Walk-forward-backtest op echte dagkoersen (tot ~4-5 jaar terug). Het rapport komt in
+    # de samenvatting van deze job en als download (artifact). Blokkeert de PR niet.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: jplh collect --interval 1d --limit 1440
+      - run: jplh backtest --interval 1d
+      - run: cat reports/backtest-*.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backtest-rapport
+          path: reports/

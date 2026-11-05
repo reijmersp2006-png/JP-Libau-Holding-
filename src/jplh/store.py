@@ -84,11 +84,21 @@ class Store:
         rows = self.db.execute(sql, args).fetchall()
         return [Candle(_dt(r[0]), *r[1:]) for r in reversed(rows)]
 
-    def latest_close(self, symbol: str, interval: str = "1h") -> tuple[datetime, float] | None:
-        row = self.db.execute(
-            "SELECT ts, close FROM candles WHERE symbol=? AND interval=? ORDER BY ts DESC LIMIT 1",
-            (symbol, interval)).fetchone()
+    def latest_close(self, symbol: str, interval: str = "1h",
+                     known_at: datetime | None = None) -> tuple[datetime, float] | None:
+        sql, args = "SELECT ts, close FROM candles WHERE symbol=? AND interval=?", [symbol, interval]
+        if known_at is not None:
+            sql, args = sql + " AND fetched_at <= ?", args + [_iso(known_at)]
+        row = self.db.execute(sql + " ORDER BY ts DESC LIMIT 1", args).fetchone()
         return (_dt(row[0]), row[1]) if row else None
+
+    def save_observed(self, symbol: str, interval: str, candles: list[Candle], source: str, step) -> None:
+        """Voor demo's en tests: elke candle telt als opgehaald direct na zijn sluiting."""
+        self.db.executemany(
+            "INSERT OR IGNORE INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+            [(symbol, interval, _iso(c.ts), c.open, c.high, c.low, c.close, c.volume, source,
+              _iso(c.ts + step)) for c in candles])
+        self.db.commit()
 
     def candle_counts(self) -> dict[str, int]:
         return dict(self.db.execute("SELECT symbol, COUNT(*) FROM candles GROUP BY symbol"))

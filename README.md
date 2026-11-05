@@ -10,7 +10,7 @@ welke strategieën na kosten echt iets opleveren, en de rest uit te zetten.
 
 Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 
-## Status: fase 1, het fundament
+## Status: fase 1 tot en met 4
 
 | Onderdeel | Wat het doet |
 | --- | --- |
@@ -21,8 +21,21 @@ Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 | Paper-broker | Vult tegen de laatste koers met fee en slippage per afdeling |
 | Logboek | Elke beslissing met reden en alle risico-checks, in de database en per dag als JSONL |
 
-Nog niet gebouwd: strategieën en backtest-lab (fase 2), 24/7 paper trading (fase 3),
-het HQ-game-dashboard (fase 4) en de leerlus (fase 5).
+| Strategieën | Trend (gemiddelden), momentum, uitbraak en terugkeer naar het gemiddelde, met koop-en-houd als maatlat |
+| Backtest-lab | Walk-forward: instellingen kiezen op oude data, testen op nieuwe. Handelt pas op de volgende opening, met dezelfde kosten als paper |
+
+| Afdelingen | Elke afdeling heeft een eigen potje nepgeld (crypto €300, memecoins €50, aandelen €350, goud/zilver €150, valuta €150), eigen boekhouding en logboek |
+| Leerlus | Elke week kiest elke afdeling per instrument de strategie die de laatste 500 dagen het best werkte voor risico, na kosten. Koop-en-houd doet mee en wint als niets duidelijk beter is |
+| 24/7 paper | GitHub Actions draait elk uur een ronde (`.github/workflows/paper.yml`). De stand staat op de branch `paper-data` |
+| HQ-dashboard | Een eiland in game-stijl met een gebouw per afdeling, levensbalk (risicoruimte), dagbudget, levels, missies en een logboek. Staat op GitHub Pages |
+
+Nog niet gebouwd: het wekelijkse leerrapport en nabesprekingen per trade (fase 5).
+
+## Het dashboard openen
+
+- **Online**: `https://reijmersp2006-png.github.io/JP-Libau-Holding-/` (eenmalig aanzetten: Settings,
+  Pages, bij Source kies je "GitHub Actions").
+- **Lokaal met nep-data**: `jplh dashboard --demo` opent het in je browser.
 
 ## Risicogrenzen
 
@@ -55,6 +68,11 @@ jplh selftest        # hele keten testen met nep-koersen
 jplh collect         # nieuwste koersen ophalen voor alle afdelingen
 jplh collect --demo  # nep-koersen, zonder internet
 jplh status          # vermogen, posities, laatste gebeurtenissen
+jplh collect --interval 1d --limit 1440   # dagkoersen van jaren terug
+jplh backtest        # walk-forward-backtest, rapport in reports/
+jplh backtest --demo # zelfde, met nep-koersen
+jplh run             # één paper-ronde voor alle afdelingen + dashboard bijwerken
+jplh dashboard       # dashboard openen (met --demo: nep-wereld)
 jplh kill / unkill   # noodstop aan / uit
 jplh resume          # pauze na een te grote daling opheffen
 pytest               # alle tests
@@ -77,6 +95,13 @@ src/jplh/
   ledger.py    boekhouding
   journal.py   logboek
   holding.py   de keten: signaal -> risico -> broker -> boekhouding -> logboek
+  strategies.py  strategieën (alleen signalen, kunnen niet in de toekomst kijken)
+  backtest.py  backtest-motor en walk-forward
+  report.py    backtest-rapport per afdeling
+  desks.py     de vijf afdelingen, elk met eigen potje en weekkeuze van strategieën
+  paper.py     één paper-ronde voor de hele holding, en de demo-wereld
+  site.py      stand voor het dashboard (state.json)
+  hq/          het game-dashboard (één HTML-bestand)
   collect.py   koersen verzamelen
   cli.py       opdrachtregel
 ```

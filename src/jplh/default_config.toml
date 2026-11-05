@@ -142,6 +142,17 @@ stocks = 0.50
 metals = 0.30
 fx = 0.20
 
+# ---------------------------------------------------------------- afdelingen
+# Elke afdeling krijgt een eigen deel van het startkapitaal en handelt los van de rest.
+# Per afdeling nooit meer dan risk.max_class_pct.
+
+[desks]
+crypto = 0.30
+meme = 0.05
+stocks = 0.35
+metals = 0.15
+fx = 0.15
+
 # ---------------------------------------------------------------- kosten (paper)
 # Aannames, bewust aan de voorzichtige kant. Controleer bij de echte broker.
 # fee_pct: commissie per order  slippage_pct: hoeveel slechter je vult dan de koers
