@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from jplh.config import HoldingConfig
 from jplh.data import CandleSource, DataError, DexScreener, ECB
@@ -32,7 +32,8 @@ def collect_candles(config: HoldingConfig, store: Store, sources: dict[str, Cand
         try:
             candles = src.candles(inst.symbol, interval, limit)
             # Nooit een candle opslaan die op dit moment nog niet gesloten was.
-            candles = [c for c in candles if c.ts < now]
+            step = timedelta(days=1) if interval == "1d" else timedelta(hours=1)
+            candles = [c for c in candles if c.ts + step <= now]
             n = store.save_candles(inst.symbol, interval, candles, src.name, now)
             results.append(CollectResult(inst.symbol, True, n))
         except (DataError, KeyError, ValueError, TypeError) as exc:

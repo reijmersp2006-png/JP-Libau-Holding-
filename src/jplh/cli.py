@@ -55,8 +55,8 @@ def cmd_collect(args) -> int:
         sources = {"bitvavo": demo, "yahoo": demo}
     else:
         sources = {"bitvavo": Bitvavo(), "yahoo": Yahoo()}
-    results = collect_candles(config, store, sources, limit=args.limit, now=now)
-    if not args.demo:
+    results = collect_candles(config, store, sources, interval=args.interval, limit=args.limit, now=now)
+    if not args.demo and args.interval == "1h":
         results += collect_fx_reference(config, store, now=now)
         if not args.no_radar:
             results += collect_radar(store, now=now)
@@ -69,6 +69,37 @@ def cmd_collect(args) -> int:
             print(f"FAIL  {r.symbol}: {r.error}")
     print(f"{len(results) - bad} van {len(results)} gelukt")
     return 1 if bad == len(results) else 0
+
+
+def cmd_backtest(args) -> int:
+    """Walk-forward-backtest van alle strategieën per afdeling, met rapport in reports/."""
+    from jplh.backtest import run_lab
+    from jplh.report import backtest_report
+
+    config = load_config(_paths(args.home)[0])
+    instruments = [i for i in config.instruments if not args.symbol or i.symbol in args.symbol]
+    now = datetime.now(tz=UTC)
+    if args.demo:
+        demo = Demo({i.symbol: i.asset_class.value for i in config.instruments}, end=now)
+        candles_of = {i.symbol: demo.candles(i.symbol, args.interval, args.bars) for i in instruments}
+    else:
+        store = Store(_paths(args.home)[1])
+        candles_of = {i.symbol: store.candles(i.symbol, args.interval) for i in instruments}
+        short = [s for s, c in candles_of.items() if len(c) < args.train + args.test]
+        if short:
+            print(f"Te weinig koersen voor: {', '.join(short)}. Draai eerst "
+                  f"'jplh collect --interval {args.interval} --limit 1500'.")
+    results = run_lab(instruments, candles_of, config.costs, args.interval, args.train, args.test)
+    if not results:
+        print("Geen enkel instrument heeft genoeg koersen voor een backtest.")
+        return 1
+    report = backtest_report(results, instruments, args.interval, args.train, args.test, now, args.demo)
+    out = args.home / "reports" / f"backtest-{now:%Y-%m-%d}{'-demo' if args.demo else ''}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report, encoding="utf-8")
+    print(report)
+    print(f"Rapport opgeslagen in {out}")
+    return 0
 
 
 def cmd_status(args) -> int:
@@ -147,9 +178,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="controleer of alle databronnen bereikbaar zijn").set_defaults(fn=cmd_doctor)
     c = sub.add_parser("collect", help="haal de nieuwste koersen op voor alle afdelingen")
     c.add_argument("--demo", action="store_true", help="nep-koersen, werkt zonder internet")
-    c.add_argument("--limit", type=int, default=200, help="aantal uurcandles per instrument")
+    c.add_argument("--limit", type=int, default=200, help="aantal candles per instrument")
+    c.add_argument("--interval", choices=["1h", "1d"], default="1h", help="uur- of dagkoersen")
     c.add_argument("--no-radar", action="store_true", help="sla de memecoin-radar over")
     c.set_defaults(fn=cmd_collect)
+    b = sub.add_parser("backtest", help="walk-forward-backtest van alle strategieën per afdeling")
+    b.add_argument("--interval", choices=["1h", "1d"], default="1d")
+    b.add_argument("--train", type=int, default=500, help="perioden om instellingen op te kiezen")
+    b.add_argument("--test", type=int, default=125, help="perioden om daarna op te testen")
+    b.add_argument("--symbol", action="append", help="alleen dit instrument (mag vaker)")
+    b.add_argument("--demo", action="store_true", help="nep-koersen, werkt zonder internet")
+    b.add_argument("--bars", type=int, default=1200, help="aantal nep-koersen bij --demo")
+    b.set_defaults(fn=cmd_backtest)
     sub.add_parser("status", help="vermogen, posities en laatste gebeurtenissen").set_defaults(fn=cmd_status)
     sub.add_parser("kill", help="noodstop: geen enkele order meer").set_defaults(fn=cmd_kill)
     sub.add_parser("unkill", help="noodstop opheffen").set_defaults(fn=cmd_unkill)

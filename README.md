@@ -10,7 +10,7 @@ welke strategieën na kosten echt iets opleveren, en de rest uit te zetten.
 
 Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 
-## Status: fase 1, het fundament
+## Status: fase 1 (fundament) en fase 2 (backtest-lab)
 
 | Onderdeel | Wat het doet |
 | --- | --- |
@@ -21,7 +21,10 @@ Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 | Paper-broker | Vult tegen de laatste koers met fee en slippage per afdeling |
 | Logboek | Elke beslissing met reden en alle risico-checks, in de database en per dag als JSONL |
 
-Nog niet gebouwd: strategieën en backtest-lab (fase 2), 24/7 paper trading (fase 3),
+| Strategieën | Trend (gemiddelden), momentum, uitbraak en terugkeer naar het gemiddelde, met koop-en-houd als maatlat |
+| Backtest-lab | Walk-forward: instellingen kiezen op oude data, testen op nieuwe. Handelt pas op de volgende opening, met dezelfde kosten als paper |
+
+Nog niet gebouwd: 24/7 paper trading (fase 3),
 het HQ-game-dashboard (fase 4) en de leerlus (fase 5).
 
 ## Risicogrenzen
@@ -55,6 +58,9 @@ jplh selftest        # hele keten testen met nep-koersen
 jplh collect         # nieuwste koersen ophalen voor alle afdelingen
 jplh collect --demo  # nep-koersen, zonder internet
 jplh status          # vermogen, posities, laatste gebeurtenissen
+jplh collect --interval 1d --limit 1440   # dagkoersen van jaren terug
+jplh backtest        # walk-forward-backtest, rapport in reports/
+jplh backtest --demo # zelfde, met nep-koersen
 jplh kill / unkill   # noodstop aan / uit
 jplh resume          # pauze na een te grote daling opheffen
 pytest               # alle tests
@@ -77,6 +83,9 @@ src/jplh/
   ledger.py    boekhouding
   journal.py   logboek
   holding.py   de keten: signaal -> risico -> broker -> boekhouding -> logboek
+  strategies.py  strategieën (alleen signalen, kunnen niet in de toekomst kijken)
+  backtest.py  backtest-motor en walk-forward
+  report.py    backtest-rapport per afdeling
   collect.py   koersen verzamelen
   cli.py       opdrachtregel
 ```
