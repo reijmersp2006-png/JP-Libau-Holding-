@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JP-libau HQ</title>
+<style>
+:root{
+  --ink:#f4ecd8; --dim:#b9ad93; --bg:#141022; --panel:#1f1934; --panel2:#2a2245; --edge:#4b3f7a;
+  --gold:#ffcc4d; --good:#5fe08a; --bad:#ff5d6c; --warn:#ffb347; --blue:#5ab8ff; --purple:#b07cff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Courier New",ui-monospace,monospace;font-size:14px;overflow:hidden}
+.px{font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+#app{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+
+/* HUD */
+#hud{display:flex;align-items:center;gap:18px;padding:10px 16px;background:linear-gradient(#2a2245,#1f1934);
+  border-bottom:4px solid #0b0816;box-shadow:0 4px 0 #3a2f63 inset}
+#logo{display:flex;align-items:center;gap:10px}
+#logo .crest{width:36px;height:36px;background:var(--gold);color:#2a1a00;display:grid;place-items:center;
+  font-weight:900;font-size:15px;box-shadow:0 0 0 3px #2a1a00,0 0 0 6px var(--gold);image-rendering:pixelated}
+#logo .t1{font-size:16px} #logo .t2{font-size:11px;color:var(--dim)}
+.stat{display:flex;flex-direction:column;gap:4px;min-width:150px}
+.stat .lbl{font-size:10px;color:var(--dim)}
+.stat .val{font-size:20px}
+.bar{height:14px;background:#0b0816;border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge);position:relative}
+.bar>i{position:absolute;inset:0 auto 0 0;display:block;background:var(--good);
+  background-image:repeating-linear-gradient(90deg,transparent 0 6px,rgba(0,0,0,.18) 6px 8px)}
+.bar.en>i{background-color:var(--blue)} .bar.xp>i{background-color:var(--purple)}
+.badge{padding:5px 9px;border:2px solid currentColor;font-size:11px}
+.badge.paper{color:var(--blue)} .badge.kill{color:var(--bad);animation:blink 1s steps(2) infinite}
+.badge.demo{color:var(--warn)}
+#hud .spacer{flex:1}
+@keyframes blink{50%{opacity:.25}}
+
+/* Wereld */
+#main{display:grid;grid-template-columns:1fr 380px;min-height:0}
+#world{position:relative;min-height:0;overflow:hidden;background:#123a5c}
+#world canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;cursor:pointer}
+#labels{position:absolute;inset:0;pointer-events:none}
+.sign{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;
+  background:#1f1934ee;border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge);padding:4px 7px;
+  font-size:11px;white-space:nowrap;text-align:center}
+.sign b{display:block;font-size:12px}
+.sign .lv{color:var(--purple)} .sign .up{color:var(--good)} .sign .dn{color:var(--bad)}
+.sign.sel{box-shadow:0 0 0 2px var(--gold)}
+.sign.alarm{box-shadow:0 0 0 2px var(--bad);animation:blink .8s steps(2) infinite}
+#weather{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--dim);background:#0b0816aa;padding:4px 8px}
+
+/* Zijpaneel */
+#side{background:var(--panel);border-left:4px solid #0b0816;overflow:auto;padding:14px}
+#side h2{margin:0 0 4px;font-size:18px} #side h3{margin:16px 0 6px;font-size:12px;color:var(--dim)}
+.row{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
+.card{background:var(--panel2);border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge) inset;padding:10px;margin:8px 0}
+.big{font-size:24px}
+.up{color:var(--good)} .dn{color:var(--bad)} .mute{color:var(--dim)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:4px 3px;text-align:left;border-bottom:1px dashed #3a2f63} th{color:var(--dim);font-weight:400}
+td.r,th.r{text-align:right}
+.pill{display:inline-block;padding:1px 5px;border:1px solid var(--edge);font-size:10px;color:var(--dim)}
+.pill.in{color:var(--good);border-color:var(--good)}
+canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
+.tabs{display:flex;gap:6px;margin-bottom:6px}
+.tabs button{flex:1;background:#0b0816;color:var(--ink);border:2px solid var(--edge);padding:6px;font:inherit;
+  font-size:11px;cursor:pointer}
+.tabs button.on{border-color:var(--gold);color:var(--gold)}
+
+/* Onderbalk */
+#bottom{display:grid;grid-template-columns:1fr 380px;height:210px;border-top:4px solid #0b0816}
+#feed{background:#0e0b1a;overflow:auto;padding:8px 14px;font-size:12px}
+#feed .msg{padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+#feed .t{color:var(--dim)} #feed .who{font-weight:700}
+#feed .trade .txt{color:var(--good)} #feed .refused .txt{color:var(--warn)}
+#feed .pause .txt{color:var(--bad)} #feed .selection .txt{color:var(--purple)}
+#quests{background:var(--panel);border-left:4px solid #0b0816;overflow:auto;padding:8px 14px}
+.quest{margin:6px 0} .quest .qt{display:flex;justify-content:space-between;font-size:12px}
+.quest .bar{height:10px;margin-top:3px} .quest.done .qt{color:var(--good)}
+.quest.locked{opacity:.65}
+.hint{font-size:10px;color:var(--dim)}
+#err{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:#0b0816;padding:16px;
+  border:2px solid var(--bad);display:none;max-width:420px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div id="logo"><div class="crest px">JP</div><div><div class="t1 px">JP-libau Holding</div><div class="t2">Hoofdkwartier</div></div></div>
+    <div class="stat"><span class="lbl px">Schatkist</span><span class="val" id="h-eq">…</span><span class="hint" id="h-pnl"></span></div>
+    <div class="stat"><span class="lbl px">Risicoruimte</span><div class="bar hp"><i id="h-hp"></i></div><span class="hint" id="h-hpt"></span></div>
+    <div class="stat"><span class="lbl px">Dagbudget</span><div class="bar en"><i id="h-en"></i></div><span class="hint" id="h-ent"></span></div>
+    <div class="stat"><span class="lbl px">Demofase</span><div class="bar xp"><i id="h-day"></i></div><span class="hint" id="h-dayt"></span></div>
+    <div class="spacer"></div>
+    <span class="badge px demo" id="b-demo" hidden>Nep-data</span>
+    <span class="badge px paper">Paper</span>
+    <span class="badge px kill" id="b-kill" hidden>Noodstop</span>
+    <div class="stat" style="min-width:110px;text-align:right"><span class="lbl px">Laatste ronde</span><span id="h-time" class="hint"></span></div>
+  </header>
+
+  <div id="main">
+    <div id="world"><canvas id="cv"></canvas><div id="labels"></div><div id="weather"></div><div id="err"></div></div>
+    <aside id="side"></aside>
+  </div>
+
+  <div id="bottom">
+    <div id="feed"></div>
+    <div id="quests"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const W = 320, H = 180;           // wereld in "pixels"; wordt opgeschaald
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let S = null, selected = "hq", tick = 0, scale = 3, offX = 0, offY = 0;
+
+const eur = (v, d = 2) => v == null ? "–" : "€" + Number(v).toLocaleString("nl-NL", {minimumFractionDigits: d, maximumFractionDigits: d});
+const pct = (v, d = 1) => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d).replace(".", ",") + "%";
+const cls = v => v == null ? "mute" : v >= 0 ? "up" : "dn";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+// "trend(fast=50, slow=100, band=0.01)" -> "trend 50/100"
+const strat = t => String(t ?? "")
+  .replace(/koop_en_houd/g, "koop-en-houd")
+  .replace(/trend\(fast=(\d+), slow=(\d+)[^)]*\)/g, "trend $1/$2")
+  .replace(/momentum\(lookback=(\d+)[^)]*\)/g, "momentum $1d")
+  .replace(/uitbraak\(entry=(\d+), exit=(\d+)\)/g, "uitbraak $1/$2")
+  .replace(/terugkeer\(period=\d+, low=(\d+), high=(\d+)\)/g, "terugkeer $1/$2")
+  .replace(/ \(Sharpe [^)]*\)/g, "").replace(/weekkeuze strategieën: /, "nieuwe keuze: ");
+const tiny = v => v == null ? "–" : v < 0.01 ? v.toPrecision(3) : v.toLocaleString("nl-NL", {maximumFractionDigits: 2});
+const when = iso => { const d = new Date(iso); return d.toLocaleString("nl-NL", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}); };
+
+// ------------------------------------------------------------------ gebouwen
+// x,y = linksonder in wereldpixels; w,h = maat van de gevel
+const B = {
+  crypto: {x: 62, y: 86, w: 34, h: 26, wall: "#2bb3a3", roof: "#16675e", label: "Crypto Lab"},
+  meme:   {x: 112, y: 64, w: 30, h: 22, wall: "#8b4fd8", roof: "#4b2585", label: "Meme Arcade"},
+  stocks: {x: 196, y: 70, w: 22, h: 46, wall: "#8a95ad", roof: "#4a536a", label: "Beurstoren"},
+  metals: {x: 230, y: 112, w: 32, h: 22, wall: "#d9a521", roof: "#7a5a0c", label: "De Kluis"},
+  fx:     {x: 46, y: 138, w: 38, h: 18, wall: "#3f7fd6", roof: "#1f4a86", label: "Wisselhaven"},
+  risk:   {x: 262, y: 74, w: 12, h: 40, wall: "#b84a4a", roof: "#5e1f1f", label: "Wachttoren"},
+  lab:    {x: 150, y: 120, w: 30, h: 18, wall: "#e8e4f0", roof: "#9c95b5", label: "Onderzoekslab"},
+  hq:     {x: 146, y: 96, w: 0, h: 0, label: "HQ"},
+};
+const DESKS = ["crypto", "meme", "stocks", "metals", "fx"];
+const desk = id => S && S.desks.find(d => d.id === id);
+
+function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+
+function night() { const h = new Date().getHours(); return h < 7 || h >= 19; }
+
+function drawWater() {
+  const n = night();
+  rect(0, 0, W, H, n ? "#0d2440" : "#1e5f8f");
+  ctx.globalAlpha = .35;
+  for (let i = 0; i < 70; i++) {
+    const x = (i * 53 + tick * (i % 3 + 1) * .15) % (W + 10) - 5, y = (i * 37) % H;
+    rect(x, y, 4, 1, n ? "#2c5b8a" : "#7fc4ef");
+  }
+  ctx.globalAlpha = 1;
+}
+
+function blob(cx, cy, rx, ry, c, wob) {
+  for (let y = -ry; y <= ry; y++) {
+    const k = Math.sqrt(1 - (y * y) / (ry * ry));
+    const w = rx * k + Math.sin(y * .35 + wob);
+    rect(cx - w, cy + y, w * 2, 1, c);
+  }
+}
+
+function drawIsland() {
+  blob(160, 104, 136, 70, "#e6cf8b", 1);       // zand
+  blob(160, 102, 124, 62, night() ? "#2e6b3a" : "#4fa64f", 2);   // gras
+  blob(160, 102, 110, 52, night() ? "#2a6235" : "#5bb85a", 3);
+  // paden naar het plein
+  const path = night() ? "#8e7a52" : "#cdb27a";
+  for (const id of ["crypto", "meme", "stocks", "metals", "fx", "risk", "lab"]) {
+    const b = B[id], tx = b.x + b.w / 2, ty = b.y + 2, hx = 160, hy = 100;
+    const steps = 40;
+    for (let i = 0; i <= steps; i++) { const t = i / steps; rect(hx + (tx - hx) * t - 1, hy + (ty - hy) * t - 1, 3, 3, path); }
+  }
+  // plein met fontein en JP-standbeeld
+  blob(160, 100, 14, 8, path, 0);
+  blob(160, 100, 7, 4, "#5ab8ff", 0);
+  rect(158, 90, 4, 9, "#ffcc4d"); rect(156, 89, 8, 2, "#ffcc4d");
+  // bomen
+  for (const [x, y] of [[40, 110], [50, 70], [100, 50], [140, 48], [230, 56], [286, 104], [270, 140], [200, 150], [130, 158], [100, 140], [180, 60]]) {
+    rect(x, y - 2, 2, 4, "#6b4a2b"); blob(x + 1, y - 6, 4, 4, night() ? "#1f4f2a" : "#2f8f3f", x);
+  }
+}
+
+function building(id, d) {
+  const b = B[id], top = b.y - b.h;
+  const closed = d && d.status === "gesloten", alarm = d && d.status === "alarm";
+  const lit = d && !closed && (night() || d.status === "aan het werk");
+  rect(b.x + 2, b.y, b.w, 3, "rgba(0,0,0,.25)");                 // schaduw
+  rect(b.x, top, b.w, b.h, b.wall);
+  rect(b.x - 2, top - 4, b.w + 4, 5, b.roof);                    // dak
+  // ramen
+  for (let wy = top + 4; wy < b.y - 7; wy += 6)
+    for (let wx = b.x + 3; wx < b.x + b.w - 4; wx += 6) {
+      const on = lit && ((wx * 7 + wy * 3 + Math.floor(tick / 40)) % 5 !== 0);
+      rect(wx, wy, 3, 3, alarm ? (tick % 20 < 10 ? "#ff5d6c" : "#5e1f1f") : on ? "#ffe9a0" : "#25304a");
+    }
+  rect(b.x + b.w / 2 - 2, b.y - 6, 4, 6, "#2a1a10");               // deur
+  extras(id, b, top, d);
+  if (alarm && tick % 30 < 15) { ctx.strokeStyle = "#ff5d6c"; ctx.lineWidth = 1; ctx.strokeRect(b.x - 4.5, top - 7.5, b.w + 9, b.h + 11); }
+}
+
+function extras(id, b, top, d) {
+  const t = tick;
+  if (id === "crypto") {               // antenne met draaiende munt
+    rect(b.x + b.w - 6, top - 12, 1, 8, "#ddd");
+    const w = Math.abs(Math.cos(t / 15)) * 5 + 1;
+    rect(b.x + b.w - 5.5 - w / 2, top - 17, w, 5, "#ffcc4d");
+  }
+  if (id === "meme") {                 // neonbord + waarschuwing
+    const on = t % 24 < 16;
+    rect(b.x + 3, top + 2, b.w - 6, 4, on ? "#ff4fd8" : "#5a2050");
+    rect(b.x - 8, b.y - 10, 6, 6, "#ffcc4d"); rect(b.x - 6, b.y - 9, 2, 3, "#2a1a00"); rect(b.x - 6, b.y - 5, 2, 1, "#2a1a00");
+  }
+  if (id === "stocks") {               // vlag + koerslijn op de gevel
+    rect(b.x + b.w / 2, top - 12, 1, 8, "#ddd"); rect(b.x + b.w / 2 + 1, top - 12, 6, 4, d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a");
+  }
+  if (id === "metals") {               // ronde kluisdeur + staven
+    blob(b.x + b.w / 2, top + b.h / 2, 6, 6, "#8a6a10", 0); blob(b.x + b.w / 2, top + b.h / 2, 3, 3, "#ffdf70", 0);
+    const bars = d ? Math.min(6, d.positions.length * 3) : 0;
+    for (let i = 0; i < bars; i++) rect(b.x + b.w + 2 + (i % 3) * 4, b.y - 3 - Math.floor(i / 3) * 3, 4, 2, "#ffcc4d");
+  }
+  if (id === "fx") {                   // steiger + bootje
+    rect(b.x - 22, b.y - 2, 22, 3, "#7a5530");
+    const bx = b.x - 40 + Math.sin(t / 60) * 6;
+    rect(bx, b.y + 6, 14, 3, "#e8e4f0"); rect(bx + 6, b.y - 2, 1, 8, "#ddd"); rect(bx + 7, b.y - 2, 5, 5, "#ff5d6c");
+  }
+  if (id === "risk") {                 // baken: groen of rood
+    const bad = S && (S.kill || S.desks.some(x => x.status === "alarm"));
+    const c = bad ? (t % 20 < 10 ? "#ff5d6c" : "#7a1f1f") : (t % 60 < 50 ? "#5fe08a" : "#2f7a4a");
+    rect(b.x + 3, top - 9, 6, 5, c);
+    if (bad) { ctx.globalAlpha = .25; blob(b.x + 6, top - 7, 14, 10, "#ff5d6c", 0); ctx.globalAlpha = 1; }
+  }
+  if (id === "lab") {                  // koepel
+    blob(b.x + b.w / 2, top - 1, 10, 6, "#cfc8e4", 0); rect(b.x + b.w / 2 - 1, top - 8, 2, 3, "#b07cff");
+  }
+}
+
+// kleine medewerkers die tussen het plein en hun gebouw lopen
+function workers() {
+  for (const id of DESKS) {
+    const d = desk(id), b = B[id];
+    if (!d) continue;
+    const door = [b.x + b.w / 2, b.y + 1], hq = [160, 102];
+    const n = d.status === "aan het werk" ? 3 : d.status === "wacht af" ? 2 : 0;
+    for (let i = 0; i < n; i++) {
+      const p = ((tick / 4 + i * 37 + id.length * 13) % 100) / 100, t = p < .5 ? p * 2 : 2 - p * 2;
+      const x = door[0] + (hq[0] - door[0]) * t * .7, y = door[1] + (hq[1] - door[1]) * t * .7;
+      const bob = Math.floor(tick / 6 + i) % 2;
+      rect(x - 1, y - 6 + bob, 3, 2, "#f2c9a0"); rect(x - 1, y - 4 + bob, 3, 3, b.wall); rect(x - 1, y - 1, 1, 1, "#222"); rect(x + 1, y - 1, 1, 1, "#222");
+    }
+    if (d.status === "gesloten" && tick % 90 < 60) {      // slapend team
+      ctx.fillStyle = "#e8e4f0"; ctx.font = "6px monospace"; ctx.fillText("z", b.x + b.w + 1, b.y - b.h - 2 - (tick % 90) / 15);
+    }
+  }
+}
+
+function weather() {
+  const dd = S ? S.total.drawdown : 0, el = document.getElementById("weather");
+  if (dd > 0.05) {                       // storm als het vermogen flink onder de top staat
+    ctx.fillStyle = "rgba(20,20,40,.35)"; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = .6;
+    for (let i = 0; i < 120; i++) { const x = (i * 29 + tick * 2) % W, y = (i * 17 + tick * 4) % H; rect(x, y, 1, 3, "#9fc4ff"); }
+    ctx.globalAlpha = 1;
+    if (tick % 200 < 4) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillRect(0, 0, W, H); }
+    el.textContent = `Storm: ${pct(dd)} onder de top. De Wachttoren bewaakt de grens van ${pct(S.limits.max_drawdown_pct, 0)}.`;
+  } else {
+    if (night()) { ctx.fillStyle = "rgba(10,10,40,.28)"; ctx.fillRect(0, 0, W, H); }
+    el.textContent = night() ? "Nacht op het eiland. Crypto werkt door, de beurs slaapt." : "Helder weer op het eiland.";
+  }
+}
+
+function frame() {
+  tick++;
+  drawWater(); drawIsland();
+  const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
+  for (const id of order) building(id, desk(id));
+  workers(); weather();
+  if (tick % 15 === 0) placeSigns();
+  requestAnimationFrame(frame);
+}
+
+function resize() {
+  const r = cv.parentElement.getBoundingClientRect();
+  cv.width = r.width; cv.height = r.height;
+  scale = Math.max(1, Math.min(r.width / W, r.height / H));
+  offX = (r.width - W * scale) / 2; offY = (r.height - H * scale) / 2;
+  ctx.setTransform(scale, 0, 0, scale, offX, offY);
+  ctx.imageSmoothingEnabled = false;
+  placeSigns();
+}
+
+function placeSigns() {
+  const box = document.getElementById("labels");
+  if (!S) return;
+  const html = [];
+  for (const id of [...DESKS, "risk", "lab"]) {
+    const b = B[id], d = desk(id);
+    const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 7) * scale;
+    let inner;
+    if (d) inner = `<b>${esc(b.label)}</b><span class="lv">Lv ${d.level}</span> · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
+    else if (id === "risk") inner = `<b>Wachttoren</b>${S.kill ? '<span class="dn">noodstop aan</span>' : S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">alles veilig</span>'}`;
+    else inner = `<b>Onderzoekslab</b><span class="mute">toernooi</span>`;
+    const alarm = d && d.status === "alarm";
+    html.push(`<div class="sign ${selected === id ? "sel" : ""} ${alarm ? "alarm" : ""}" data-id="${id}" style="left:${x}px;top:${y}px">${inner}</div>`);
+  }
+  box.innerHTML = html.join("");
+  box.querySelectorAll(".sign").forEach(el => el.onclick = () => select(el.dataset.id));
+}
+
+cv.addEventListener("click", ev => {
+  const r = cv.getBoundingClientRect();
+  const x = (ev.clientX - r.left - offX) / scale, y = (ev.clientY - r.top - offY) / scale;
+  for (const id of Object.keys(B)) {
+    const b = B[id];
+    if (b.w && x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - b.h - 8 && y <= b.y + 3) return select(id);
+  }
+  if (Math.hypot(x - 160, y - 100) < 16) return select("hq");
+});
+
+// ------------------------------------------------------------------ panelen
+function spark(canvas, pts, base) {
+  const c = canvas.getContext("2d"), w = canvas.width = canvas.clientWidth, h = canvas.height = 90;
+  c.fillStyle = "#0b0816"; c.fillRect(0, 0, w, h);
+  if (!pts || pts.length < 2) { c.fillStyle = "#b9ad93"; c.font = "11px monospace"; c.fillText("nog te weinig rondes voor een grafiek", 8, 48); return; }
+  const v = pts.map(p => p[1]), lo = Math.min(...v, base), hi = Math.max(...v, base), pad = (hi - lo) * .1 || 1;
+  const Y = x => h - 6 - (x - lo + pad) / (hi - lo + 2 * pad) * (h - 12);
+  c.fillStyle = "#3a2f63"; for (let x = 0; x < w; x += 4) c.fillRect(x, Math.round(Y(base)), 2, 1);
+  c.fillStyle = v[v.length - 1] >= base ? "#5fe08a" : "#ff5d6c";
+  for (let i = 0; i < w; i += 2) { const k = Math.min(v.length - 1, Math.round(i / w * (v.length - 1))); c.fillRect(i, Math.round(Y(v[k])), 2, 2); }
+}
+
+function hqPanel() {
+  const t = S.total;
+  const ranked = [...S.desks].sort((a, b) => b.pnl_pct - a.pnl_pct);
+  return `<h2 class="px">Hoofdkwartier</h2><div class="mute">${esc(S.name)} · alles met nepgeld</div>
+  <div class="card"><div class="big">${eur(t.equity_eur)}</div>
+    <div class="row"><span>Resultaat</span><span class="${cls(t.pnl_pct)}">${eur(t.pnl_eur)} (${pct(t.pnl_pct)})</span></div>
+    <div class="row"><span>Koop-en-houd zou zijn</span><span>${eur(t.benchmark_eur)}</span></div>
+    <div class="row"><span>Onder de top</span><span>${pct(-t.drawdown)}</span></div>
+    <canvas class="spark" id="sp"></canvas></div>
+  <h3 class="px">Ranglijst afdelingen</h3>
+  <table><tr><th>Afdeling</th><th class="r">Potje</th><th class="r">Resultaat</th><th class="r">K&H</th></tr>
+  ${ranked.map(d => `<tr style="cursor:pointer" onclick="select('${d.id}')"><td>${esc(d.name)}</td><td class="r">${eur(d.equity_eur, 0)}</td>
+    <td class="r ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r ${cls(d.benchmark_eur == null ? null : d.benchmark_eur / d.capital_eur - 1)}">${d.benchmark_eur == null ? "–" : pct(d.benchmark_eur / d.capital_eur - 1)}</td></tr>`).join("")}
+  </table>
+  <p class="hint">Tik op een gebouw voor het dossier van dat team. K&H = wat koop-en-houd sinds de start had opgeleverd.</p>
+  ${S.radar && S.radar.length ? `<h3 class="px">Memecoin-radar (alleen kijken)</h3><table><tr><th>Munt</th><th class="r">24u</th><th>Waarschuwing</th></tr>
+    ${S.radar.slice(0, 6).map(r => `<tr><td>${esc(r.symbol)} <span class="pill">${esc(r.chain)}</span></td><td class="r ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100, 0)}</td><td class="hint">${esc(r.flags.join(", ") || "geen")}</td></tr>`).join("")}</table>` : ""}`;
+}
+
+function deskPanel(d) {
+  const xpNext = 20 * d.level * d.level, xpPrev = 20 * (d.level - 1) * (d.level - 1);
+  const xpFrac = Math.max(0, Math.min(1, (d.xp - xpPrev) / (xpNext - xpPrev || 1)));
+  return `<h2 class="px">${esc(d.name)}</h2><div class="mute">Team ${esc(d.team)} · status: <b>${esc(d.status)}</b></div>
+  ${d.paused_reason ? `<div class="card dn">${esc(d.paused_reason)}</div>` : ""}
+  <div class="card"><div class="row"><span class="px" style="font-size:11px">Level ${d.level}</span><span class="hint">${d.xp} XP</span></div>
+    <div class="bar xp"><i style="width:${xpFrac * 100}%"></i></div>
+    <div class="hint" style="margin-top:4px">XP komt van discipline: elke beslissing, elke trade en elke dag binnen de regels.</div></div>
+  <div class="card"><div class="big">${eur(d.equity_eur)}</div>
+    <div class="row"><span>Startpotje</span><span>${eur(d.capital_eur)}</span></div>
+    <div class="row"><span>Resultaat</span><span class="${cls(d.pnl_pct)}">${eur(d.pnl_eur)} (${pct(d.pnl_pct)})</span></div>
+    <div class="row"><span>Koop-en-houd zou zijn</span><span>${eur(d.benchmark_eur)}</span></div>
+    <div class="row"><span>Cash</span><span>${eur(d.cash_eur)}</span></div>
+    <div class="row"><span>Trades · kosten</span><span>${d.trades} · ${eur(d.fees_eur)}</span></div>
+    <canvas class="spark" id="sp"></canvas></div>
+  <h3 class="px">Wat het team volgt</h3>
+  <table><tr><th>Instrument</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
+  ${d.instruments.map(i => `<tr><td>${esc(i.symbol)} ${i.in_market ? '<span class="pill in">in</span>' : ""}</td>
+    <td class="r" style="white-space:nowrap">${tiny(i.price_eur)}</td>
+    <td class="r ${cls(i.change_24h)}">${pct(i.change_24h)}</td><td class="hint">${esc(strat(i.strategy))}${i.fresh ? "" : " · koers oud"}</td></tr>`).join("")}
+  </table>
+  <h3 class="px">Posities</h3>
+  ${d.positions.length ? `<table><tr><th>Instrument</th><th class="r">Waarde</th><th class="r">Sinds aankoop</th></tr>
+    ${d.positions.map(p => `<tr><td>${esc(p.symbol)}</td><td class="r">${eur(p.value_eur)}</td><td class="r ${cls(p.pnl_pct)}">${pct(p.pnl_pct)}</td></tr>`).join("")}</table>`
+    : `<div class="hint">Geen posities. Het team wacht tot een strategie een kans ziet.</div>`}
+  <p class="hint">Strategieën worden elke week opnieuw gekozen op de laatste 500 dagen${d.selected_at ? " (laatst: " + when(d.selected_at) + ")" : ""}.</p>`;
+}
+
+function labPanel() {
+  const rows = S.desks.flatMap(d => d.instruments.map(i => ({desk: d.name, ...i})));
+  const counts = {};
+  rows.forEach(r => { const f = (r.strategy || "").split("(")[0]; counts[f] = (counts[f] || 0) + 1; });
+  return `<h2 class="px">Onderzoekslab</h2><div class="mute">Het strategietoernooi</div>
+  <div class="card">Elke week laat elk team alle strategieën strijden op de laatste 500 dagen, na kosten. De beste voor risico wint, maar alleen als hij duidelijk beter is dan gewoon vasthouden.</div>
+  <h3 class="px">Winnaars nu</h3>
+  <table>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k.replaceAll("_", "-"))}</td><td class="r">${v}×</td></tr>`).join("")}</table>
+  <h3 class="px">Per instrument</h3>
+  <table><tr><th>Instrument</th><th>Strategie</th></tr>${rows.map(r => `<tr><td>${esc(r.symbol)}</td><td class="hint">${esc(strat(r.strategy))}</td></tr>`).join("")}</table>`;
+}
+
+function riskPanel() {
+  return `<h2 class="px">Wachttoren</h2><div class="mute">De risico-afdeling mag elke order weigeren</div>
+  <div class="card"><div class="row"><span>Noodstop</span><span class="${S.kill ? "dn" : "up"}">${S.kill ? "AAN" : "uit"}</span></div>
+  <div class="row"><span>Max daling vanaf de top</span><span>${pct(S.limits.max_drawdown_pct, 0)}</span></div>
+  <div class="row"><span>Max verlies per dag</span><span>${pct(S.limits.daily_loss_limit_pct, 0)}</span></div></div>
+  <h3 class="px">Status per team</h3>
+  <table>${S.desks.map(d => `<tr><td>${esc(d.name)}</td><td class="r ${d.status === "alarm" ? "dn" : ""}">${esc(d.status)}</td><td class="r">${pct(-d.drawdown)}</td></tr>`).join("")}</table>
+  <h3 class="px">Laatste weigeringen</h3>
+  ${S.feed.filter(f => f.kind === "refused").slice(0, 8).map(f => `<div class="card hint">${when(f.ts)} · ${esc(f.text)}<br>${esc(f.detail)}</div>`).join("") || '<div class="hint">Nog niets geweigerd.</div>'}`;
+}
+
+function select(id) {
+  selected = id;
+  const side = document.getElementById("side");
+  const d = desk(id);
+  side.innerHTML = d ? deskPanel(d) : id === "lab" ? labPanel() : id === "risk" ? riskPanel() : hqPanel();
+  const sp = document.getElementById("sp");
+  if (sp) spark(sp, d ? d.equity_curve : S.total.equity_curve, d ? d.capital_eur : S.total.capital_eur);
+  placeSigns();
+}
+
+function hud() {
+  const t = S.total;
+  document.getElementById("h-eq").textContent = eur(t.equity_eur);
+  const pnl = document.getElementById("h-pnl"); pnl.textContent = `${pct(t.pnl_pct)} sinds start · vandaag ${pct(t.day_pnl_pct)}`; pnl.className = "hint " + cls(t.pnl_pct);
+  const hp = Math.max(0, 1 - t.drawdown / S.limits.max_drawdown_pct);
+  const hpEl = document.getElementById("h-hp");
+  hpEl.style.width = hp * 100 + "%";
+  hpEl.style.backgroundColor = hp > .6 ? "var(--good)" : hp > .3 ? "var(--warn)" : "var(--bad)";
+  document.getElementById("h-hpt").textContent = `${pct(-t.drawdown)} van max ${pct(-S.limits.max_drawdown_pct, 0)}`;
+  const en = Math.max(0, 1 - Math.max(0, -t.day_pnl_pct) / S.limits.daily_loss_limit_pct);
+  document.getElementById("h-en").style.width = en * 100 + "%";
+  document.getElementById("h-ent").textContent = `${Math.round(en * 100)}% van het dagbudget over`;
+  document.getElementById("h-day").style.width = Math.min(1, S.days_active / 90) * 100 + "%";
+  document.getElementById("h-dayt").textContent = `dag ${S.days_active} van minimaal 90`;
+  document.getElementById("h-time").textContent = when(S.generated_at);
+  document.getElementById("b-kill").hidden = !S.kill;
+  document.getElementById("b-demo").hidden = !S.demo;
+}
+
+function feed() {
+  const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven"};
+  document.getElementById("feed").innerHTML = S.feed.length ? S.feed.map(f =>
+    `<div class="msg ${f.kind}" title="${esc(f.detail)}"><span class="t">[${when(f.ts)}]</span> <span class="who">${esc(who[f.desk] || f.desk)}:</span> <span class="txt">${esc(strat(f.text))}</span> <span class="t">${esc(strat(f.strategy || ""))}</span></div>`).join("")
+    : '<div class="msg t">Nog geen gebeurtenissen. De eerste ronde draait binnen het uur.</div>';
+  document.getElementById("quests").innerHTML = '<div class="px" style="font-size:12px;margin-bottom:4px">Missies</div>' + S.missions.map(m => {
+    const done = m.progress >= m.goal;
+    return `<div class="quest ${done ? "done" : ""} ${m.locked ? "locked" : ""}"><div class="qt"><span>${done ? "✔ " : m.locked ? "🔒 " : ""}${esc(m.title)}</span><span>${m.progress}/${m.goal}</span></div>
+      <div class="bar xp"><i style="width:${Math.min(1, m.progress / m.goal) * 100}%"></i></div>${m.hint ? `<div class="hint">${esc(m.hint)}</div>` : ""}</div>`;
+  }).join("");
+}
+
+async function load() {
+  try {
+    const r = await fetch("state.json?t=" + Date.now(), {cache: "no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    S = await r.json();
+    document.getElementById("err").style.display = "none";
+    hud(); feed(); select(selected);
+  } catch (e) {
+    const el = document.getElementById("err");
+    el.style.display = "block";
+    el.innerHTML = `<b>Kan de stand niet laden.</b><br><span class="hint">${esc(e.message)}. Open het dashboard via de link van GitHub Pages of met <code>jplh dashboard</code>.</span>`;
+  }
+}
+
+window.addEventListener("resize", resize);
+resize(); load(); frame();
+setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>

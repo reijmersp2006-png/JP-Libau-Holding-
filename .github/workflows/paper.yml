@@ -1,0 +1,69 @@
+name: Paper trading
+
+# Elk uur één ronde: koersen ophalen, elke afdeling laten handelen (nepgeld), dashboard
+# bijwerken. De stand van de bot staat op de branch `paper-data`, het dashboard op
+# GitHub Pages. Er is in deze workflow geen enkele sleutel of echt geld.
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: paper
+  cancel-in-progress: false
+
+jobs:
+  ronde:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      - name: Stand van de vorige ronde ophalen
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$url" paper-data >/dev/null; then
+            git clone --depth 1 --branch paper-data "$url" state
+          else
+            mkdir state && git -C state init -b paper-data && git -C state remote add origin "$url"
+          fi
+          mkdir -p data logs
+          [ -d state/data ] && cp -r state/data/. data/ || true
+          [ -d state/logs ] && cp -r state/logs/. logs/ || true
+          [ -f state/KILL ] && cp state/KILL KILL || true
+
+      - name: Paper-ronde
+        run: jplh run
+
+      - name: Stand bewaren
+        run: |
+          rm -rf state/data state/logs
+          cp -r data logs state/
+          cd state
+          git config user.name "jplh-bot"
+          git config user.email "jplh-bot@users.noreply.github.com"
+          git add -A
+          git commit -qm "Paper-ronde $(date -u +%Y-%m-%dT%H:%MZ)" || echo "niets veranderd"
+          git push origin paper-data
+
+      - uses: actions/configure-pages@v5
+        continue-on-error: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

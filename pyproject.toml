@@ -19,7 +19,7 @@ jplh = "jplh.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-jplh = ["default_config.toml"]
+jplh = ["default_config.toml", "hq/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -19,9 +19,11 @@ from jplh.store import Store
 
 class Holding:
     def __init__(self, config: HoldingConfig, store: Store, base_dir: Path | None = Path("."),
-                 log_dir: Path | None = Path("logs"), interval: str = "1h") -> None:
+                 log_dir: Path | None = Path("logs"), interval: str = "1h", market: Store | None = None) -> None:
+        """``store`` bewaart boekhouding en logboek; ``market`` de koersen (standaard dezelfde)."""
         self.config = config
         self.store = store
+        self.market = market or store
         self.interval = interval
         self.risk = RiskEngine(config, base_dir)
         self.broker = PaperBroker(config)
@@ -32,10 +34,11 @@ class Holding:
                                              "day": None, "day_start_equity": config.start_capital_eur,
                                              "paused_reason": None})
 
-    def prices(self) -> PriceBook:
+    def prices(self, now: datetime | None = None) -> PriceBook:
+        """Laatst bekende koersen; met ``now`` alleen wat op dat moment al opgehaald was."""
         book = PriceBook({i.symbol: i for i in self.config.instruments})
         for inst in self.config.instruments:
-            last = self.store.latest_close(inst.symbol, self.interval)
+            last = self.market.latest_close(inst.symbol, self.interval, known_at=now)
             if last:
                 book.update(inst.symbol, *last)
         return book
@@ -58,7 +61,7 @@ class Holding:
 
     def submit(self, signal: Signal, now: datetime | None = None) -> Decision:
         now = now or datetime.now(tz=UTC)
-        prices = self.prices()
+        prices = self.prices(now)
         self.mark(now, prices)
         ctx = RiskContext(now, self.portfolio, prices, self.meta["day_start_equity"],
                           self.meta["peak_equity"], self.store.fills_on(now.astimezone(UTC).date()),

@@ -17,6 +17,7 @@ def test_user_may_tighten_risk(tmp_path):
     assert cfg.risk.max_drawdown_pct == 0.10
     assert cfg.risk.max_class_pct["meme"] == 0.02
     assert cfg.risk.max_class_pct["crypto"] == 0.40
+    assert cfg.desks["meme"] == 0.02  # potje volgt de strengere grens
 
 
 @pytest.mark.parametrize("line", [

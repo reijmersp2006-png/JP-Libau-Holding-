@@ -42,6 +42,7 @@ class HoldingConfig:
     instruments: tuple[Instrument, ...]
     risk: RiskLimits
     costs: dict[str, CostModel]
+    desks: dict[str, float] = field(default_factory=dict)
 
     def instrument(self, symbol: str) -> Instrument:
         for inst in self.instruments:
@@ -89,6 +90,8 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         raw["risk"] = _merge_risk(raw["risk"], user.get("risk", {}))
         if "instrument" in user:
             raw["instrument"] = user["instrument"]
+        if "desks" in user:
+            raw["desks"] = {**raw.get("desks", {}), **user["desks"]}
         for cls, cost in user.get("costs", {}).items():
             raw["costs"][cls] = {**raw["costs"].get(cls, {}), **cost}
 
@@ -111,6 +114,11 @@ def load_config(path: Path | None = None) -> HoldingConfig:
     if missing:
         raise ConfigError(f"geen kostenmodel voor: {', '.join(sorted(missing))}")
 
+    # Een afdeling krijgt nooit meer dan haar risicogrens per afdeling.
+    desks = {k: min(float(v), raw["risk"]["max_class_pct"].get(k, 0.0)) for k, v in raw.get("desks", {}).items()}
+    if sum(desks.values()) > 1.0 + 1e-9:
+        raise ConfigError("desks: samen meer dan 100% van het startkapitaal")
+
     return HoldingConfig(
         name=holding["name"],
         base_currency=holding["base_currency"],
@@ -119,4 +127,5 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         instruments=tuple(instruments),
         risk=RiskLimits(**raw["risk"]),
         costs=costs,
+        desks=desks,
     )

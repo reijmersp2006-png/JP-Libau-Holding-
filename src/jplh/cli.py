@@ -102,6 +102,47 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def cmd_run(args) -> int:
+    """Eén paper-ronde: koersen ophalen, elke afdeling laten handelen, dashboard bijwerken."""
+    from jplh.paper import paper_round
+
+    config = load_config(_paths(args.home)[0])
+    failed = paper_round(config, args.home, args.home / "site", collect=not args.no_collect)
+    return 0 if failed < 10 else 1
+
+
+def cmd_dashboard(args) -> int:
+    """Bouwt het HQ-dashboard en opent het in je browser."""
+    import functools
+    import http.server
+    import webbrowser
+
+    from jplh.desks import open_desks
+    from jplh.paper import build_demo
+    from jplh.site import build_state, write_site
+
+    config = load_config(_paths(args.home)[0])
+    if args.demo:
+        site = build_demo(config, args.home / "data" / "demo").parent
+    else:
+        market = Store(_paths(args.home)[1])
+        desks = open_desks(config, args.home, market)
+        site = write_site(build_state(config, desks, market, args.home), args.home / "site").parent
+    print(f"Dashboard staat in {site}")
+    if args.no_serve:
+        return 0
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(site))
+    with http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler) as srv:
+        url = f"http://127.0.0.1:{args.port}/"
+        print(f"Open {url} (stoppen met Ctrl+C)")
+        webbrowser.open(url)
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            pass
+    return 0
+
+
 def cmd_status(args) -> int:
     config, store, log_dir = _open(args)
     h = Holding(config, store, args.home, log_dir)
@@ -190,6 +231,14 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--demo", action="store_true", help="nep-koersen, werkt zonder internet")
     b.add_argument("--bars", type=int, default=1200, help="aantal nep-koersen bij --demo")
     b.set_defaults(fn=cmd_backtest)
+    r = sub.add_parser("run", help="één paper-ronde voor alle afdelingen + dashboard bijwerken")
+    r.add_argument("--no-collect", action="store_true", help="geen nieuwe koersen ophalen")
+    r.set_defaults(fn=cmd_run)
+    d = sub.add_parser("dashboard", help="HQ-dashboard bouwen en openen in je browser")
+    d.add_argument("--demo", action="store_true", help="met een nep-wereld, werkt zonder internet")
+    d.add_argument("--port", type=int, default=8000)
+    d.add_argument("--no-serve", action="store_true", help="alleen bouwen, niet openen")
+    d.set_defaults(fn=cmd_dashboard)
     sub.add_parser("status", help="vermogen, posities en laatste gebeurtenissen").set_defaults(fn=cmd_status)
     sub.add_parser("kill", help="noodstop: geen enkele order meer").set_defaults(fn=cmd_kill)
     sub.add_parser("unkill", help="noodstop opheffen").set_defaults(fn=cmd_unkill)
