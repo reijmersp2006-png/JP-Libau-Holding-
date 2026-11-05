@@ -1,0 +1,173 @@
+# JP-libau Holding: standaardinstellingen.
+# Kopieer naar config/holding.toml om iets aan te passen. Risicogrenzen kunnen daar
+# alleen STRENGER worden gemaakt: een ruimere grens dan hieronder wordt geweigerd.
+
+[holding]
+name = "JP-libau Holding"
+base_currency = "EUR"
+start_capital_eur = 1000.0
+mode = "paper"            # alleen "paper" bestaat; live vereist later jouw expliciete akkoord
+
+# ---------------------------------------------------------------- universum
+# source: bitvavo | yahoo     currency: munt waarin de koers staat
+# Valuta (fx): het instrument is het aanhouden van de vreemde munt (bijv. USD) vanuit euro.
+# De koers EURUSD=X zegt hoeveel USD 1 euro waard is; 1 USD kost dus 1/koers euro.
+# Memecoins handelen we alleen op Bitvavo (gereguleerd, liquide). DexScreener is
+# uitsluitend een radar om nieuwe munten te bekijken, nooit om op te handelen.
+
+[[instrument]]
+symbol = "BTC-EUR"
+asset_class = "crypto"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "ETH-EUR"
+asset_class = "crypto"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "SOL-EUR"
+asset_class = "crypto"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "XRP-EUR"
+asset_class = "crypto"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "DOGE-EUR"
+asset_class = "meme"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "SHIB-EUR"
+asset_class = "meme"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "PEPE-EUR"
+asset_class = "meme"
+source = "bitvavo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "IWDA.AS"        # iShares MSCI World, Euronext Amsterdam
+asset_class = "stocks"
+source = "yahoo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "ASML.AS"
+asset_class = "stocks"
+source = "yahoo"
+currency = "EUR"
+
+[[instrument]]
+symbol = "AAPL"
+asset_class = "stocks"
+source = "yahoo"
+currency = "USD"
+
+[[instrument]]
+symbol = "MSFT"
+asset_class = "stocks"
+source = "yahoo"
+currency = "USD"
+
+[[instrument]]
+symbol = "NVDA"
+asset_class = "stocks"
+source = "yahoo"
+currency = "USD"
+
+[[instrument]]
+symbol = "GC=F"           # goud (COMEX future, USD per troy ounce): alleen als koersbron
+asset_class = "metals"
+source = "yahoo"
+currency = "USD"
+
+[[instrument]]
+symbol = "SI=F"           # zilver (COMEX future, USD per troy ounce): alleen als koersbron
+asset_class = "metals"
+source = "yahoo"
+currency = "USD"
+
+[[instrument]]
+symbol = "EURUSD=X"
+asset_class = "fx"
+source = "yahoo"
+currency = "USD"
+
+[[instrument]]
+symbol = "EURGBP=X"
+asset_class = "fx"
+source = "yahoo"
+currency = "GBP"
+
+[[instrument]]
+symbol = "EURJPY=X"
+asset_class = "fx"
+source = "yahoo"
+currency = "JPY"
+
+[[instrument]]
+symbol = "EURCHF=X"
+asset_class = "fx"
+source = "yahoo"
+currency = "CHF"
+
+# ---------------------------------------------------------------- risico
+# Vaste grenzen. Het zelflerende systeem kan deze NOOIT aanpassen.
+
+[risk]
+max_drawdown_pct = 0.15        # -15% vanaf de top: alles op pauze tot jij hervat
+daily_loss_limit_pct = 0.03    # -3% op een dag: geen nieuwe aankopen meer die dag
+max_position_pct = 0.25        # max 25% van het vermogen in één instrument
+max_invested_pct = 0.90        # altijd minimaal 10% cash
+max_trades_per_day = 10
+min_order_eur = 10.0
+max_data_age_hours = 3.0       # koers ouder dan dit: niet handelen
+
+[risk.max_class_pct]           # max deel van het vermogen per afdeling
+crypto = 0.40
+meme = 0.05
+stocks = 0.50
+metals = 0.30
+fx = 0.20
+
+# ---------------------------------------------------------------- kosten (paper)
+# Aannames, bewust aan de voorzichtige kant. Controleer bij de echte broker.
+# fee_pct: commissie per order  slippage_pct: hoeveel slechter je vult dan de koers
+# min_fee_eur: minimale commissie per order
+
+[costs.crypto]
+fee_pct = 0.0025       # Bitvavo taker, laagste staffel
+slippage_pct = 0.001
+min_fee_eur = 0.0
+
+[costs.meme]
+fee_pct = 0.0025
+slippage_pct = 0.005   # dunne orderboeken
+min_fee_eur = 0.0
+
+[costs.stocks]
+fee_pct = 0.0005
+slippage_pct = 0.0005
+min_fee_eur = 1.25     # orde van grootte van een goedkope broker
+
+[costs.metals]
+fee_pct = 0.0005
+slippage_pct = 0.001
+min_fee_eur = 1.25
+
+[costs.fx]
+fee_pct = 0.0002
+slippage_pct = 0.0002
+min_fee_eur = 1.25
