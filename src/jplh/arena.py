@@ -209,7 +209,7 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
     """Eén keer per dag de arena bijwerken (de dagkoersen veranderen maar één keer per dag)."""
     old = market.get_state("arena")
     today = now.date().isoformat()
-    if old and old.get("computed_at", "")[:10] == today:
+    if old and old.get("computed_at", "")[:10] == today and ("shadow" in old or not config.shadow):
         return old
     start = arena_start(books)
     if start is None:
