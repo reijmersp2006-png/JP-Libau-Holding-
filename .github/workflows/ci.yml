@@ -46,7 +46,8 @@ jobs:
       - run: pip install -e .
       - run: jplh collect --interval 1d --limit 1440
       - run: jplh backtest --interval 1d
-      - run: cat reports/backtest-*.md >> "$GITHUB_STEP_SUMMARY"
+      - run: jplh backtest --interval 1d --desks
+      - run: cat reports/afdelingen-*.md reports/backtest-*.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: backtest-rapport

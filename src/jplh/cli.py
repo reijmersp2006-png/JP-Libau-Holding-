@@ -89,6 +89,16 @@ def cmd_backtest(args) -> int:
         if short:
             print(f"Te weinig koersen voor: {', '.join(short)}. Draai eerst "
                   f"'jplh collect --interval {args.interval} --limit 1500'.")
+    if args.desks:
+        from jplh.deskbacktest import compare, compare_report
+        from jplh.desks import ALL_CANDIDATES
+        report = compare_report(compare(config, candles_of, ALL_CANDIDATES), now, args.demo)
+        out = args.home / "reports" / f"afdelingen-{now:%Y-%m-%d}{'-demo' if args.demo else ''}.md"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(report, encoding="utf-8")
+        print(report)
+        print(f"Rapport opgeslagen in {out}")
+        return 0
     results = run_lab(instruments, candles_of, config.costs, args.interval, args.train, args.test)
     if not results:
         print("Geen enkel instrument heeft genoeg koersen voor een backtest.")
@@ -230,6 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--symbol", action="append", help="alleen dit instrument (mag vaker)")
     b.add_argument("--demo", action="store_true", help="nep-koersen, werkt zonder internet")
     b.add_argument("--bars", type=int, default=1200, help="aantal nep-koersen bij --demo")
+    b.add_argument("--desks", action="store_true", help="hele afdelingen naspelen: verbeteringen tegen de huidige versie")
     b.set_defaults(fn=cmd_backtest)
     r = sub.add_parser("run", help="één paper-ronde voor alle afdelingen + dashboard bijwerken")
     r.add_argument("--no-collect", action="store_true", help="geen nieuwe koersen ophalen")
