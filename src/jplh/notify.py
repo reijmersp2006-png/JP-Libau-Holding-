@@ -140,6 +140,17 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
             out.insert(0, f"🤖 {b['hello']} Phil. Dagbriefing:\n" + "\n".join(f"• {x}" for x in b["lines"]))
         memory["briefing_day"] = today
 
+    told = set(memory.get("promoted", []))
+    for cls, d in ((state.get("arena") or {}).get("desks") or {}).items():
+        for r in d["board"]:
+            key = f"{cls}:{r['variant']}"
+            if r.get("promote") and key not in told:
+                out.append(f"🏆 Schaduw-arena: bij {d['name']} wint '{r['name']}' al {r['days']} dagen van de "
+                           f"huidige regels ({_pct(r['return'])} tegen {_pct(next(x for x in d['board'] if x['live'])['return'])}). "
+                           "Wil je hem laten promoveren? Dat beslis jij; eerst moet hij ook de backtest winnen.")
+                told.add(key)
+    memory["promoted"] = sorted(told)
+
     week = f"{local.isocalendar().year}-W{local.isocalendar().week}"
     if local.weekday() == REPORT_DAY and local.hour >= REPORT_HOUR and memory.get("report_week") != week:
         if state.get("total"):

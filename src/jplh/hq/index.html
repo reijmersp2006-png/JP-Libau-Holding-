@@ -530,6 +530,8 @@ function deskPanel(d) {
     <div class="row"><span>Cash</span><span>${eur(d.cash_eur)}</span></div>
     <div class="row"><span>Trades · kosten</span><span>${d.trades} · ${eur(d.fees_eur)}</span></div>
     <canvas class="spark" id="sp"></canvas></div>
+  ${S.arena && S.arena.desks && S.arena.desks[d.id] && S.arena.desks[d.id].board.some(r => r.days > 0) ? `<h3 class="px">Schaduw-arena</h3>${arenaBoard(S.arena, S.arena.desks[d.id], 3)}
+    <p class="hint">Uitdagers op papier sinds ${esc(S.arena.start)}. Meer in het Onderzoekslab.</p>` : ""}
   <h3 class="px">Wat het team volgt</h3>
   <table><tr><th>Instrument</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
   ${d.instruments.map(i => `<tr><td>${esc(i.symbol)} ${i.in_market ? '<span class="pill in">in</span>' : ""}</td>
@@ -545,6 +547,25 @@ function deskPanel(d) {
     `<div class="card hint"><b class="${f.kind === "trade" ? "up" : "dn"}">${esc(f.text)}</b> · ${when(f.ts)}<br>${esc(strat(f.why || f.detail))}${f.kind === "refused" ? `<br><span class="dn">${esc(f.detail.split("Risico: ").pop())}</span>` : ""}</div>`).join("")
     || '<div class="hint">Nog geen trades.</div>'}
   <p class="hint">Strategieën worden elke week opnieuw gekozen op de laatste 500 dagen${d.selected_at ? " (laatst: " + when(d.selected_at) + ")" : ""}.</p>`;
+}
+
+function arenaBoard(a, d, n = 4) {
+  const top = d.board.slice(0, n);
+  const live = d.board.find(r => r.live);
+  if (live && !top.includes(live)) top.push(live);
+  return `<table><tr><th>#</th><th>Uitdager</th><th class="r">Sinds start</th><th class="r">Sharpe</th></tr>
+    ${top.map(r => `<tr${r.live ? ' style="background:rgba(43,179,163,.15)"' : ""}><td>${d.board.indexOf(r) + 1}</td>
+      <td class="hint">${r.live ? "<b>" : ""}${esc(r.name)}${r.live ? "</b>" : ""}${r.promote ? " 🏆" : ""}</td>
+      <td class="r ${cls(r.return)}">${pct(r.return)}</td><td class="r">${r.days >= 30 ? r.sharpe.toFixed(2).replace(".", ",") : "–"}</td></tr>`).join("")}</table>`;
+}
+function arenaSection() {
+  const a = S.arena;
+  if (!a || !a.desks || !Object.keys(a.desks).length) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena start bij de eerste paper-ronde.</div>`;
+  const days = Math.max(...Object.values(a.desks).flatMap(d => d.board.map(r => r.days)), 0);
+  if (!days) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena is net begonnen (${esc(a.start)}). ${Object.values(a.desks)[0].board.length - 1} uitdagers per afdeling draaien vanaf nu op papier mee. De eerste uitslag staat er morgen.</div>`;
+  return `<h3 class="px">Schaduw-arena</h3>
+  <div class="hint">Andere strategieën draaien op papier mee met hetzelfde geld en dezelfde echte koersen, vanaf ${esc(a.start)} (${days} dagen). Alleen wat daarna gebeurt telt. Wint een uitdager ${a.promote_days} dagen lang op rendement én Sharpe, dan krijgt hij een 🏆 en meldt Jarvis het. Promoveren beslist alleen Phil. Sharpe verschijnt na 30 dagen; eerder zegt die niets.</div>
+  ${Object.values(a.desks).map(d => `<div class="card"><div class="row"><b>${esc(d.name)}</b><span class="hint">huidige regels op plek ${d.live_rank} van ${d.board.length}</span></div>${arenaBoard(a, d)}</div>`).join("")}`;
 }
 
 function labAlerts24h() {
@@ -592,6 +613,8 @@ function labPanel() {
   <h3 class="px">Weekrapporten</h3>
   ${L.reports.length ? L.reports.map(r => `<div class="card hint"><b>${esc(who[r.desk] || r.desk)}</b> · ${when(r.ts)}<br>${esc(strat(r.reason.replace(/^weekrapport: /, "")))}</div>`).join("")
     : '<div class="hint">Het eerste weekrapport komt na 7 dagen.</div>'}
+
+  ${arenaSection()}
 
   <h3 class="px">Strategietoernooi</h3>
   <div class="hint">Elke week strijden alle strategieën per instrument op de laatste 500 dagen, na kosten. Vasthouden wint, tenzij een strategie duidelijk beter is.</div>

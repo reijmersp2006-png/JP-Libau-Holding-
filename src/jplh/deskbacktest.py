@@ -274,8 +274,10 @@ def live_variant(mode: str) -> Variant:
 
 
 def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidates: list[Strategy],
-            variants: list[Variant] = VARIANTS, window: int = WINDOW) -> dict[str, dict[str, dict]]:
-    """Per afdeling per variant: rendement, Sharpe, max daling, trades, kosten, wissels."""
+            variants: list[Variant] = VARIANTS, window: int = WINDOW, start=None) -> dict[str, dict[str, dict]]:
+    """Per afdeling per variant: rendement, Sharpe, max daling, trades, kosten, wissels.
+    Met ``start`` (een datum) telt alleen wat er vanaf die dag gebeurt: zo kijkt de
+    schaduw-arena alleen vooruit."""
     out: dict[str, dict[str, dict]] = {}
     for cls, share in config.desks.items():
         insts = [i for i in config.instruments if i.asset_class.value == cls]
@@ -290,11 +292,12 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
         if lead_sym and len(candles_of.get(lead_sym, [])) > 250:
             li = config.instrument(lead_sym)
             leader = _prepare(li, candles_of[lead_sym], [BuyHold()], config.costs[li.asset_class.value], ppy)
-        start = max(s.candles[min(window, len(s.candles) - 1)].ts.date() for s in series)
+        first = max(s.candles[min(window, len(s.candles) - 1)].ts.date() for s in series)
+        begin = max(first, start) if start else first
         capital = config.start_capital_eur * share
         out[cls] = {}
         for v in list(variants) + [live_variant(config.desk_modes.get(cls, "actief"))]:
-            r = run_desk(cls, series, leader, config, v, start, capital)
+            r = run_desk(cls, series, leader, config, v, begin, capital)
             rets = [b / a - 1 for a, b in zip([capital] + r.equity, r.equity)]
             m = metrics(rets, r.trades, r.fees, 0, ppy)
             out[cls][v.name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,

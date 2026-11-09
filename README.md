@@ -98,6 +98,11 @@ Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`,
 `/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
 `/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
 
+Schaduw-arena: per afdeling draaien 8 andere strategieën op papier mee, met hetzelfde geld en
+dezelfde echte koersen, vanaf de eerste paper-dag (alleen vooruit kijken). Wint een uitdager
+90 dagen op rendement én Sharpe, dan meldt Jarvis dat. Promoveren beslist alleen Phil, en
+alleen als hij ook `jplh backtest --desks` wint. Te zien in het Onderzoekslab.
+
 Je hoeft dit niet op je eigen computer te draaien: vanaf fase 3 draait de bot in de
 cloud via GitHub Actions. Bij elke pull request controleert GitHub al automatisch of de
 tests slagen en of de databronnen bereikbaar zijn.
