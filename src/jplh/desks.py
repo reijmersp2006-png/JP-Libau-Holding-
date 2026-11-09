@@ -27,12 +27,16 @@ from jplh.holding import Holding
 from jplh.models import AssetClass, Decision, Instrument, Side, Signal
 from jplh.research import REVIEW_AFTER, WEEK, adjustments, review, round_trips, track_record, weekly_report
 from jplh.store import Store
-from jplh.strategies import FAMILIES, BuyHold, Strategy, _nl
+from jplh.strategies import FAMILIES, BuyHold, Strategy, _nl, _p
 
 DESK_ORDER = ("crypto", "meme", "stocks", "metals", "fx")
 SELECTION_WINDOW = 500      # dagen waarop de strategie gekozen wordt
 RESELECT_EVERY = timedelta(days=7)
 MIN_DAILY_BARS = 220        # genoeg voor de langste strategie (200 dagen) plus marge
+SWITCH_MARGIN = 0.3         # zoveel Sharpe beter moet een nieuwe strategie zijn om de huidige te vervangen
+REBALANCE_EVERY = timedelta(days=91)
+REBALANCE_BAND = 0.10       # pas herverdelen als een deel meer dan 10% naast zijn doel zit
+LEADER = {"crypto": "BTC-EUR", "meme": "BTC-EUR", "stocks": "IWDA.AS"}
 
 ALL_CANDIDATES: list[Strategy] = [BuyHold()] + [s for fam in FAMILIES.values() for s in fam]
 _BY_LABEL = {s.label: s for s in ALL_CANDIDATES}
@@ -56,21 +60,27 @@ def choose_strategy(candles, inst: Instrument, config: HoldingConfig, window: in
                     adjust: dict[str, float] | None = None) -> tuple[str, float]:
     """De beste strategie voor risico op de laatste ``window`` dagen, na kosten.
     ``adjust``: live-straf of -bonus per strategie uit de terugblikken van het lab."""
+    scores = score_strategies(candles, inst, config, window, adjust)
+    best = max(scores, key=scores.get)
+    return best, scores[best]
+
+
+def score_strategies(candles, inst: Instrument, config: HoldingConfig, window: int = SELECTION_WINDOW,
+                     adjust: dict[str, float] | None = None) -> dict[str, float]:
+    """Score (Sharpe na kosten, met handicap en lab-aanpassing) voor elke kandidaat."""
     adjust = adjust or {}
     candles = unit_prices(candles, inst)
     cost = config.costs[inst.asset_class.value]
     ppy = PERIODS_PER_YEAR[("1d", inst.asset_class.value)]
     start = max(0, len(candles) - window)
-    best, best_sharpe = "koop_en_houd", -math.inf
+    out = {}
     for strat in ALL_CANDIDATES:
         run = simulate(strat, candles, cost, start=start)
         m = metrics(run.returns, run.trades, run.fees, run.in_market, ppy)
         # Een strategie moet duidelijk beter zijn dan vasthouden om het te verdringen.
         score = m.sharpe if strat.name == "koop_en_houd" else m.sharpe - 0.1
-        score += adjust.get(strat.label, 0.0)
-        if score > best_sharpe:
-            best, best_sharpe = strat.label, score
-    return best, best_sharpe
+        out[strat.label] = score + adjust.get(strat.label, 0.0)
+    return out
 
 
 @dataclass
@@ -90,6 +100,25 @@ class Desk:
         self.holding = Holding(self.config, book, base_dir, log_dir, market=market)
 
     @property
+    def mode(self) -> str:
+        return self.config.desk_modes.get(self.cls, "actief")
+
+    def regime(self, now: datetime) -> tuple[bool | None, str]:
+        """Marktweer: staat de marktleider boven zijn 200-dagengemiddelde? None = geen leider/data."""
+        sym = LEADER.get(self.cls)
+        if not sym:
+            return None, ""
+        daily = self.market.candles(sym, "1d", known_at=now, limit=200)
+        if len(daily) < 200:
+            return None, ""
+        sma = sum(c.close for c in daily) / len(daily)
+        last = daily[-1].close
+        gap = last / sma - 1
+        if last > sma:
+            return True, f"marktweer goed: {sym} staat {_p(gap)} t.o.v. zijn 200-dagengemiddelde"
+        return False, f"marktweer slecht: {sym} staat {_p(gap)} onder zijn 200-dagengemiddelde"
+
+    @property
     def meta(self) -> dict:
         return self.holding.meta
 
@@ -98,22 +127,36 @@ class Desk:
 
     def maybe_reselect(self, now: datetime) -> list[str]:
         last = self.meta.get("selected_at")
-        if last and now - datetime.fromisoformat(last) < RESELECT_EVERY and self.selection():
+        same_mode = self.meta.get("mode") == self.mode
+        if last and same_mode and now - datetime.fromisoformat(last) < RESELECT_EVERY and self.selection():
             return []
+        self.meta["mode"] = self.mode
         notes, chosen, scores = [], {}, {}
-        adj = adjustments(track_record(self.reflections()))
-        for label, a in adj.items():
-            notes.append(f"lab: {label} {'strafpunten' if a < 0 else 'bonus'} ({a:+.2f}) door live-resultaten")
-        for inst in self.instruments:
-            daily = self.market.candles(inst.symbol, "1d", known_at=now)
-            if len(daily) < MIN_DAILY_BARS:
-                continue
-            label, score = choose_strategy(daily, inst, self.config, adjust=adj)
-            chosen[inst.symbol] = label
-            scores[inst.symbol] = round(score, 2)
-            old = self.selection().get(inst.symbol)
-            if old != label:
-                notes.append(f"{inst.symbol}: {old or 'niets'} -> {label} (Sharpe {score:.2f})")
+        if self.mode != "actief":
+            for inst in self.instruments:
+                if self.market.candles(inst.symbol, "1d", known_at=now, limit=1):
+                    chosen[inst.symbol] = "koop_en_houd"
+            if self.selection() != chosen:
+                notes.append(f"kern: deze afdeling houdt vast ({self.mode.replace('_', ' + ')})")
+            adj = {}
+        else:
+            adj = adjustments(track_record(self.reflections()))
+            for label, a in adj.items():
+                notes.append(f"lab: {label} {'strafpunten' if a < 0 else 'bonus'} ({a:+.2f}) door live-resultaten")
+            for inst in self.instruments:
+                daily = self.market.candles(inst.symbol, "1d", known_at=now)
+                if len(daily) < MIN_DAILY_BARS:
+                    continue
+                all_scores = score_strategies(daily, inst, self.config, adjust=adj)
+                label = max(all_scores, key=all_scores.get)
+                old = self.selection().get(inst.symbol)
+                # Minder heen-en-weer: de huidige strategie blijft, tenzij de nieuwe duidelijk beter is.
+                if old in all_scores and old != label and all_scores[old] >= all_scores[label] - SWITCH_MARGIN:
+                    label = old
+                chosen[inst.symbol] = label
+                scores[inst.symbol] = round(all_scores[label], 2)
+                if old != label:
+                    notes.append(f"{inst.symbol}: {old or 'niets'} -> {label} (Sharpe {all_scores[label]:.2f})")
         self.meta["selection"] = chosen
         self.meta["selection_scores"] = scores
         self.meta["adjustments"] = adj
@@ -178,6 +221,7 @@ class Desk:
             self.meta["started_at"] = now.isoformat()
         decisions = []
         per_instrument = self.config.start_capital_eur / max(len(self.instruments), 1)
+        bull, weather = self.regime(now) if self.mode != "vasthouden" else (None, "")
         for inst in self.instruments:
             label = self.selection().get(inst.symbol)
             if label is None:
@@ -189,25 +233,64 @@ class Desk:
             unit = unit_prices(daily, inst)
             want = strat.targets(unit)[-1]
             have = inst.symbol in self.holding.portfolio.positions
+            blocked = None
+            if bull is False and (self.mode == "vasthouden_marktweer" or (self.mode == "actief" and not have)):
+                if want:
+                    blocked = weather
+                want = 0
             if want and not have:
                 equity = self.holding.portfolio.equity_eur(self.holding.prices(now))
                 size = equity / max(len(self.instruments), 1) if equity > 0 else per_instrument
-                sig = Signal(inst.symbol, Side.BUY, label, self._why(strat, unit, inst.symbol), size)
+                why = self._why(strat, unit, inst.symbol) + (f". {weather}" if weather else "")
+                sig = Signal(inst.symbol, Side.BUY, label, why, size)
             elif not want and have:
-                why = self._why(strat, unit, inst.symbol)
+                why = (f"noodrem: {blocked}. Eruit tot het marktweer weer goed is" if blocked
+                       else self._why(strat, unit, inst.symbol))
                 opened_by = self._opened_by(inst.symbol)
-                if opened_by and opened_by != label:
+                if opened_by and opened_by != label and not blocked:
                     why = (f"de weekkeuze verving {opened_by} door {label}, en die wil hier nu niet in zitten: "
                            + why)
                 sig = Signal(inst.symbol, Side.SELL, label, why)
             else:
                 continue
             decisions.append(self.holding.submit(sig, now))
+        decisions += self.maybe_rebalance(now)
         self.holding.mark(now, self.holding.prices(now))
         rep = self.maybe_report(now)
         if rep:
             notes.append(rep)
         return DeskRound(self.cls, decisions, notes)
+
+    def maybe_rebalance(self, now: datetime) -> list[Decision]:
+        """Kern-afdelingen: elk kwartaal terug naar gelijke delen, als iets ver is afgedreven."""
+        if self.mode == "actief":
+            return []
+        last = self.meta.get("rebalanced_at") or self.meta.get("started_at")
+        if not last or now - datetime.fromisoformat(last) < REBALANCE_EVERY:
+            return []
+        self.meta["rebalanced_at"] = now.isoformat()
+        held = self.holding.portfolio.positions
+        if len(held) < 2:
+            return []
+        prices = self.holding.prices(now)
+        values = {}
+        for sym, pos in held.items():
+            try:
+                values[sym] = pos.quantity * prices.price_eur(sym)
+            except KeyError:
+                return []
+        target = sum(values.values()) / len(values)
+        out = []
+        for sym, v in sorted(values.items(), key=lambda kv: -kv[1]):   # eerst verkopen, dan kopen
+            drift = v / target - 1
+            if abs(drift) < REBALANCE_BAND:
+                continue
+            side = Side.SELL if drift > 0 else Side.BUY
+            why = (f"kwartaal-herverdeling: {sym} is {_p(drift)} t.o.v. zijn deel, terug naar gelijke delen "
+                   f"({_nl(format(target, ',.2f'))} euro elk)")
+            out.append(self.holding.submit(Signal(sym, side, "koop_en_houd", why, abs(v - target)), now))
+        self.holding._save()
+        return out
 
     def _opened_by(self, symbol: str) -> str | None:
         for f in reversed(self.holding.store.fills()):
