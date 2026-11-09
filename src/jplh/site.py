@@ -219,8 +219,16 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
     radar = market.db.execute(
         "SELECT base_symbol, chain, price_usd, liquidity_usd, volume_24h_usd, change_24h_pct, flags FROM radar "
         "WHERE fetched_at = (SELECT MAX(fetched_at) FROM radar) ORDER BY volume_24h_usd DESC LIMIT 12").fetchall()
+    lab = lab_state(config, desks, market, now, alerts)
+    weather = []
+    for cls_, name in (("crypto", "Crypto (bitcoin)"), ("stocks", "Beurs (wereldindex)")):
+        if cls_ in desks:
+            ok, text = desks[cls_].regime(now)
+            if ok is not None:
+                weather.append({"name": name, "ok": ok, "text": text})
+    vix = next((w for w in lab["watch"] if w["symbol"] == "^VIX"), None)
     return {
-        "lab": lab_state(config, desks, market, now, alerts),
+        "lab": lab, "market_weather": weather, "vix": vix and vix["price"],
         "generated_at": now.isoformat(), "name": config.name, "mode": config.mode, "demo": demo,
         "kill": (home / "KILL").exists(), "days_active": days,
         "limits": {"max_drawdown_pct": config.risk.max_drawdown_pct,
