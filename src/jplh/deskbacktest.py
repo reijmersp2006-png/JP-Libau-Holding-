@@ -49,6 +49,7 @@ class Variant:
     vote: int = 1
     hold_only: bool = False
     handicap: float = 0.1     # Sharpe die een strategie moet inleveren t.o.v. vasthouden
+    regime_exit: bool = False # bij slecht marktweer ook verkopen (niet alleen niet kopen)
 
 
 VARIANTS = [
@@ -64,6 +65,7 @@ VARIANTS = [
     Variant("2+6", switch_margin=0.3, handicap=0.5),
     Variant("2+3+6", switch_margin=0.3, regime=True, handicap=0.5),
     Variant("1+2+3+6", risk_sizing=True, switch_margin=0.3, regime=True, handicap=0.5),
+    Variant("7 vasthouden + marktweer", hold_only=True, regime=True, regime_exit=True),
     Variant("alles", risk_sizing=True, switch_margin=0.3, regime=True, trail=3.0, vote=3, handicap=0.5),
 ]
 
@@ -222,7 +224,7 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
                 peak_since[sym] = max(peak_since[sym], c)
                 if variant.trail and s.vol[i] > 0 and c < peak_since[sym] * (1 - variant.trail * s.vol[i] * math.sqrt(10)):
                     want = 0
-            elif not bull:
+            if not bull and (qty[sym] == 0 or variant.regime_exit):
                 want = 0
             have = qty[sym] > 0
             if want != have:
