@@ -32,6 +32,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 .badge{padding:5px 9px;border:2px solid currentColor;font-size:11px}
 .badge.paper{color:var(--blue)} .badge.kill{color:var(--bad);animation:blink 1s steps(2) infinite}
 .badge.demo{color:var(--warn)}
+.badge.auto{color:var(--good);cursor:pointer} .badge.auto.warn{color:var(--warn)} .badge.auto.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
 #hud .spacer{flex:1}
 .badge.jarvis{color:#5ee7ff;cursor:pointer} .badge.jarvis.warn{color:var(--warn)} .badge.jarvis.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
 /* Jarvis */
@@ -136,6 +137,7 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
     <div class="spacer"></div>
     <span class="badge px demo" id="b-demo" hidden>Nep-data</span>
     <span class="badge px jarvis" id="b-jarvis" onclick="select('hq')" title="Jarvis bewaakt de holding">JARVIS</span>
+    <span class="badge px auto" id="b-auto" onclick="select('risk')" title="Autopiloot: elk uur een ronde, Jarvis kijkt elke 10 minuten">AUTO</span>
     <span class="badge px paper">Paper</span>
     <span class="badge px kill" id="b-kill" hidden>Noodstop</span>
     <div class="stat" style="min-width:110px;text-align:right"><span class="lbl px">Laatste ronde</span><span id="h-time" class="hint"></span></div>
@@ -669,11 +671,26 @@ function labPanel() {
   <table>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k.replaceAll("_", "-"))}</td><td class="r">${v}×</td></tr>`).join("")}</table>`;
 }
 
+function autopilot() {
+  const ageMin = (Date.now() - new Date(S.generated_at)) / 60e3;
+  const next = new Date(new Date(S.generated_at).getTime() + 60 * 60e3).toLocaleTimeString("nl-NL", {hour: "2-digit", minute: "2-digit"});
+  if (S.demo) return {label: "DEMO", cls: "warn", next, ageMin, text: "Dit is de nep-wereld: hier draait geen autopiloot."};
+  if (ageMin <= 80) return {label: "AAN", cls: "", next, ageMin, text: "Alles draait vanzelf."};
+  if (ageMin <= 150) return {label: "TRAAG", cls: "warn", next, ageMin, text: "De laatste ronde is wat lang geleden; Jarvis start hem zelf opnieuw."};
+  return {label: "STIL", cls: "alarm", next, ageMin, text: "Er is al lang geen ronde geweest. Jarvis meldt dit via Telegram."};
+}
+
 function riskPanel() {
   return `<h2 class="px">Wachttoren</h2><div class="mute">De risico-afdeling mag elke order weigeren</div>
   <div class="card"><div class="row"><span>Noodstop</span><span class="${S.kill ? "dn" : "up"}">${S.kill ? "AAN" : "uit"}</span></div>
   <div class="row"><span>Max daling vanaf de top</span><span>${pct(S.limits.max_drawdown_pct, 0)}</span></div>
   <div class="row"><span>Max verlies per dag</span><span>${pct(S.limits.daily_loss_limit_pct, 0)}</span></div></div>
+  <h3 class="px">Autopiloot</h3>
+  ${(() => { const a = autopilot(); return `<div class="card"><div class="row"><span>Status</span><span class="${a.cls === "alarm" ? "dn" : a.cls ? "" : "up"}">${a.label}</span></div>
+    <div class="row"><span>Laatste ronde</span><span>${when(S.generated_at)} (${Math.round(a.ageMin)} min geleden)</span></div>
+    <div class="row"><span>Volgende ronde</span><span>rond ${a.next}</span></div>
+    <div class="row"><span>Jarvis kijkt</span><span>elke 10 minuten</span></div>
+    <div class="hint" style="margin-top:4px">${esc(a.text)} Een hartslag in GitHub maakt Jarvis elke 10 minuten wakker. Jarvis beantwoordt Telegram, start de uurronde en zet de hartslag weer aan als die ooit wegvalt. Je hoeft er niets voor te doen.</div></div>`; })()}
   <h3 class="px">Status per team</h3>
   <table>${S.desks.map(d => `<tr><td>${esc(d.name)}</td><td class="r ${d.status === "alarm" ? "dn" : ""}">${esc(d.status)}</td><td class="r">${pct(-d.drawdown)}</td></tr>`).join("")}</table>
   <h3 class="px">Laatste weigeringen</h3>
@@ -705,7 +722,11 @@ function hud() {
   document.getElementById("h-ent").textContent = `${Math.round(en * 100)}% van het dagbudget over`;
   document.getElementById("h-day").style.width = Math.min(1, S.days_active / 90) * 100 + "%";
   document.getElementById("h-dayt").textContent = `dag ${S.days_active} van minimaal 90`;
+  const a = autopilot();
   document.getElementById("h-time").textContent = when(S.generated_at);
+  const ab = document.getElementById("b-auto");
+  ab.textContent = "AUTO: " + a.label;
+  ab.className = "badge auto " + a.cls;
   document.getElementById("b-kill").hidden = !S.kill;
   document.getElementById("b-demo").hidden = !S.demo;
   const j = jarvisStatus(), jb = document.getElementById("b-jarvis");
