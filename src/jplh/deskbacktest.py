@@ -304,13 +304,13 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
     return out
 
 
-ALLOCATIONS = ("vaste potjes, nooit herverdelen (live)", "vaste verdeling, elk kwartaal terug",
+ALLOCATIONS = ("vaste potjes, nooit herverdelen", "vaste verdeling, elk kwartaal terug (live)",
                "naar risico, elk kwartaal")
 MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost samen ~0,5% van het verschoven bedrag
 
 
 def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
-               vol_days: int = 90, skip: tuple[str, ...] = ()) -> dict[str, dict]:
+               vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10) -> dict[str, dict]:
     """Slimmer verdelen tussen afdelingen? Speelt de live-curves van alle afdelingen samen na
     vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
     curves = {c: dict(rows["gekozen (live)"]["curve"]) for c, rows in result.items()
@@ -346,6 +346,9 @@ def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], eve
                         inv[c] = 1 / sd if sd > 0 else 0.0
                     w = {c: inv[c] / sum(inv.values()) for c in curves} if sum(inv.values()) else w
                 target = {c: tot * w[c] for c in curves}
+                if name == ALLOCATIONS[1] and all(abs(val[c] / target[c] - 1) <= band for c in curves):
+                    eq.append(tot)
+                    continue
                 shift = sum(abs(target[c] - val[c]) for c in curves) / 2
                 moved += shift
                 tot -= shift * MOVE_COST
@@ -395,12 +398,12 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
 
 
 def allocation_lines(alloc: dict[str, dict], title: str = "") -> list[str]:
-    live = alloc[ALLOCATIONS[0]]
+    live = alloc[ALLOCATIONS[1]]
     lines = ["", f"## Verdeling tussen afdelingen{title} (samen, sinds {live['since']})", "",
              f"Herverdelen kost {MOVE_COST:.1%} van het verschoven bedrag. ✅ = beter dan live.", "",
              "| Verdeling | Rendement | Sharpe | Max daling | Verschoven (x pot) |", "|---|---:|---:|---:|---:|"]
     for n, r in alloc.items():
-        better = n != ALLOCATIONS[0] and r["sharpe"] > live["sharpe"] + 0.05 and r["max_dd"] <= live["max_dd"] + 0.01
+        better = n != ALLOCATIONS[1] and r["sharpe"] > live["sharpe"] + 0.05 and r["max_dd"] <= live["max_dd"] + 0.01
         lines.append(f"| {n}{' ✅' if better else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
                      f"{-r['max_dd']:.1%} | {r['moved']:.2f} |")
     return lines

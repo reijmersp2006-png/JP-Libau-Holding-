@@ -25,7 +25,8 @@ def test_compare_runs_every_variant_for_every_desk():
     alloc = allocation(res, config.desks)
     assert set(alloc) == set(ALLOCATIONS)
     assert alloc[ALLOCATIONS[0]]["moved"] == 0
-    assert alloc[ALLOCATIONS[1]]["moved"] > 0
+    assert alloc[ALLOCATIONS[2]]["moved"] > 0
+    assert allocation(res, config.desks, band=0.0)[ALLOCATIONS[1]]["moved"] > 0
     report = compare_report(res, END, demo=True, alloc=alloc)
     assert "Oordeel" in report and "Spelregel" in report and "Verdeling tussen afdelingen" in report
 

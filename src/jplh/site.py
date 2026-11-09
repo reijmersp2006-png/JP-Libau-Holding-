@@ -45,8 +45,11 @@ def desk_state(desk: Desk, now: datetime, max_age: timedelta) -> dict:
     h = desk.holding
     prices = h.prices(now)
     equity = h.portfolio.equity_eur(prices)
-    cap = desk.config.start_capital_eur
+    cap0 = desk.config.start_capital_eur
+    cap = cap0 + desk.meta.get("transfers_eur", 0.0)   # overboekingen tussen afdelingen tellen niet als winst
     bench = benchmark_equity(desk, now)
+    if bench is not None and cap0:
+        bench *= cap / cap0
     fills = h.store.fills()
     events = h.store.events(limit=200)
     decisions = [p for _, k, p in events if k == "decision"]
@@ -91,7 +94,8 @@ def desk_state(desk: Desk, now: datetime, max_age: timedelta) -> dict:
     return {
         "id": desk.cls, **DESK_INFO[desk.cls],
         "capital_eur": cap, "equity_eur": equity, "cash_eur": h.portfolio.cash_eur,
-        "pnl_eur": equity - cap, "pnl_pct": equity / cap - 1 if cap else 0.0,
+        # Procent t.o.v. het grootste bedrag dat erin zat, zodat afgeven of krijgen het niet opblaast.
+        "pnl_eur": equity - cap, "pnl_pct": (equity - cap) / max(cap, cap0) if cap else 0.0,
         "benchmark_eur": bench, "peak_eur": h.meta.get("peak_equity", cap),
         "drawdown": 1 - equity / h.meta["peak_equity"] if h.meta.get("peak_equity") else 0.0,
         "fees_eur": h.portfolio.fees_eur, "trades": len(fills), "status": status, "paused_reason": paused,

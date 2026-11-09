@@ -9,7 +9,7 @@ from pathlib import Path
 from jplh.collect import collect_candles, collect_fx_reference, collect_radar, collect_watch
 from jplh.config import HoldingConfig
 from jplh.data import Bitvavo, Demo, Yahoo
-from jplh.desks import open_desks
+from jplh.desks import open_desks, rebalance_desks
 from jplh.models import Candle
 from jplh.scouts import scan
 from jplh.site import build_state, write_site
@@ -48,6 +48,8 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
             log(f"{cls:<7} {'OK ' if d.approved else 'NEE'}  {d.signal.instrument}: {d.reason}")
         eq = desk.holding.portfolio.equity_eur(desk.holding.prices(now))
         log(f"{cls:<7} potje €{eq:,.2f}")
+    for note in rebalance_desks(desks, market, now):
+        log(f"holding  herverdeling  {note}")
     for a in scan(market, watch_list(config), now):
         log(f"verkenner {a.level:<6} {a.text}")
     if site_dir is not None:
@@ -96,6 +98,7 @@ def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime
     for t in steps:
         for desk in desks.values():
             desk.run(t)
+        rebalance_desks(desks, market, t)
         scan(market, watch_list(config), t)
     site = home / "site"
     write_site(build_state(config, desks, market, home, now, demo=True), site)

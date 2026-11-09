@@ -37,9 +37,10 @@ Op ~2,5 jaar echte koersen verloor actief handelen na kosten van gewoon vasthoud
 
 | Afdeling | Werkwijze |
 |---|---|
-| Crypto | **kern + noodrem**: vasthouden, eruit als bitcoin onder zijn 200-dagengemiddelde staat |
+| Crypto | **kern + noodrem**: vasthouden, eruit als bitcoin meer dan 5% onder zijn 200-dagengemiddelde zakt, weer erin als hij er 5% boven staat (de marge voorkomt heen-en-weer: kosten €71 → €19 in de test) |
 | Memecoins | **jacht**: weekkeuze van strategieën, alleen wisselen als een nieuwe duidelijk beter is, niet kopen bij slecht marktweer |
 | Aandelen, goud/zilver, valuta | **kern**: vasthouden, elk kwartaal terug naar gelijke delen |
+| De holding | elk kwartaal het geld tussen de afdelingen terug naar de vaste verdeling (`[desks]`), als een afdeling meer dan 10% afwijkt |
 
 **Spelregel**: een aanpassing gaat pas live als ze in `jplh backtest --desks` op echte koersen minstens zo goed is als wat er draait. De CI draait die toets bij elke pull request, en het rapport laat per afdeling zien of de live-werkwijze "in orde" is.
 
