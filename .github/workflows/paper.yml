@@ -45,6 +45,12 @@ jobs:
           [ -d state/data ] && cp -r state/data/. data/ || true
           [ -d state/logs ] && cp -r state/logs/. logs/ || true
           [ -f state/KILL ] && cp state/KILL KILL || true
+          [ -f state/jarvis.json ] && cp state/jarvis.json jarvis.json || true
+
+      - name: Jarvis luistert (commando's van Phil, bijv. /noodstop)
+        run: jplh jarvis || true
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
 
       - name: Paper-ronde
         run: jplh run
@@ -55,12 +61,15 @@ jobs:
         run: |
           rm -rf state/data state/logs
           cp -r data logs state/
+          if [ -f KILL ]; then cp KILL state/KILL; else rm -f state/KILL; fi
+          [ -f jarvis.json ] && cp jarvis.json state/jarvis.json || true
           cd state
           git config user.name "jplh-bot"
           git config user.email "jplh-bot@users.noreply.github.com"
           git add -A
           git commit -qm "Paper-ronde $(date -u +%Y-%m-%dT%H:%MZ)" || echo "niets veranderd"
-          git push origin paper-data
+          # Jarvis kan tussendoor iets bewaard hebben: dan eerst bijwerken en opnieuw proberen.
+          for i in 1 2 3; do git push origin paper-data && break; git pull --rebase origin paper-data; done
 
       - uses: actions/configure-pages@v5
         continue-on-error: true

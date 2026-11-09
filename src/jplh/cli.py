@@ -157,6 +157,24 @@ def cmd_dashboard(args) -> int:
     return 0
 
 
+def cmd_jarvis(args) -> int:
+    import os
+
+    from jplh.commands import listen
+    from jplh.notify import Telegram
+    token = os.environ.get("TELEGRAM_TOKEN")
+    if not token:
+        print("Geen TELEGRAM_TOKEN: Jarvis luistert niet.")
+        return 0
+    config = load_config(_paths(args.home)[0])
+    try:
+        listen(config, args.home, Telegram(token))
+    except RuntimeError as exc:
+        print(f"Jarvis: {exc}")
+        return 1
+    return 0
+
+
 def cmd_status(args) -> int:
     config, store, log_dir = _open(args)
     h = Holding(config, store, args.home, log_dir)
@@ -254,6 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--port", type=int, default=8000)
     d.add_argument("--no-serve", action="store_true", help="alleen bouwen, niet openen")
     d.set_defaults(fn=cmd_dashboard)
+    sub.add_parser("jarvis", help="Telegram-commando's van Phil beantwoorden").set_defaults(fn=cmd_jarvis)
     sub.add_parser("status", help="vermogen, posities en laatste gebeurtenissen").set_defaults(fn=cmd_status)
     sub.add_parser("kill", help="noodstop: geen enkele order meer").set_defaults(fn=cmd_kill)
     sub.add_parser("unkill", help="noodstop opheffen").set_defaults(fn=cmd_unkill)
