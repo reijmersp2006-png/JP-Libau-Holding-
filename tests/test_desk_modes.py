@@ -101,3 +101,15 @@ def test_mode_change_triggers_new_selection(tmp_path):
 
 def test_switch_margin_is_meaningful():
     assert SWITCH_MARGIN >= 0.2
+
+
+def test_weather_brake_waits_for_the_margin(tmp_path):
+    m = Store(tmp_path / "m.sqlite3")
+    m.save_observed("BTC-EUR", "1d", _daily([100.0] * 399 + [98.0]), "t", timedelta(days=1))  # 2% onder het gemiddelde
+    desk = Desk("crypto", _cfg(), m, Store(tmp_path / "c.sqlite3"), None, None)
+    desk.meta["regime_bull"] = True
+    ok, text = desk.regime(NOW)
+    assert ok is True and "marge" in text           # binnen 5%: vorige (goede) stand blijft
+    desk.meta.pop("regime_bull")
+    ok, _ = desk.regime(NOW)
+    assert ok is False                              # zonder vorige stand telt de kant van de lijn

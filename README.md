@@ -43,6 +43,8 @@ Op ~2,5 jaar echte koersen verloor actief handelen na kosten van gewoon vasthoud
 
 **Spelregel**: een aanpassing gaat pas live als ze in `jplh backtest --desks` op echte koersen minstens zo goed is als wat er draait. De CI draait die toets bij elke pull request, en het rapport laat per afdeling zien of de live-werkwijze "in orde" is.
 
+De toets draait op zoveel geschiedenis als er is (Bitvavo en Yahoo tot ruim tien jaar terug) en test ook rotatie op momentum, een marge rond het 200-dagengemiddelde (minder heen-en-weer, dus minder kosten) en drie manieren om het geld tussen de afdelingen te verdelen.
+
 ## Het dashboard openen
 
 - **Online**: `https://reijmersp2006-png.github.io/JP-Libau-Holding-/` (eenmalig aanzetten: Settings,

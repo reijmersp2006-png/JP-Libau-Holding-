@@ -32,6 +32,7 @@ from jplh.backtest import PERIODS_PER_YEAR, metrics, simulate, unit_prices
 from jplh.config import HoldingConfig
 from jplh.models import Candle, Instrument
 from jplh.strategies import BuyHold, Strategy
+from jplh.desks import REGIME_BAND
 
 WINDOW = 500
 RESELECT_DAYS = 7
@@ -267,7 +268,8 @@ def live_variant(mode: str) -> Variant:
     if mode == "vasthouden":
         return Variant("gekozen (live)", hold_only=True)
     if mode == "vasthouden_marktweer":
-        return Variant("gekozen (live)", hold_only=True, regime=True, regime_exit=True)
+        return Variant("gekozen (live)", hold_only=True, regime=True, regime_exit=True,
+                       regime_band=REGIME_BAND.get(mode, 0.0))
     return Variant("gekozen (live)", switch_margin=0.3, regime=True)
 
 
@@ -308,11 +310,11 @@ MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost sam
 
 
 def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
-               vol_days: int = 90) -> dict[str, dict]:
+               vol_days: int = 90, skip: tuple[str, ...] = ()) -> dict[str, dict]:
     """Slimmer verdelen tussen afdelingen? Speelt de live-curves van alle afdelingen samen na
     vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
     curves = {c: dict(rows["gekozen (live)"]["curve"]) for c, rows in result.items()
-              if rows.get("gekozen (live)", {}).get("curve")}
+              if rows.get("gekozen (live)", {}).get("curve") and c not in skip}
     if len(curves) < 2:
         return {}
     start = max(min(c) for c in curves.values())
@@ -357,7 +359,7 @@ def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], eve
 
 
 def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool = False,
-                   alloc: dict[str, dict] | None = None) -> str:
+                   alloc: dict[str, dict] | None = None, alloc_title: str = "") -> str:
     lines = [f"# Afdelingen-backtest: verbeteringen tegen de huidige versie ({now:%Y-%m-%d})", ""]
     if demo:
         lines += ["**Let op: nep-koersen.** Deze cijfers zeggen niets over echte markten.", ""]
@@ -388,12 +390,17 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
         lines.append(f"| {cls} | {live['sharpe']:.2f} | {base['sharpe']:.2f} | {hold['sharpe']:.2f} | "
                      f"{'in orde' if ok else 'NIET in orde: aanpassen'} |")
     if alloc:
-        live = alloc[ALLOCATIONS[0]]
-        lines += ["", f"## Verdeling tussen afdelingen (samen, sinds {live['since']})", "",
-                  f"Herverdelen kost {MOVE_COST:.1%} van het verschoven bedrag. ✅ = beter dan live.", "",
-                  "| Verdeling | Rendement | Sharpe | Max daling | Verschoven (x pot) |", "|---|---:|---:|---:|---:|"]
-        for n, r in alloc.items():
-            better = n != ALLOCATIONS[0] and r["sharpe"] > live["sharpe"] + 0.05 and r["max_dd"] <= live["max_dd"] + 0.01
-            lines.append(f"| {n}{' ✅' if better else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
-                         f"{-r['max_dd']:.1%} | {r['moved']:.2f} |")
+        lines += allocation_lines(alloc, alloc_title)
     return "\n".join(lines) + "\n"
+
+
+def allocation_lines(alloc: dict[str, dict], title: str = "") -> list[str]:
+    live = alloc[ALLOCATIONS[0]]
+    lines = ["", f"## Verdeling tussen afdelingen{title} (samen, sinds {live['since']})", "",
+             f"Herverdelen kost {MOVE_COST:.1%} van het verschoven bedrag. ✅ = beter dan live.", "",
+             "| Verdeling | Rendement | Sharpe | Max daling | Verschoven (x pot) |", "|---|---:|---:|---:|---:|"]
+    for n, r in alloc.items():
+        better = n != ALLOCATIONS[0] and r["sharpe"] > live["sharpe"] + 0.05 and r["max_dd"] <= live["max_dd"] + 0.01
+        lines.append(f"| {n}{' ✅' if better else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
+                     f"{-r['max_dd']:.1%} | {r['moved']:.2f} |")
+    return lines
