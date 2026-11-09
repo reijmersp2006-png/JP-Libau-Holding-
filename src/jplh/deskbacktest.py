@@ -52,6 +52,7 @@ class Variant:
     regime_exit: bool = False # bij slecht marktweer ook verkopen (niet alleen niet kopen)
     rotate: int = 0           # alleen de ``rotate`` sterkste instrumenten (momentum) houden; 0 = uit
     rotate_days: int = 126    # momentum over zoveel dagen (~6 maanden)
+    regime_band: float = 0.0  # marge rond het 200-dagengemiddelde: pas wisselen als de leider er zoveel voorbij is
 
 
 VARIANTS = [
@@ -71,6 +72,9 @@ VARIANTS = [
     Variant("8 rotatie top 2 (6 mnd)", rotate=2),
     Variant("8b rotatie top 2 + marktweer", rotate=2, regime=True, regime_exit=True),
     Variant("8c rotatie top 1 (3 mnd)", rotate=1, rotate_days=63),
+    Variant("9 vasthouden + marktweer, marge 3%", hold_only=True, regime=True, regime_exit=True, regime_band=0.03),
+    Variant("9b vasthouden + marktweer, marge 5%", hold_only=True, regime=True, regime_exit=True, regime_band=0.05),
+    Variant("9c 2+3 met marge 3%", switch_margin=0.3, regime=True, regime_band=0.03),
     Variant("alles", risk_sizing=True, switch_margin=0.3, regime=True, trail=3.0, vote=3, handicap=0.5),
 ]
 
@@ -125,6 +129,7 @@ class DeskResult:
     variant: str
     desk: str
     equity: list[float] = field(default_factory=list)
+    dates: list = field(default_factory=list)
     trades: int = 0
     fees: float = 0.0
     switches: int = 0
@@ -141,7 +146,9 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
     chosen: dict[str, list[str]] = {}
     pending: dict[str, int] = {}
     res = DeskResult(variant.name, cls)
+    res.dates = dates
     last_pick = None
+    bull_state: bool | None = None
     rotation: set = set()
     max_pos = max(config.risk.max_position_pct, 1 / max(len(series), 1),
                   1 / variant.rotate if variant.rotate else 0)
@@ -229,7 +236,10 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
             li = last_idx(leader, d)
             if li is not None and li >= 200:
                 sma = sum(c.close for c in leader.candles[li - 199:li + 1]) / 200
-                bull = leader.candles[li].close > sma
+                gap = leader.candles[li].close / sma - 1
+                if bull_state is None or abs(gap) > variant.regime_band:
+                    bull_state = gap > 0
+                bull = bull_state
         for s in series:
             sym, i = s.inst.symbol, idxs[s.inst.symbol]
             if i is None or sym not in chosen:
@@ -287,10 +297,67 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
             m = metrics(rets, r.trades, r.fees, 0, ppy)
             out[cls][v.name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
                                 "trades": r.trades, "fees": r.fees, "switches": r.switches, "days": len(r.equity)}
+            if v.name == "gekozen (live)":
+                out[cls][v.name]["curve"] = list(zip(r.dates, r.equity))
     return out
 
 
-def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool = False) -> str:
+ALLOCATIONS = ("vaste potjes, nooit herverdelen (live)", "vaste verdeling, elk kwartaal terug",
+               "naar risico, elk kwartaal")
+MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost samen ~0,5% van het verschoven bedrag
+
+
+def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
+               vol_days: int = 90) -> dict[str, dict]:
+    """Slimmer verdelen tussen afdelingen? Speelt de live-curves van alle afdelingen samen na
+    vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
+    curves = {c: dict(rows["gekozen (live)"]["curve"]) for c, rows in result.items()
+              if rows.get("gekozen (live)", {}).get("curve")}
+    if len(curves) < 2:
+        return {}
+    start = max(min(c) for c in curves.values())
+    days = sorted({d for c in curves.values() for d in c if d >= start})
+    last = {c: None for c in curves}
+    rets: dict[str, list[float]] = {c: [] for c in curves}
+    for d in days:   # dagrendement per afdeling; geen koers die dag (weekend) = 0
+        for c, cur in curves.items():
+            v = cur.get(d, last[c])
+            rets[c].append(v / last[c] - 1 if last[c] and v else 0.0)
+            last[c] = v if v else last[c]
+    out = {}
+    total_share = sum(shares[c] for c in curves)
+    for name in ALLOCATIONS:
+        w = {c: shares[c] / total_share for c in curves}
+        val = {c: w[c] for c in curves}
+        eq, moved = [], 0.0
+        for k in range(len(days)):
+            for c in curves:
+                val[c] *= 1 + rets[c][k]
+            tot = sum(val.values())
+            if name != ALLOCATIONS[0] and k > 0 and k % every == 0:
+                if name == ALLOCATIONS[2] and k >= vol_days:
+                    inv = {}
+                    for c in curves:
+                        r = rets[c][k - vol_days + 1:k + 1]
+                        m = sum(r) / len(r)
+                        sd = math.sqrt(sum((x - m) ** 2 for x in r) / len(r))
+                        inv[c] = 1 / sd if sd > 0 else 0.0
+                    w = {c: inv[c] / sum(inv.values()) for c in curves} if sum(inv.values()) else w
+                target = {c: tot * w[c] for c in curves}
+                shift = sum(abs(target[c] - val[c]) for c in curves) / 2
+                moved += shift
+                tot -= shift * MOVE_COST
+                val = {c: tot * w[c] for c in curves}
+            eq.append(tot)
+        dr = [b / a - 1 for a, b in zip([1.0] + eq, eq)]
+        m = metrics(dr, 0, 0, 0, 365)
+        out[name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
+                     "moved": moved, "since": start}
+    return out
+
+
+def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool = False,
+                   alloc: dict[str, dict] | None = None) -> str:
     lines = [f"# Afdelingen-backtest: verbeteringen tegen de huidige versie ({now:%Y-%m-%d})", ""]
     if demo:
         lines += ["**Let op: nep-koersen.** Deze cijfers zeggen niets over echte markten.", ""]
@@ -320,4 +387,13 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
         ok = live["sharpe"] >= base["sharpe"] - 0.05 and live["sharpe"] >= hold["sharpe"] - 0.15
         lines.append(f"| {cls} | {live['sharpe']:.2f} | {base['sharpe']:.2f} | {hold['sharpe']:.2f} | "
                      f"{'in orde' if ok else 'NIET in orde: aanpassen'} |")
+    if alloc:
+        live = alloc[ALLOCATIONS[0]]
+        lines += ["", f"## Verdeling tussen afdelingen (samen, sinds {live['since']})", "",
+                  f"Herverdelen kost {MOVE_COST:.1%} van het verschoven bedrag. ✅ = beter dan live.", "",
+                  "| Verdeling | Rendement | Sharpe | Max daling | Verschoven (x pot) |", "|---|---:|---:|---:|---:|"]
+        for n, r in alloc.items():
+            better = n != ALLOCATIONS[0] and r["sharpe"] > live["sharpe"] + 0.05 and r["max_dd"] <= live["max_dd"] + 0.01
+            lines.append(f"| {n}{' ✅' if better else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
+                         f"{-r['max_dd']:.1%} | {r['moved']:.2f} |")
     return "\n".join(lines) + "\n"
