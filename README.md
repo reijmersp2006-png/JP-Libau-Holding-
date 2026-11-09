@@ -90,8 +90,13 @@ jplh run             # één paper-ronde voor alle afdelingen + dashboard bijwer
 jplh dashboard       # dashboard openen (met --demo: nep-wereld)
 jplh kill / unkill   # noodstop aan / uit
 jplh resume          # pauze na een te grote daling opheffen
+jplh jarvis          # Telegram-berichten van Phil beantwoorden en alarmen nalopen
 pytest               # alle tests
 ```
+
+Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`,
+`/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
+`/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
 
 Je hoeft dit niet op je eigen computer te draaien: vanaf fase 3 draait de bot in de
 cloud via GitHub Actions. Bij elke pull request controleert GitHub al automatisch of de

@@ -82,3 +82,21 @@ def test_weather_flip_and_alarm_are_reported():
     msgs = messages(st, memory, NOW)
     assert any("omgeslagen naar slecht" in m for m in msgs)
     assert any(m.startswith("🚨") for m in msgs)
+
+
+def test_week_report_on_sunday_evening_once():
+    sunday = datetime(2026, 11, 15, 18, 30, tzinfo=UTC)          # 19:30 in Nederland
+    st = _state()
+    st["total"]["pnl_pct"] = 0.01
+    st["total"]["equity_curve"] = [[(sunday - timedelta(days=8)).isoformat(), 1000.0], [sunday.isoformat(), 1010.0]]
+    st["desks"][0].update(equity_eur=525.0, equity_curve=[[(sunday - timedelta(days=8)).isoformat(), 500.0]])
+    st["desks"][1].update(equity_eur=495.0, equity_curve=[[(sunday - timedelta(days=8)).isoformat(), 500.0]])
+    st["feed"] = [{"ts": (sunday - timedelta(days=2)).isoformat(), "desk": "crypto", "kind": "reflection",
+                   "text": "terugblik BTC-EUR: goed"}]
+    st["jarvis"] = {"health": {"status": "ok", "issues": []}}
+    memory = {"seen_ts": sunday.isoformat(), "briefing_day": "2026-11-15"}
+    msgs = messages(st, memory, sunday)
+    report = next(m for m in msgs if "Weekrapport" in m)
+    assert "+1,0%" in report and "Winnaar van de week: Crypto Lab" in report and "terugblik BTC-EUR" in report
+    assert not any("Weekrapport" in m for m in messages(st, memory, sunday + timedelta(hours=1)))
+    assert not any("Weekrapport" in m for m in messages(_state(), {"briefing_day": "2026-11-09"}, NOW))

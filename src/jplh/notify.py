@@ -13,11 +13,61 @@ import urllib.request
 from datetime import datetime, timedelta
 
 from jplh.data.http import USER_AGENT, ssl_context
-from jplh.jarvis import AMS
+from jplh.jarvis import AMS, _eur, _pct
 from jplh.store import Store
 
 API = "https://api.telegram.org/bot{token}/{method}"
 BRIEFING_HOUR = 8          # dagbriefing bij de eerste ronde na 08:00 Nederlandse tijd
+REPORT_DAY, REPORT_HOUR = 6, 18   # weekrapport: zondag bij de eerste ronde na 18:00
+
+
+def _week_ago(curve: list, now: datetime) -> float | None:
+    """De waarde van een vermogenscurve ([[iso, waarde], ...]) een week geleden, of de oudste."""
+    if not curve:
+        return None
+    cut = (now - timedelta(days=7)).isoformat()
+    before = [e for t, e in curve if t <= cut]
+    return before[-1] if before else curve[0][1]
+
+
+def week_report(state: dict, now: datetime) -> str:
+    """Het weekrapport: hoe de week ging, per afdeling, en wat de holding leerde."""
+    t = state["total"]
+    since = (now - timedelta(days=7)).isoformat()
+    lines = ["📊 Weekrapport JP-libau Holding"]
+    start = _week_ago(t.get("equity_curve", []), now)
+    if start:
+        diff = t["equity_eur"] - start
+        lines.append(f"Schatkist {_eur(t['equity_eur'])}: deze week {_pct(diff / start)} "
+                     f"({'+' if diff >= 0 else '-'}{_eur(abs(diff))}), sinds de start {_pct(t['pnl_pct'])}.")
+    else:
+        lines.append(f"Schatkist {_eur(t['equity_eur'])}, sinds de start {_pct(t['pnl_pct'])}.")
+    if t.get("benchmark_eur"):
+        diff = t["equity_eur"] - t["benchmark_eur"]
+        lines.append(f"Tegenover gewoon vasthouden: {_eur(abs(diff))} {'voor' if diff >= 0 else 'achter'}.")
+    week = []
+    for d in state.get("desks", []):
+        s0 = _week_ago(d.get("equity_curve", []), now)
+        if s0:
+            week.append((d["equity_eur"] / s0 - 1, d.get("name", d["id"])))
+    if week:
+        week.sort(reverse=True)
+        lines.append("Per afdeling deze week:")
+        lines += [f"• {name}: {_pct(r)}" for r, name in week]
+        if len(week) >= 2:
+            lines.append(f"Winnaar van de week: {week[0][1]}. Achterblijver: {week[-1][1]}.")
+    feed = [f for f in state.get("feed", []) if f["ts"] >= since]
+    trades = [f for f in feed if f["kind"] == "trade"]
+    lines.append(f"Trades deze week: {len(trades)}." if trades else
+                 "Geen trades deze week: de afdelingen hielden vast.")
+    lessons = [f for f in feed if f["kind"] == "reflection"]
+    if lessons:
+        lines.append("Wat de holding leerde:")
+        lines += [f"• {f['text']}" for f in lessons[:3]]
+    issues = state.get("jarvis", {}).get("health", {}).get("issues", [])
+    lines.append("Alles draaide gezond." if not issues else
+                 "Let op: " + "; ".join(i["text"] for i in issues[:2]) + ".")
+    return "\n".join(lines)
 
 
 class Telegram:
@@ -89,6 +139,12 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
         if b:
             out.insert(0, f"🤖 {b['hello']} Phil. Dagbriefing:\n" + "\n".join(f"• {x}" for x in b["lines"]))
         memory["briefing_day"] = today
+
+    week = f"{local.isocalendar().year}-W{local.isocalendar().week}"
+    if local.weekday() == REPORT_DAY and local.hour >= REPORT_HOUR and memory.get("report_week") != week:
+        if state.get("total"):
+            out.append(week_report(state, now))
+        memory["report_week"] = week
     return out
 
 
