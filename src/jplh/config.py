@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
-from jplh.models import AssetClass, Instrument
+from jplh.models import AssetClass, Instrument, Watch
 
 
 class ConfigError(ValueError):
@@ -43,6 +43,7 @@ class HoldingConfig:
     risk: RiskLimits
     costs: dict[str, CostModel]
     desks: dict[str, float] = field(default_factory=dict)
+    watch: tuple[Watch, ...] = ()
 
     def instrument(self, symbol: str) -> Instrument:
         for inst in self.instruments:
@@ -90,6 +91,8 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         raw["risk"] = _merge_risk(raw["risk"], user.get("risk", {}))
         if "instrument" in user:
             raw["instrument"] = user["instrument"]
+        if "watch" in user:
+            raw["watch"] = user["watch"]
         if "desks" in user:
             raw["desks"] = {**raw.get("desks", {}), **user["desks"]}
         for cls, cost in user.get("costs", {}).items():
@@ -128,4 +131,6 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         risk=RiskLimits(**raw["risk"]),
         costs=costs,
         desks=desks,
+        watch=tuple(Watch(w["symbol"], w.get("name", w["symbol"]), w["source"], w.get("kind", "markt"))
+                    for w in raw.get("watch", []) if w["symbol"] not in seen),
     )

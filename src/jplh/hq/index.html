@@ -74,6 +74,11 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
 #feed .t{color:var(--dim)} #feed .who{font-weight:700}
 #feed .trade .txt{color:var(--good)} #feed .refused .txt{color:var(--warn)}
 #feed .pause .txt{color:var(--bad)} #feed .selection .txt{color:var(--purple)}
+#feed .reflection .txt{color:var(--blue)} #feed .weekreport .txt{color:var(--gold)} #feed .alert .txt{color:#ff9de2}
+#feed .msg{cursor:pointer} #feed .msg .det{display:none;white-space:normal;color:var(--dim);padding:2px 0 4px 16px}
+#feed .msg.open{white-space:normal} #feed .msg.open .det{display:block}
+.lvl-groot{color:var(--bad)} .lvl-let_op{color:var(--warn)} .lvl-info{color:var(--blue)}
+.lesson{margin:2px 0 0 10px;color:var(--dim);font-size:11px}
 #quests{background:var(--panel);border-left:4px solid #0b0816;overflow:auto;padding:8px 14px}
 .quest{margin:6px 0} .quest .qt{display:flex;justify-content:space-between;font-size:12px}
 .quest .bar{height:10px;margin-top:3px} .quest.done .qt{color:var(--good)}
@@ -307,7 +312,10 @@ function placeSigns() {
     let inner;
     if (d) inner = `<b>${esc(b.label)}</b><span class="lv">Lv ${d.level}</span> · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
     else if (id === "risk") inner = `<b>Wachttoren</b>${S.kill ? '<span class="dn">noodstop aan</span>' : S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">alles veilig</span>'}`;
-    else inner = `<b>Onderzoekslab</b><span class="mute">toernooi</span>`;
+    else {
+      const n = labAlerts24h();
+      inner = `<b>Onderzoekslab</b>${n ? `<span class="dn">${n} melding${n > 1 ? "en" : ""}</span>` : '<span class="mute">rustig</span>'}`;
+    }
     const alarm = d && d.status === "alarm";
     html.push(`<div class="sign ${selected === id ? "sel" : ""} ${alarm ? "alarm" : ""}" data-id="${id}" style="left:${x}px;top:${y}px">${inner}</div>`);
   }
@@ -381,19 +389,62 @@ function deskPanel(d) {
   ${d.positions.length ? `<table><tr><th>Instrument</th><th class="r">Waarde</th><th class="r">Sinds aankoop</th></tr>
     ${d.positions.map(p => `<tr><td>${esc(p.symbol)}</td><td class="r">${eur(p.value_eur)}</td><td class="r ${cls(p.pnl_pct)}">${pct(p.pnl_pct)}</td></tr>`).join("")}</table>`
     : `<div class="hint">Geen posities. Het team wacht tot een strategie een kans ziet.</div>`}
+  <h3 class="px">Waarom deze trades?</h3>
+  ${S.feed.filter(f => f.desk === d.id && (f.kind === "trade" || f.kind === "refused")).slice(0, 5).map(f =>
+    `<div class="card hint"><b class="${f.kind === "trade" ? "up" : "dn"}">${esc(f.text)}</b> · ${when(f.ts)}<br>${esc(strat(f.why || f.detail))}${f.kind === "refused" ? `<br><span class="dn">${esc(f.detail.split("Risico: ").pop())}</span>` : ""}</div>`).join("")
+    || '<div class="hint">Nog geen trades.</div>'}
   <p class="hint">Strategieën worden elke week opnieuw gekozen op de laatste 500 dagen${d.selected_at ? " (laatst: " + when(d.selected_at) + ")" : ""}.</p>`;
 }
 
+function labAlerts24h() {
+  if (!S || !S.lab) return 0;
+  const since = new Date(S.generated_at).getTime() - 24 * 3600e3;
+  return S.lab.alerts.filter(a => new Date(a.ts).getTime() >= since && a.level !== "info").length;
+}
+
 function labPanel() {
+  const L = S.lab || {alerts: [], watch: [], reflections: [], records: [], reports: [], adjustments: {}};
+  const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven"};
   const rows = S.desks.flatMap(d => d.instruments.map(i => ({desk: d.name, ...i})));
   const counts = {};
   rows.forEach(r => { const f = (r.strategy || "").split("(")[0]; counts[f] = (counts[f] || 0) + 1; });
-  return `<h2 class="px">Onderzoekslab</h2><div class="mute">Het strategietoernooi</div>
-  <div class="card">Elke week laat elk team alle strategieën strijden op de laatste 500 dagen, na kosten. De beste voor risico wint, maar alleen als hij duidelijk beter is dan gewoon vasthouden.</div>
-  <h3 class="px">Winnaars nu</h3>
-  <table>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k.replaceAll("_", "-"))}</td><td class="r">${v}×</td></tr>`).join("")}</table>
-  <h3 class="px">Per instrument</h3>
-  <table><tr><th>Instrument</th><th>Strategie</th></tr>${rows.map(r => `<tr><td>${esc(r.symbol)}</td><td class="hint">${esc(strat(r.strategy))}</td></tr>`).join("")}</table>`;
+  const adj = L.adjustments || {};
+  return `<h2 class="px">Onderzoekslab</h2><div class="mute">Kijkt terug, leert en houdt de wereld in de gaten</div>
+  <div class="card">
+    <div class="row"><span>Trades teruggeblikt</span><span>${L.reviewed}</span></div>
+    <div class="row"><span>Met winst</span><span>${L.hit_rate == null ? "–" : Math.round(L.hit_rate * 100) + "%"}</span></div>
+    <div class="row"><span>Gemiddeld t.o.v. vasthouden</span><span class="${cls(L.avg_edge)}">${L.avg_edge == null ? "–" : pct(L.avg_edge)}</span></div>
+    <div class="hint" style="margin-top:4px">Een week na elke verkoop kijkt het lab of de trade slim was: wat had vasthouden gedaan, was de verkoop te vroeg, en welke strategie had het beter gedaan.</div></div>
+
+  <h3 class="px">Verkenners</h3>
+  ${L.alerts.length ? L.alerts.slice(0, 8).map(a => `<div class="card hint"><span class="lvl-${a.level}">●</span> ${when(a.ts)} · ${esc(a.text)}</div>`).join("")
+    : '<div class="hint">Geen ongewone bewegingen gezien. De verkenners kijken elk uur naar alle markten.</div>'}
+
+  ${L.watch.length ? `<h3 class="px">De wereld</h3><table><tr><th>Markt</th><th class="r">24u</th></tr>
+    ${L.watch.map(w => `<tr><td>${esc(w.name)} <span class="pill">${esc(w.kind)}</span></td><td class="r ${cls(w.change_24h)}">${pct(w.change_24h)}${w.fresh ? "" : ' <span class="hint">dicht</span>'}</td></tr>`).join("")}</table>
+    <p class="hint">Alleen om mee te kijken. Hier wordt niet op gehandeld.</p>` : ""}
+
+  <h3 class="px">Terugblik op trades</h3>
+  ${L.reflections.length ? L.reflections.slice(0, 8).map(r => `<div class="card"><div class="row"><span><b>${esc(r.instrument)}</b> <span class="pill">${esc(who[r.desk] || r.desk)}</span></span>
+      <span class="${cls(r.pnl_pct)}">${esc(r.verdict)} ${pct(r.pnl_pct)}</span></div>
+      <div class="hint">${esc(strat(r.strategy))} · ${r.days} dagen · vasthouden ${pct(r.hold_pct)}</div>
+      ${r.lessons.map(l => `<div class="lesson">→ ${esc(strat(l))}</div>`).join("")}</div>`).join("")
+    : '<div class="hint">Nog geen afgeronde trades. Een week na de eerste verkoop verschijnt hier de eerste terugblik.</div>'}
+
+  <h3 class="px">Rapportcijfers strategieën</h3>
+  ${L.records.length ? `<table><tr><th>Strategie</th><th class="r">Trades</th><th class="r">Raak</th><th class="r">vs houden</th></tr>
+    ${L.records.map(r => { const a = adj[r.desk + ":" + r.strategy];
+      return `<tr><td class="hint">${esc(strat(r.strategy))}${a ? ` <span class="${a < 0 ? "dn" : "up"}">${a < 0 ? "straf" : "bonus"}</span>` : ""}</td><td class="r">${r.trades}</td><td class="r">${Math.round(r.hit_rate * 100)}%</td><td class="r ${cls(r.avg_edge)}">${pct(r.avg_edge)}</td></tr>`; }).join("")}</table>
+    <p class="hint">Na 3 of meer trades krijgt een strategie die live slechter is dan vasthouden strafpunten bij de weekkeuze. Duidelijk beter? Dan een kleine bonus.</p>`
+    : '<div class="hint">Nog geen cijfers. Die komen na de eerste terugblikken.</div>'}
+
+  <h3 class="px">Weekrapporten</h3>
+  ${L.reports.length ? L.reports.map(r => `<div class="card hint"><b>${esc(who[r.desk] || r.desk)}</b> · ${when(r.ts)}<br>${esc(strat(r.reason.replace(/^weekrapport: /, "")))}</div>`).join("")
+    : '<div class="hint">Het eerste weekrapport komt na 7 dagen.</div>'}
+
+  <h3 class="px">Strategietoernooi</h3>
+  <div class="hint">Elke week strijden alle strategieën per instrument op de laatste 500 dagen, na kosten. Vasthouden wint, tenzij een strategie duidelijk beter is.</div>
+  <table>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k.replaceAll("_", "-"))}</td><td class="r">${v}×</td></tr>`).join("")}</table>`;
 }
 
 function riskPanel() {
@@ -437,10 +488,12 @@ function hud() {
 }
 
 function feed() {
-  const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven"};
-  document.getElementById("feed").innerHTML = S.feed.length ? S.feed.map(f =>
-    `<div class="msg ${f.kind}" title="${esc(f.detail)}"><span class="t">[${when(f.ts)}]</span> <span class="who">${esc(who[f.desk] || f.desk)}:</span> <span class="txt">${esc(strat(f.text))}</span> <span class="t">${esc(strat(f.strategy || ""))}</span></div>`).join("")
+  const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven", scouts: "Verkenners"};
+  const box = document.getElementById("feed");
+  box.innerHTML = S.feed.length ? S.feed.map(f =>
+    `<div class="msg ${f.kind}"><span class="t">[${when(f.ts)}]</span> <span class="who">${esc(who[f.desk] || f.desk)}:</span> <span class="txt">${esc(strat(f.text))}</span> <span class="t">${esc(strat(f.strategy || ""))}</span>${f.detail ? `<div class="det">${esc(strat(f.detail))}</div>` : ""}</div>`).join("")
     : '<div class="msg t">Nog geen gebeurtenissen. De eerste ronde draait binnen het uur.</div>';
+  box.querySelectorAll(".msg").forEach(el => el.onclick = () => el.classList.toggle("open"));
   document.getElementById("quests").innerHTML = '<div class="px" style="font-size:12px;margin-bottom:4px">Missies</div>' + S.missions.map(m => {
     const done = m.progress >= m.goal;
     return `<div class="quest ${done ? "done" : ""} ${m.locked ? "locked" : ""}"><div class="qt"><span>${done ? "✔ " : m.locked ? "🔒 " : ""}${esc(m.title)}</span><span>${m.progress}/${m.goal}</span></div>

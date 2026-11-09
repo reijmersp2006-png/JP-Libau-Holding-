@@ -6,10 +6,12 @@ import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from jplh.collect import collect_candles, collect_fx_reference, collect_radar
+from jplh.collect import collect_candles, collect_fx_reference, collect_radar, collect_watch
 from jplh.config import HoldingConfig
 from jplh.data import Bitvavo, Demo, Yahoo
 from jplh.desks import open_desks
+from jplh.models import Candle
+from jplh.scouts import scan
 from jplh.site import build_state, write_site
 from jplh.store import Store
 
@@ -32,6 +34,11 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
                 failed += 1
                 log(f"FAIL  {r.symbol}: {r.error}")
         log(f"Koersen: {len(results) - failed} van {len(results)} gelukt")
+        watch = collect_watch(config, market, sources, now)
+        for r in watch:
+            if not r.ok:
+                log(f"verkenner mist {r.symbol}: {r.error}")
+        log(f"Verkenners: {sum(r.ok for r in watch)} van {len(watch)} extra markten binnen")
     desks = open_desks(config, home, market)
     for cls, desk in desks.items():
         rnd = desk.run(now)
@@ -41,14 +48,22 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
             log(f"{cls:<7} {'OK ' if d.approved else 'NEE'}  {d.signal.instrument}: {d.reason}")
         eq = desk.holding.portfolio.equity_eur(desk.holding.prices(now))
         log(f"{cls:<7} potje €{eq:,.2f}")
+    for a in scan(market, watch_list(config), now):
+        log(f"verkenner {a.level:<6} {a.text}")
     if site_dir is not None:
         write_site(build_state(config, desks, market, home, now), site_dir)
         log(f"Dashboard bijgewerkt in {site_dir}")
     return failed
 
 
-def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime | None = None) -> Path:
-    """Maakt een nep-wereld: ~2 jaar nep-dagkoersen en een paar dagen paper-rondes per uur.
+def watch_list(config: HoldingConfig) -> list[tuple[str, str]]:
+    return [(i.symbol, i.symbol) for i in config.instruments] + [(w.symbol, w.name) for w in config.watch]
+
+
+def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime | None = None,
+               history_days: int = 60) -> Path:
+    """Maakt een nep-wereld: ~2 jaar nep-dagkoersen, ``history_days`` dagen met één ronde per
+    dag (zodat het lab al trades kan terugblikken) en daarna ``hours`` rondes per uur.
     Alles staat in ``home``, los van je echte data."""
     now = (now or datetime.now(tz=UTC)).replace(minute=5, second=0, microsecond=0)
     if home.exists():
@@ -56,22 +71,32 @@ def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime
     (home / "data").mkdir(parents=True)
     market = Store(home / "data" / "holding.sqlite3")
     kinds = {i.symbol: i.asset_class.value for i in config.instruments}
+    kinds.update({w.symbol: "stocks" for w in config.watch})
     hourly = Demo(kinds, seed=11, end=now)
-    for inst in config.instruments:
-        h = hourly.candles(inst.symbol, "1h", hours + 48)
+    for inst in list(config.instruments) + list(config.watch):
+        h = hourly.candles(inst.symbol, "1h", hours + 48 + history_days * 24)
         market.save_observed(inst.symbol, "1h", h, "demo", timedelta(hours=1))
         # Dagkoersen die netjes aansluiten op de uurkoersen.
         last_close = h[0].open
         d = Demo(kinds, seed=5, end=h[0].ts.replace(hour=0)).candles(inst.symbol, "1d", 700)
         k = last_close / d[-1].close
-        from jplh.models import Candle
         d = [Candle(c.ts, c.open * k, c.high * k, c.low * k, c.close * k, c.volume) for c in d]
+        # Daarna dagkoersen gebouwd uit de uurkoersen, zodat signalen in de demo meebewegen.
+        days: dict = {}
+        for c in h:
+            days.setdefault(c.ts.replace(hour=0), []).append(c)
+        for day, cs in sorted(days.items()):
+            if day > d[-1].ts and len(cs) == 24:
+                d.append(Candle(day, cs[0].open, max(c.high for c in cs), min(c.low for c in cs), cs[-1].close,
+                                sum(c.volume for c in cs)))
         market.save_observed(inst.symbol, "1d", d, "demo", timedelta(days=1))
     desks = open_desks(config, home, market, use_kill_file=False)
-    for i in range(hours, -1, -1):
-        t = now - timedelta(hours=i)
+    steps = [now - timedelta(hours=hours + 24 * d) for d in range(history_days, 0, -1)]
+    steps += [now - timedelta(hours=i) for i in range(hours, -1, -1)]
+    for t in steps:
         for desk in desks.values():
             desk.run(t)
+        scan(market, watch_list(config), t)
     site = home / "site"
     write_site(build_state(config, desks, market, home, now, demo=True), site)
     return site

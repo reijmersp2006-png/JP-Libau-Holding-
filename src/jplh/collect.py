@@ -69,3 +69,24 @@ def collect_radar(store: Store, dex: DexScreener | None = None, queries=RADAR_QU
         except DataError as exc:
             out.append(CollectResult(f"radar {q}", False, error=str(exc)))
     return out
+
+
+def collect_watch(config: HoldingConfig, store: Store, sources: dict[str, CandleSource],
+                  now: datetime | None = None, hourly: int = 48, daily: int = 300) -> list[CollectResult]:
+    """Koersen voor de verkenners (alleen kijken). Fouten hier stoppen de handel nooit."""
+    now = now or datetime.now(tz=UTC)
+    out = []
+    for w in config.watch:
+        src = sources.get(w.source)
+        if src is None:
+            out.append(CollectResult(w.symbol, False, error=f"onbekende bron {w.source}"))
+            continue
+        try:
+            n = 0
+            for interval, limit, step in (("1h", hourly, timedelta(hours=1)), ("1d", daily, timedelta(days=1))):
+                candles = [c for c in src.candles(w.symbol, interval, limit) if c.ts + step <= now]
+                n += store.save_candles(w.symbol, interval, candles, src.name, now)
+            out.append(CollectResult(w.symbol, True, n))
+        except (DataError, KeyError, ValueError, TypeError) as exc:
+            out.append(CollectResult(w.symbol, False, error=str(exc)))
+    return out

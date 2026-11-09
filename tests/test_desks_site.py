@@ -85,7 +85,7 @@ def test_state_and_site(world, tmp_path):
 
 
 def test_demo_world(tmp_path):
-    site = build_demo(load_config(None), tmp_path / "demo", hours=6, now=NOW)
+    site = build_demo(load_config(None), tmp_path / "demo", hours=6, now=NOW, history_days=10)
     state = json.loads((site / "state.json").read_text())
     assert state["demo"] is True
     assert (site / "index.html").read_text().count("JP-libau") >= 1
