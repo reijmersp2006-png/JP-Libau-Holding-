@@ -17,6 +17,8 @@ from pathlib import Path
 from jplh.config import HoldingConfig
 from jplh.desks import DESK_ORDER, Desk, benchmark_equity
 from jplh.prices import PriceError
+from jplh.research import track_record
+from jplh.scouts import recent as recent_alerts
 from jplh.store import Store
 
 DESK_INFO = {
@@ -117,6 +119,42 @@ def _missions(total: dict, desks: list[dict], days: int, ever_paused: bool) -> l
     ]
 
 
+def lab_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, now: datetime,
+              alerts: list[dict]) -> dict:
+    """Alles voor het Onderzoekslab: terugblikken, rapportcijfers, weekrapporten en verkenners."""
+    reflections, records, reports, adjust = [], [], [], {}
+    for c in DESK_ORDER:
+        if c not in desks:
+            continue
+        refl = desks[c].reflections()
+        reflections += [{"desk": c, **r} for r in refl]
+        for label, t in track_record(refl).items():
+            records.append({"desk": c, "strategy": label, **{k: t[k] for k in
+                            ("trades", "hit_rate", "avg_pnl", "avg_edge")}})
+        last = desks[c].holding.store.events(kind="weekreport", limit=1)
+        if last:
+            reports.append({"desk": c, "ts": last[0][0].isoformat(), **last[0][2]})
+        for label, a in (desks[c].meta.get("adjustments") or {}).items():
+            adjust[f"{c}:{label}"] = a
+    reflections.sort(key=lambda r: r["exit_ts"], reverse=True)
+    wins = sum(1 for r in reflections if r["pnl_pct"] > 0)
+    watch = []
+    for w in config.watch:
+        day = market.candles(w.symbol, "1h", known_at=now, limit=25)
+        if not day:
+            continue
+        fresh = now - day[-1].ts <= timedelta(hours=config.risk.max_data_age_hours)
+        watch.append({"symbol": w.symbol, "name": w.name, "kind": w.kind, "price": day[-1].close,
+                      "change_24h": day[-1].close / day[0].close - 1 if len(day) >= 2 else None, "fresh": fresh})
+    return {
+        "reviewed": len(reflections), "wins": wins,
+        "hit_rate": wins / len(reflections) if reflections else None,
+        "avg_edge": sum(r["edge_vs_hold"] for r in reflections) / len(reflections) if reflections else None,
+        "reflections": reflections[:25], "records": sorted(records, key=lambda r: -r["trades"])[:20],
+        "reports": reports, "adjustments": adjust, "alerts": alerts, "watch": watch,
+    }
+
+
 def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, home: Path,
                 now: datetime | None = None, demo: bool = False) -> dict:
     now = now or datetime.now(tz=UTC)
@@ -149,11 +187,25 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
             if kind == "decision":
                 verb = "koopt" if p["side"] == "buy" else "verkoopt"
                 text = f"{p['instrument']}: {verb}" if p["approved"] else f"{p['instrument']}: {verb} NIET"
+                why = p.get("signal_reason", "")
                 feed.append({"ts": ts.isoformat(), "desk": c, "kind": "trade" if p["approved"] else "refused",
-                             "text": text, "detail": p["reason"], "strategy": p.get("strategy", "")})
+                             "text": text, "why": why,
+                             "detail": (why + ". " if why else "") + "Risico: " + p["reason"],
+                             "strategy": p.get("strategy", "")})
+            elif kind == "reflection":
+                feed.append({"ts": ts.isoformat(), "desk": c, "kind": "reflection",
+                             "text": f"terugblik {p['instrument']}: {p['verdict']}", "detail": p["reason"],
+                             "strategy": p.get("strategy", "")})
+            elif kind == "weekreport":
+                feed.append({"ts": ts.isoformat(), "desk": c, "kind": "weekreport", "text": p["reason"],
+                             "detail": ""})
             elif kind in ("selection", "pause", "resume"):
                 feed.append({"ts": ts.isoformat(), "desk": c, "kind": kind, "text": p.get("reason", kind),
                              "detail": ""})
+    alerts = recent_alerts(market, 40)
+    for a in alerts[:15]:
+        feed.append({"ts": a["ts"], "desk": "scouts", "kind": "alert", "text": a["text"], "detail": "",
+                     "level": a["level"]})
     feed.sort(key=lambda f: f["ts"], reverse=True)
 
     started = [d["days_active"] for d in states]
@@ -167,6 +219,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
         "SELECT base_symbol, chain, price_usd, liquidity_usd, volume_24h_usd, change_24h_pct, flags FROM radar "
         "WHERE fetched_at = (SELECT MAX(fetched_at) FROM radar) ORDER BY volume_24h_usd DESC LIMIT 12").fetchall()
     return {
+        "lab": lab_state(config, desks, market, now, alerts),
         "generated_at": now.isoformat(), "name": config.name, "mode": config.mode, "demo": demo,
         "kill": (home / "KILL").exists(), "days_active": days,
         "limits": {"max_drawdown_pct": config.risk.max_drawdown_pct,

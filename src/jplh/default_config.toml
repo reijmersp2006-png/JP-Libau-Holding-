@@ -182,3 +182,91 @@ min_fee_eur = 1.25
 fee_pct = 0.0002
 slippage_pct = 0.0002
 min_fee_eur = 1.25
+
+# ---------------------------------------------------------------- verkenners (alleen kijken)
+# De verkenners volgen ook de rest van de wereld, om vroeg te zien als er iets ongewoons
+# gebeurt. Hierop wordt NOOIT gehandeld; het is alleen informatie voor het Onderzoekslab.
+
+[[watch]]
+symbol = "^GSPC"
+name = "S&P 500"
+source = "yahoo"
+kind = "index"
+
+[[watch]]
+symbol = "^IXIC"
+name = "Nasdaq"
+source = "yahoo"
+kind = "index"
+
+[[watch]]
+symbol = "^AEX"
+name = "AEX"
+source = "yahoo"
+kind = "index"
+
+[[watch]]
+symbol = "^VIX"
+name = "Angstindex (VIX)"
+source = "yahoo"
+kind = "stemming"
+
+[[watch]]
+symbol = "^TNX"
+name = "VS-rente 10 jaar"
+source = "yahoo"
+kind = "rente"
+
+[[watch]]
+symbol = "DX-Y.NYB"
+name = "Dollarindex"
+source = "yahoo"
+kind = "valuta"
+
+[[watch]]
+symbol = "CL=F"
+name = "Olie (WTI)"
+source = "yahoo"
+kind = "grondstof"
+
+[[watch]]
+symbol = "HG=F"
+name = "Koper"
+source = "yahoo"
+kind = "grondstof"
+
+[[watch]]
+symbol = "ADA-EUR"
+name = "Cardano"
+source = "bitvavo"
+kind = "crypto"
+
+[[watch]]
+symbol = "AVAX-EUR"
+name = "Avalanche"
+source = "bitvavo"
+kind = "crypto"
+
+[[watch]]
+symbol = "LINK-EUR"
+name = "Chainlink"
+source = "bitvavo"
+kind = "crypto"
+
+[[watch]]
+symbol = "LTC-EUR"
+name = "Litecoin"
+source = "bitvavo"
+kind = "crypto"
+
+[[watch]]
+symbol = "WIF-EUR"
+name = "dogwifhat"
+source = "bitvavo"
+kind = "meme"
+
+[[watch]]
+symbol = "BONK-EUR"
+name = "Bonk"
+source = "bitvavo"
+kind = "meme"

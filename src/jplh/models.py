@@ -29,6 +29,16 @@ class Instrument:
 
 
 @dataclass(frozen=True)
+class Watch:
+    """Iets wat de verkenners alleen volgen (indexen, olie, rente, extra munten). Nooit handelen."""
+
+    symbol: str
+    name: str
+    source: str
+    kind: str = "markt"
+
+
+@dataclass(frozen=True)
 class Candle:
     """Eén gesloten koersperiode. ``ts`` is het begin van de periode (UTC)."""
 
