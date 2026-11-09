@@ -50,10 +50,12 @@ class Variant:
     hold_only: bool = False
     handicap: float = 0.1     # Sharpe die een strategie moet inleveren t.o.v. vasthouden
     regime_exit: bool = False # bij slecht marktweer ook verkopen (niet alleen niet kopen)
+    rotate: int = 0           # alleen de ``rotate`` sterkste instrumenten (momentum) houden; 0 = uit
+    rotate_days: int = 126    # momentum over zoveel dagen (~6 maanden)
 
 
 VARIANTS = [
-    Variant("huidig"),
+    Variant("oude versie"),
     Variant("vasthouden (maatlat)", hold_only=True),
     Variant("1 grootte op risico", risk_sizing=True),
     Variant("2 minder wisselen", switch_margin=0.3),
@@ -66,6 +68,9 @@ VARIANTS = [
     Variant("2+3+6", switch_margin=0.3, regime=True, handicap=0.5),
     Variant("1+2+3+6", risk_sizing=True, switch_margin=0.3, regime=True, handicap=0.5),
     Variant("7 vasthouden + marktweer", hold_only=True, regime=True, regime_exit=True),
+    Variant("8 rotatie top 2 (6 mnd)", rotate=2),
+    Variant("8b rotatie top 2 + marktweer", rotate=2, regime=True, regime_exit=True),
+    Variant("8c rotatie top 1 (3 mnd)", rotate=1, rotate_days=63),
     Variant("alles", risk_sizing=True, switch_margin=0.3, regime=True, trail=3.0, vote=3, handicap=0.5),
 ]
 
@@ -137,7 +142,9 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
     pending: dict[str, int] = {}
     res = DeskResult(variant.name, cls)
     last_pick = None
-    max_pos = max(config.risk.max_position_pct, 1 / max(len(series), 1))
+    rotation: set = set()
+    max_pos = max(config.risk.max_position_pct, 1 / max(len(series), 1),
+                  1 / variant.rotate if variant.rotate else 0)
 
     def last_idx(s: _Series, d) -> int | None:
         i = s.index.get(d)
@@ -172,6 +179,8 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
                         if j is not None and x.vol[j] > 0:
                             inv[x.inst.symbol] = 1 / x.vol[j]
                     w = inv.get(sym, 0.0) / sum(inv.values()) if sym in inv else 1 / len(series)
+                elif variant.rotate:
+                    w = 1 / variant.rotate
                 else:
                     w = 1 / len(series)
                 size = min(equity_open * min(w, max_pos), cash)
@@ -193,6 +202,14 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
         # 2. Weekkeuze.
         if last_pick is None or (d - last_pick).days >= RESELECT_DAYS:
             last_pick = d
+            if variant.rotate:
+                mom = {}
+                for s in series:
+                    i = idxs[s.inst.symbol] if idxs[s.inst.symbol] is not None else last_idx(s, d)
+                    if i is not None and i >= variant.rotate_days:
+                        mom[s.inst.symbol] = s.candles[i].close / s.candles[i - variant.rotate_days].close - 1
+                top = sorted(mom, key=mom.get, reverse=True)[:variant.rotate]
+                rotation = {sym for sym in top if mom[sym] > 0}   # alleen als het echt stijgt
             for s in series:
                 i = idxs[s.inst.symbol] if idxs[s.inst.symbol] is not None else last_idx(s, d)
                 if i is None:
@@ -219,6 +236,8 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
                 continue
             votes = [s.targets[lab][i] for lab in chosen[sym]]
             want = int(sum(votes) * 2 > len(votes))
+            if variant.rotate:
+                want = int(sym in rotation)
             c = s.candles[i].close
             if qty[sym] > 0:
                 peak_since[sym] = max(peak_since[sym], c)
@@ -276,11 +295,11 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
     if demo:
         lines += ["**Let op: nep-koersen.** Deze cijfers zeggen niets over echte markten.", ""]
     lines += ["Elke variant speelt de hele afdeling na met weekkeuze, kosten en uitvoering op de volgende opening.",
-              "Een verbetering telt alleen als ze de Sharpe verhoogt zonder een diepere daling, over de meeste afdelingen.", ""]
+              "✅ = beter dan wat nu live draait: hogere Sharpe (+0,05) zonder diepere daling. Alleen zo'n variant mag live.", ""]
     names = [v.name for v in VARIANTS if v.name in next(iter(result.values()), {})] + ["gekozen (live)"]
     score = {n: 0 for n in names}
     for cls, rows in result.items():
-        base = rows["huidig"]
+        base = rows["gekozen (live)"]
         lines += [f"## {cls}", "", "| Variant | Rendement | Sharpe | Max daling | Trades | Kosten € | Wissels |",
                   "|---|---:|---:|---:|---:|---:|---:|"]
         for n in names:
@@ -291,13 +310,13 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
             lines.append(f"| {n}{' ✅' if better and n != 'huidig' else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
                          f"{-r['max_dd']:.1%} | {r['trades']} | {r['fees']:.2f} | {r['switches']} |")
         lines.append("")
-    lines += ["## Oordeel", "", "| Variant | Afdelingen beter |", "|---|---:|"]
+    lines += ["## Oordeel: beter dan live", "", "| Variant | Afdelingen beter dan live |", "|---|---:|"]
     for n in names[2:-1]:
         lines.append(f"| {n} | {score[n]} van {len(result)} |")
     lines += ["", "## Spelregel: wat live draait moet zich bewijzen", "",
               "| Afdeling | Live: Sharpe | Vorige versie | Vasthouden | Oordeel |", "|---|---:|---:|---:|---|"]
     for cls, rows in result.items():
-        live, base, hold = rows["gekozen (live)"], rows["huidig"], rows["vasthouden (maatlat)"]
+        live, base, hold = rows["gekozen (live)"], rows["oude versie"], rows["vasthouden (maatlat)"]
         ok = live["sharpe"] >= base["sharpe"] - 0.05 and live["sharpe"] >= hold["sharpe"] - 0.15
         lines.append(f"| {cls} | {live['sharpe']:.2f} | {base['sharpe']:.2f} | {hold['sharpe']:.2f} | "
                      f"{'in orde' if ok else 'NIET in orde: aanpassen'} |")

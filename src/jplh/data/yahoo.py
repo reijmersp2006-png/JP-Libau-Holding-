@@ -47,6 +47,8 @@ class Yahoo:
 
     def candles(self, symbol: str, interval: str = "1h", limit: int = 200) -> list[Candle]:
         rng = "1mo" if interval == "1d" and limit <= 20 else _RANGE.get(interval, "60d")
+        if interval == "1d" and limit > 1250:
+            rng = "max"   # meer dan 5 jaar: alles wat Yahoo heeft
         q = urllib.parse.urlencode({"interval": interval, "range": rng})
         url = f"{self.base_url}/{urllib.parse.quote(symbol)}?{q}"
         candles = parse_chart(get_json(url))
