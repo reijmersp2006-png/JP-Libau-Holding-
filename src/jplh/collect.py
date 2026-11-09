@@ -90,3 +90,21 @@ def collect_watch(config: HoldingConfig, store: Store, sources: dict[str, Candle
         except (DataError, KeyError, ValueError, TypeError) as exc:
             out.append(CollectResult(w.symbol, False, error=str(exc)))
     return out
+
+
+def collect_shadow(config: HoldingConfig, store: Store, sources: dict[str, CandleSource],
+                   now: datetime | None = None, daily: int = 600) -> list[CollectResult]:
+    """Dagkoersen voor de schaduw-afdelingen (alleen papier). Fouten stoppen de handel nooit."""
+    now = now or datetime.now(tz=UTC)
+    out = []
+    for x in config.shadow:
+        src = sources.get(x.source)
+        if src is None:
+            out.append(CollectResult(x.symbol, False, error=f"onbekende bron {x.source}"))
+            continue
+        try:
+            candles = [c for c in src.candles(x.symbol, "1d", daily) if c.ts + timedelta(days=1) <= now]
+            out.append(CollectResult(x.symbol, True, store.save_candles(x.symbol, "1d", candles, src.name, now)))
+        except (DataError, KeyError, ValueError, TypeError) as exc:
+            out.append(CollectResult(x.symbol, False, error=str(exc)))
+    return out

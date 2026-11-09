@@ -44,6 +44,14 @@ def cmd_doctor(args) -> int:
         except (DataError, KeyError, ValueError) as exc:
             failed += 1
             print(f"FAIL  {label}: {exc}")
+    if config.shadow:   # schaduw-afdelingen: alleen ter info, blokkeert nooit
+        sources = {"bitvavo": Bitvavo(), "yahoo": Yahoo()}
+        for x in config.shadow:
+            try:
+                cs = sources[x.source].candles(x.symbol, "1d", 5)
+                print(f"OK    schaduw {x.symbol} ({x.name}): {len(cs)} dagkoersen, laatste {cs[-1].close:.2f}")
+            except (DataError, KeyError, ValueError, IndexError) as exc:
+                print(f"LET OP schaduw {x.symbol}: {exc}")
     return 1 if failed else 0
 
 

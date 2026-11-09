@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
-from jplh.models import AssetClass, Instrument, Watch
+from jplh.models import AssetClass, Instrument, Shadow, Watch
 
 
 class ConfigError(ValueError):
@@ -53,6 +53,7 @@ class HoldingConfig:
     desks: dict[str, float] = field(default_factory=dict)
     watch: tuple[Watch, ...] = ()
     desk_modes: dict[str, str] = field(default_factory=dict)
+    shadow: tuple[Shadow, ...] = ()
 
     def instrument(self, symbol: str) -> Instrument:
         for inst in self.instruments:
@@ -104,6 +105,8 @@ def load_config(path: Path | None = None) -> HoldingConfig:
             raw["desk_mode"] = {**raw.get("desk_mode", {}), **user["desk_mode"]}
         if "watch" in user:
             raw["watch"] = user["watch"]
+        if "shadow" in user:
+            raw["shadow"] = user["shadow"]
         if "desks" in user:
             raw["desks"] = {**raw.get("desks", {}), **user["desks"]}
         for cls, cost in user.get("costs", {}).items():
@@ -150,4 +153,7 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         desk_modes=modes,
         watch=tuple(Watch(w["symbol"], w.get("name", w["symbol"]), w["source"], w.get("kind", "markt"))
                     for w in raw.get("watch", []) if w["symbol"] not in seen),
+        shadow=tuple(Shadow(x["symbol"], x.get("name", x["symbol"]), x["desk"], x.get("source", "yahoo"),
+                            x.get("currency", "EUR"))
+                     for x in raw.get("shadow", []) if x["symbol"] not in seen),
     )

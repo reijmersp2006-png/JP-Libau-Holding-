@@ -29,6 +29,18 @@ class Instrument:
 
 
 @dataclass(frozen=True)
+class Shadow:
+    """Een instrument van een schaduw-afdeling: draait alleen op papier mee in de arena.
+    Er wordt nooit op gehandeld; Phil beslist of een schaduw-afdeling ooit echt mag."""
+
+    symbol: str
+    name: str
+    desk: str
+    source: str = "yahoo"
+    currency: str = "EUR"
+
+
+@dataclass(frozen=True)
 class Watch:
     """Iets wat de verkenners alleen volgen (indexen, olie, rente, extra munten). Nooit handelen."""
 

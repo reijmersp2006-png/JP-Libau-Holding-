@@ -282,3 +282,34 @@ symbol = "BONK-EUR"
 name = "Bonk"
 source = "bitvavo"
 kind = "meme"
+
+# ---------------------------------------------------------------- schaduw-afdelingen (alleen papier)
+# Nieuwe afdelingen beginnen als schaduw: ze draaien alleen mee in de arena (Onderzoekslab),
+# met echte koersen, vanaf de eerste paper-dag. Er wordt NOOIT op gehandeld. Maakt een
+# schaduw-afdeling de holding aantoonbaar sterker, dan beslist Phil of hij er echt bij komt.
+# Alleen in euro's genoteerde ETF's, zodat er geen valuta-effect in zit.
+
+[[shadow]]
+symbol = "XEON.DE"
+name = "Geldmarkt (Xtrackers EUR Overnight)"
+desk = "schatkist"
+
+[[shadow]]
+symbol = "IEAG.AS"
+name = "Euro-obligaties (iShares Euro Aggregate)"
+desk = "obligaties"
+
+[[shadow]]
+symbol = "IPRP.AS"
+name = "Europees vastgoed (iShares European Property)"
+desk = "vastgoed"
+
+[[shadow]]
+symbol = "IWDP.AS"
+name = "Wereldwijd vastgoed (iShares Developed Property)"
+desk = "vastgoed"
+
+[[shadow]]
+symbol = "EXXY.DE"
+name = "Grondstoffen breed (iShares Diversified Commodity)"
+desk = "grondstoffen"

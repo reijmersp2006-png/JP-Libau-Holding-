@@ -103,6 +103,11 @@ dezelfde echte koersen, vanaf de eerste paper-dag (alleen vooruit kijken). Wint 
 90 dagen op rendement én Sharpe, dan meldt Jarvis dat. Promoveren beslist alleen Phil, en
 alleen als hij ook `jplh backtest --desks` wint. Te zien in het Onderzoekslab.
 
+Schaduw-afdelingen (in aanbouw): de Schatkist (geldmarkt), Obligatiebank, Vastgoedkantoor en
+Grondstoffenhal draaien alleen op papier mee met echte koersen (`[[shadow]]` in de config).
+Ze worden nooit verhandeld. Hun test: had 10% erin de holding op echte koersen sterker gemaakt
+(hogere Sharpe, geen diepere val)? Op het eiland groeien ze mee met de 90 dagen proef.
+
 Wat als?: kies op het dashboard een bedrag, een afdeling en een instapdatum en zie wat de
 huidige regels op echte koersen hadden opgeleverd naast gewoon vasthouden. Hiervoor haalt de
 uurronde één keer per dag 1500 dagkoersen op.
