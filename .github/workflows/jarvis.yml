@@ -1,7 +1,7 @@
 name: Jarvis
 
 # Elke 10 minuten: commando's van Phil via Telegram beantwoorden (/stand, /noodstop, ...)
-# en controleren of de uurronde nog loopt. Is de laatste paper-ronde ouder dan 70 minuten,
+# en controleren of de uurronde nog loopt. Is de laatste paper-ronde ouder dan 55 minuten,
 # dan start Jarvis hem zelf. Zo vangen de twee planningen elkaar op.
 
 on:
@@ -65,7 +65,17 @@ jobs:
           echo "Laatste paper-ronde: $(( age / 60 )) minuten geleden"
           running=$(gh run list --workflow paper.yml --repo "$GITHUB_REPOSITORY" --status in_progress --json databaseId --jq length)
           queued=$(gh run list --workflow paper.yml --repo "$GITHUB_REPOSITORY" --status queued --json databaseId --jq length)
-          if [ "$age" -gt 4200 ] && [ "$running" = "0" ] && [ "$queued" = "0" ]; then
+          if [ "$age" -gt 3300 ] && [ "$running" = "0" ] && [ "$queued" = "0" ]; then
             echo "Te lang geleden: paper-ronde starten"
             gh workflow run paper.yml --repo "$GITHUB_REPOSITORY" --ref main
+          fi
+
+      - name: Wachter - hartslag weg? Dan opnieuw starten
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          busy=$(gh run list --workflow heartbeat.yml --repo "$GITHUB_REPOSITORY" --json status --jq '[.[] | select(.status != "completed")] | length')
+          if [ "$busy" = "0" ]; then
+            echo "Geen hartslag actief: starten"
+            gh workflow run heartbeat.yml --repo "$GITHUB_REPOSITORY" --ref main
           fi
