@@ -15,6 +15,7 @@ from importlib import resources
 from pathlib import Path
 
 from jplh.config import HoldingConfig
+from jplh.jarvis import briefing, health
 from jplh.desks import DESK_ORDER, Desk, benchmark_equity
 from jplh.prices import PriceError
 from jplh.research import track_record
@@ -161,7 +162,7 @@ def lab_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, now:
 
 
 def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, home: Path,
-                now: datetime | None = None, demo: bool = False) -> dict:
+                now: datetime | None = None, demo: bool = False, problems: list[str] | None = None) -> dict:
     now = now or datetime.now(tz=UTC)
     max_age = timedelta(hours=config.risk.max_data_age_hours)
     states = [desk_state(desks[c], now, max_age) for c in DESK_ORDER if c in desks]
@@ -231,7 +232,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
             if ok is not None:
                 weather.append({"name": name, "ok": ok, "text": text})
     vix = next((w for w in lab["watch"] if w["symbol"] == "^VIX"), None)
-    return {
+    state = {
         "lab": lab, "market_weather": weather, "vix": vix and vix["price"],
         "generated_at": now.isoformat(), "name": config.name, "mode": config.mode, "demo": demo,
         "kill": (home / "KILL").exists(), "days_active": days,
@@ -242,6 +243,9 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
         "radar": [{"symbol": r[0], "chain": r[1], "price_usd": r[2], "liquidity_usd": r[3], "volume_24h_usd": r[4],
                    "change_24h_pct": r[5], "flags": json.loads(r[6] or "[]")} for r in radar],
     }
+    h = health(state, problems)
+    state["jarvis"] = {"health": h, "briefing": briefing(state, now, h)}
+    return state
 
 
 def write_site(state: dict, out: Path) -> Path:
