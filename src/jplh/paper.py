@@ -6,6 +6,7 @@ import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from jplh.arena import maybe_run_arena
 from jplh.collect import collect_candles, collect_fx_reference, collect_radar, collect_watch
 from jplh.config import HoldingConfig
 from jplh.data import Bitvavo, Demo, Yahoo
@@ -28,7 +29,11 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
     if collect:
         sources = {"bitvavo": Bitvavo(), "yahoo": Yahoo()}
         results = collect_candles(config, market, sources, "1h", 48, now)
-        results += collect_candles(config, market, sources, "1d", 600, now)
+        # Eén keer per dag diep terug (voor de 'wat als'-machine), anders alleen het recente stuk.
+        deep = market.get_state("deep_1d") != now.date().isoformat()
+        results += collect_candles(config, market, sources, "1d", 1500 if deep else 600, now)
+        if deep:
+            market.set_state("deep_1d", now.date().isoformat())
         results += collect_fx_reference(config, market, now=now)
         results += collect_radar(market, now=now)
         for r in results:
@@ -55,6 +60,7 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
         log(f"holding  herverdeling  {note}")
     for a in scan(market, watch_list(config), now):
         log(f"verkenner {a.level:<6} {a.text}")
+    maybe_run_arena(config, market, [d.holding.store for d in desks.values()], now, log)
     if site_dir is not None:
         state = build_state(config, desks, market, home, now, problems=problems)
         write_site(state, site_dir)
@@ -105,6 +111,7 @@ def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime
             desk.run(t)
         rebalance_desks(desks, market, t)
         scan(market, watch_list(config), t)
+    maybe_run_arena(config, market, [d.holding.store for d in desks.values()], now, log=lambda *_: None)
     site = home / "site"
     write_site(build_state(config, desks, market, home, now, demo=True), site)
     return site

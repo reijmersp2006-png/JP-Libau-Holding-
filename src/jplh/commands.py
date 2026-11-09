@@ -1,12 +1,14 @@
 """Jarvis luistert: commando's van Phil via Telegram.
 
 Alleen berichten uit de chat die bij het verbinden is vastgelegd tellen; van iedereen anders
-wordt niets uitgevoerd. Commando's veranderen nooit een strategie. Ze lezen de stand, of ze
-zetten de noodstop aan of uit (het bestand ``KILL``, dat elke order blokkeert)."""
+wordt niets uitgevoerd. Commando's veranderen nooit een strategie. Ze lezen de stand, zetten
+de noodstop aan of uit (het bestand ``KILL``, dat elke order blokkeert) of zetten koersalarmen.
+Een alarm is alleen een melding: het koopt of verkoopt nooit iets."""
 
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,9 +22,133 @@ HELP = ("Commando's:\n"
         "/stand - de stand van de holding nu\n"
         "/briefing - de volledige briefing\n"
         "/waarom BTC - waarom de laatste trade in dat instrument\n"
+        "/alarm BTC 80000 - seintje zodra BTC die koers raakt\n"
+        "/alarmen - je alarmen bekijken\n"
+        "/alarm weg BTC - alarmen voor BTC weghalen (/alarm weg alles: allemaal)\n"
         "/noodstop - direct alles stil (geen enkele order meer)\n"
         "/hervat - noodstop weer uit\n"
         "/help - dit lijstje")
+
+
+MAX_ALARMS = 10
+
+
+def _find(config: HoldingConfig, want: str):
+    """Een instrument of verkenner-symbool bij een korte naam als BTC, ASML of GC."""
+    want = want.upper()
+    for item in list(config.instruments) + list(config.watch):
+        sym = item.symbol.upper()
+        if want in (sym, sym.split("-")[0], sym.split("=")[0], sym.split(".")[0], sym.lstrip("^")):
+            return item
+    return None
+
+
+def _unit(item) -> str:
+    cur = getattr(item, "currency", None)
+    if item.source == "bitvavo" or cur == "EUR":
+        return "€"
+    return f"{cur} " if cur else ""
+
+
+def _num(x: float, unit: str = "") -> str:
+    """Een koers leesbaar in Nederlandse notatie, met genoeg decimalen voor kleine munten."""
+    d = 2 if x <= 0 else min(10, max(2, 4 - math.floor(math.log10(x))))
+    if x >= 1000:
+        d = 2 if x < 10_000 else 0
+    txt = f"{x:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{unit}{txt}"
+
+
+def _parse_level(raw: str, near: float) -> float | None:
+    """'80000', '80.000', '1,085' en '0,00001' worden allemaal goed gelezen. Bij twijfel
+    (is '80.000' tachtigduizend of tachtig?) kiezen we wat het dichtst bij de koers nu ligt."""
+    raw = raw.replace("€", "").replace("$", "").strip()
+    options = set()
+    for cand in (raw.replace(",", "."), raw.replace(".", "").replace(",", "."), raw.replace(",", "")):
+        try:
+            v = float(cand)
+        except ValueError:
+            continue
+        if v > 0 and math.isfinite(v):
+            options.add(v)
+    if not options:
+        return None
+    return min(options, key=lambda v: abs(math.log(v / near)) if near > 0 else 0)
+
+
+def live_price(item, sources) -> float:
+    """De koers van nu: de slotkoers van de lopende uurcandle."""
+    candles = sources[item.source].candles(item.symbol, "1h", 3)
+    if not candles:
+        raise ValueError("geen koers")
+    return candles[-1].close
+
+
+def _alarm(parts: list[str], config: HoldingConfig, memo: dict, sources, now: datetime) -> str:
+    alarms = memo.setdefault("alarms", [])
+    if len(parts) < 2 or parts[0].lower() in ("/alarmen",):
+        if not alarms:
+            return "Je hebt geen alarmen. Zet er een met bijvoorbeeld /alarm BTC 80000"
+        return "🔔 Je alarmen:\n" + "\n".join(
+            f"• {a['symbol']} {a['dir']} {_num(a['level'], a['unit'])}" for a in alarms)
+    if parts[1].lower() in ("weg", "wis", "uit", "stop"):
+        if len(parts) < 3:
+            return "Welke? Bijvoorbeeld: /alarm weg BTC, of /alarm weg alles"
+        if parts[2].lower() == "alles":
+            n = len(alarms)
+            alarms.clear()
+            return f"Alle {n} alarm(en) weggehaald." if n else "Er stonden geen alarmen."
+        item = _find(config, parts[2])
+        sym = item.symbol if item else parts[2].upper()
+        keep = [a for a in alarms if a["symbol"] != sym]
+        gone = len(alarms) - len(keep)
+        alarms[:] = keep
+        return f"{gone} alarm(en) voor {sym} weggehaald." if gone else f"Er stond geen alarm voor {sym}."
+    if len(parts) < 3:
+        return "Op welke koers? Bijvoorbeeld: /alarm BTC 80000"
+    item = _find(config, parts[1])
+    if item is None:
+        return f"{parts[1].upper()} ken ik niet. Ik volg alleen de instrumenten van de holding en de verkenners."
+    if len(alarms) >= MAX_ALARMS:
+        return f"Je hebt al {MAX_ALARMS} alarmen. Haal er eerst een weg met /alarm weg ..."
+    price = live_price(item, sources)
+    level = _parse_level(parts[2], price)
+    if level is None:
+        return f"'{parts[2]}' is geen koers die ik kan lezen. Bijvoorbeeld: /alarm BTC 80000"
+    unit = _unit(item)
+    direction = "boven" if level > price else "onder"
+    alarms.append({"symbol": item.symbol, "level": level, "dir": direction, "unit": unit,
+                   "set_at": now.isoformat()})
+    return (f"🔔 Genoteerd. {item.symbol} staat nu op {_num(price, unit)}. Ik meld het zodra hij "
+            f"{'stijgt tot boven' if direction == 'boven' else 'zakt tot onder'} {_num(level, unit)}. "
+            "Ik kijk elke 10 minuten. Een alarm koopt of verkoopt niets.")
+
+
+def check_alarms(memo: dict, config: HoldingConfig, sources, log=print) -> list[str]:
+    """Alarmen die geraakt zijn: melding terug, en het alarm gaat weg (één keer melden)."""
+    alarms = memo.get("alarms") or []
+    if not alarms:
+        return []
+    prices: dict[str, float | None] = {}
+    out, keep = [], []
+    for a in alarms:
+        sym = a["symbol"]
+        if sym not in prices:
+            item = _find(config, sym)
+            try:
+                prices[sym] = live_price(item, sources) if item else None
+            except Exception as exc:   # een koers die even niet lukt: volgende keer opnieuw
+                log(f"Jarvis: koers {sym} mislukt ({type(exc).__name__})")
+                prices[sym] = None
+        px = prices[sym]
+        hit = px is not None and (px >= a["level"] if a["dir"] == "boven" else px <= a["level"])
+        if hit:
+            out.append(f"🔔 Alarm: {sym} staat op {_num(px, a['unit'])}, {a['dir']} je grens van "
+                       f"{_num(a['level'], a['unit'])}. Het alarm is nu uit.")
+        else:
+            keep.append(a)
+    memo["alarms"] = keep
+    return out
 
 
 def _state(config: HoldingConfig, home: Path, market: Store, now: datetime) -> dict:
@@ -30,8 +156,9 @@ def _state(config: HoldingConfig, home: Path, market: Store, now: datetime) -> d
     return build_state(config, desks, market, home, now)
 
 
-def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: datetime) -> str:
-    """Het antwoord van Jarvis op één bericht."""
+def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: datetime,
+           memo: dict | None = None, sources=None) -> str:
+    """Het antwoord van Jarvis op één bericht. ``memo`` (alarmen) wordt bijgewerkt."""
     parts = text.strip().split()
     if not parts:
         return HELP
@@ -62,6 +189,11 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
             lines.append(f"• {d['name']}: {_eur(d['equity_eur'])} ({_pct(d['pnl_pct'])})")
         lines.append("🛑 Noodstop staat AAN" if kill.exists() else f"Status: {h['status']}")
         return "\n".join(lines)
+    if cmd in ("/alarm", "/alarmen"):
+        if sources is None:
+            from jplh.data import live_sources
+            sources = live_sources()
+        return _alarm(parts, config, memo if memo is not None else {}, sources, now)
     if cmd == "/waarom":
         if len(parts) < 2:
             return "Welk instrument? Bijvoorbeeld: /waarom BTC"
@@ -87,9 +219,14 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
     return "Dat commando ken ik niet.\n" + HELP
 
 
-def listen(config: HoldingConfig, home: Path, client, log=print, now: datetime | None = None) -> int:
-    """Nieuwe berichten ophalen en beantwoorden. Geeft het aantal uitgevoerde commando's terug."""
+def listen(config: HoldingConfig, home: Path, client, log=print, now: datetime | None = None,
+           sources=None) -> int:
+    """Nieuwe berichten ophalen en beantwoorden, en alarmen nalopen.
+    Geeft het aantal uitgevoerde commando's terug."""
     now = now or datetime.now(tz=UTC)
+    if sources is None:
+        from jplh.data import live_sources
+        sources = live_sources()
     market = Store(home / "data" / "holding.sqlite3")
     chat = market.get_state("telegram", {}).get("chat")
     if not chat:
@@ -107,11 +244,14 @@ def listen(config: HoldingConfig, home: Path, client, log=print, now: datetime |
             continue
         text = msg.get("text") or ""
         try:
-            reply = answer(text, config, home, market, now)
+            reply = answer(text, config, home, market, now, memo, sources)
         except Exception as exc:   # een fout in één antwoord mag Jarvis niet stilleggen
             reply = f"Er ging iets mis bij dat commando ({type(exc).__name__})."
         client.send(chat, reply)
         done += 1
         log(f"Jarvis: commando {text.split()[0] if text else '?'} beantwoord")
+    for m in check_alarms(memo, config, sources, log):
+        client.send(chat, m)
+        log("Jarvis: alarm gemeld")
     memo_path.write_text(json.dumps(memo), encoding="utf-8")
     return done

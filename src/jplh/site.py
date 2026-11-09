@@ -243,6 +243,8 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
         "radar": [{"symbol": r[0], "chain": r[1], "price_usd": r[2], "liquidity_usd": r[3], "volume_24h_usd": r[4],
                    "change_24h_pct": r[5], "flags": json.loads(r[6] or "[]")} for r in radar],
     }
+    state["arena"] = market.get_state("arena")
+    state["whatif"] = market.get_state("whatif")
     h = health(state, problems)
     state["jarvis"] = {"health": h, "briefing": briefing(state, now, h)}
     return state

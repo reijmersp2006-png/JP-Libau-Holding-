@@ -90,8 +90,22 @@ jplh run             # één paper-ronde voor alle afdelingen + dashboard bijwer
 jplh dashboard       # dashboard openen (met --demo: nep-wereld)
 jplh kill / unkill   # noodstop aan / uit
 jplh resume          # pauze na een te grote daling opheffen
+jplh jarvis          # Telegram-berichten van Phil beantwoorden en alarmen nalopen
 pytest               # alle tests
 ```
+
+Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`,
+`/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
+`/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
+
+Schaduw-arena: per afdeling draaien 8 andere strategieën op papier mee, met hetzelfde geld en
+dezelfde echte koersen, vanaf de eerste paper-dag (alleen vooruit kijken). Wint een uitdager
+90 dagen op rendement én Sharpe, dan meldt Jarvis dat. Promoveren beslist alleen Phil, en
+alleen als hij ook `jplh backtest --desks` wint. Te zien in het Onderzoekslab.
+
+Wat als?: kies op het dashboard een bedrag, een afdeling en een instapdatum en zie wat de
+huidige regels op echte koersen hadden opgeleverd naast gewoon vasthouden. Hiervoor haalt de
+uurronde één keer per dag 1500 dagkoersen op.
 
 Je hoeft dit niet op je eigen computer te draaien: vanaf fase 3 draait de bot in de
 cloud via GitHub Actions. Bij elke pull request controleert GitHub al automatisch of de

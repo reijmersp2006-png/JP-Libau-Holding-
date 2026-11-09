@@ -74,6 +74,9 @@ td.r,th.r{text-align:right}
 .pill{display:inline-block;padding:1px 5px;border:1px solid var(--edge);font-size:10px;color:var(--dim)}
 .pill.in{color:var(--good);border-color:var(--good)}
 canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
+.whatif select,.whatif input[type=number]{background:#0b0816;color:inherit;border:1px solid #3a2f63;font:inherit;padding:3px 5px;max-width:100%}
+.whatif input[type=range]{width:100%;accent-color:#d9a521}
+.whatif .legend i{display:inline-block;width:10px;height:3px;margin:0 4px 2px 8px;vertical-align:middle}
 .tabs{display:flex;gap:6px;margin-bottom:6px}
 .tabs button{flex:1;background:#0b0816;color:var(--ink);border:2px solid var(--edge);padding:6px;font:inherit;
   font-size:11px;cursor:pointer}
@@ -490,6 +493,50 @@ function speak() {
   if (v) u.voice = v;
   speechSynthesis.speak(u);
 }
+let WI = {series: "Hele holding", amount: 1000, start: 0};
+const wiDate = s => new Date(s).toLocaleDateString("nl-NL", {day: "numeric", month: "short", year: "numeric"});
+function whatifCard() {
+  const W = S.whatif;
+  if (!W || !W.series || !Object.keys(W.series).length) return "";
+  if (!W.series[WI.series]) WI.series = Object.keys(W.series)[0];
+  const n = W.series[WI.series].length;
+  WI.start = Math.min(WI.start, n - 2);
+  return `<h3 class="px">Wat als?</h3><div class="card whatif">
+    <div class="row"><select id="wi-s" onchange="WI.series=this.value;WI.start=0;whatifUpdate(true)">${Object.keys(W.series).map(k => `<option ${k === WI.series ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
+      <span>€ <input type="number" min="10" step="100" value="${WI.amount}" style="width:90px" oninput="WI.amount=Math.max(1,+this.value||1000);whatifUpdate()"></span></div>
+    <div class="hint" style="margin:6px 0 2px">Ingestapt op <b id="wi-d"></b></div>
+    <input id="wi-r" type="range" min="0" max="${n - 2}" value="${WI.start}" oninput="WI.start=+this.value;whatifUpdate()">
+    <div id="wi-res"></div>
+    <canvas class="spark" id="wi"></canvas>
+    <div class="hint legend"><i style="background:#d9a521"></i>huidige regels<i style="background:#8a95ad"></i>vasthouden</div>
+    <div class="hint" style="margin-top:4px">Teruggerekend met de regels van nu op echte koersen, na kosten. Een terugblik, geen belofte.</div></div>`;
+}
+function whatifUpdate(reset) {
+  const el = document.getElementById("wi");
+  if (!el || !S.whatif || !S.whatif.series) return;
+  const all = S.whatif.series[WI.series];
+  if (reset) { const r = document.getElementById("wi-r"); r.max = all.length - 2; r.value = WI.start; }
+  const pts = all.slice(WI.start), p0 = pts[0], p1 = pts[pts.length - 1];
+  const mine = WI.amount * p1[1] / p0[1], hold = WI.amount * p1[2] / p0[2];
+  let peak = 0, dd = 0;
+  for (const p of pts) { peak = Math.max(peak, p[1]); dd = Math.max(dd, 1 - p[1] / peak); }
+  document.getElementById("wi-d").textContent = `${wiDate(p0[0])} (tot ${wiDate(p1[0])})`;
+  document.getElementById("wi-res").innerHTML = `
+    <div class="row"><span>Met de huidige regels</span><b class="${cls(mine / WI.amount - 1)}">${eur(mine, 0)} (${pct(mine / WI.amount - 1)})</b></div>
+    <div class="row"><span>Gewoon vasthouden</span><span class="${cls(hold / WI.amount - 1)}">${eur(hold, 0)} (${pct(hold / WI.amount - 1)})</span></div>
+    <div class="row"><span>Grootste tussentijdse daling</span><span class="dn">${pct(-dd)}</span></div>`;
+  const c = el.getContext("2d"), w = el.width = el.clientWidth, h = el.height = 90;
+  c.fillStyle = "#0b0816"; c.fillRect(0, 0, w, h);
+  const a = pts.map(p => p[1] / p0[1]), b = pts.map(p => p[2] / p0[2]);
+  const lo = Math.min(...a, ...b, 1), hi = Math.max(...a, ...b, 1), pad = (hi - lo) * .1 || .01;
+  const Y = x => h - 6 - (x - lo + pad) / (hi - lo + 2 * pad) * (h - 12);
+  c.fillStyle = "#3a2f63"; for (let x = 0; x < w; x += 4) c.fillRect(x, Math.round(Y(1)), 2, 1);
+  for (const [v, col] of [[b, "#8a95ad"], [a, "#d9a521"]]) {
+    c.fillStyle = col;
+    for (let i = 0; i < w; i += 2) { const k = Math.min(v.length - 1, Math.round(i / w * (v.length - 1))); c.fillRect(i, Math.round(Y(v[k])), 2, 2); }
+  }
+}
+
 function hqPanel() {
   const t = S.total;
   const ranked = [...S.desks].sort((a, b) => b.pnl_pct - a.pnl_pct);
@@ -506,6 +553,7 @@ function hqPanel() {
     <td class="r ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r ${cls(d.benchmark_eur == null ? null : d.benchmark_eur / d.capital_eur - 1)}">${d.benchmark_eur == null ? "–" : pct(d.benchmark_eur / d.capital_eur - 1)}</td></tr>`).join("")}
   </table>
   <p class="hint">Tik op een gebouw voor het dossier van dat team. K&H = wat koop-en-houd sinds de start had opgeleverd.</p>
+  ${whatifCard()}
   ${S.radar && S.radar.length ? `<h3 class="px">Memecoin-radar (alleen kijken)</h3><table><tr><th>Munt</th><th class="r">24u</th><th>Waarschuwing</th></tr>
     ${S.radar.slice(0, 6).map(r => `<tr><td>${esc(r.symbol)} <span class="pill">${esc(r.chain)}</span></td><td class="r ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100, 0)}</td><td class="hint">${esc(r.flags.join(", ") || "geen")}</td></tr>`).join("")}</table>` : ""}`;
 }
@@ -530,6 +578,8 @@ function deskPanel(d) {
     <div class="row"><span>Cash</span><span>${eur(d.cash_eur)}</span></div>
     <div class="row"><span>Trades · kosten</span><span>${d.trades} · ${eur(d.fees_eur)}</span></div>
     <canvas class="spark" id="sp"></canvas></div>
+  ${S.arena && S.arena.desks && S.arena.desks[d.id] && S.arena.desks[d.id].board.some(r => r.days > 0) ? `<h3 class="px">Schaduw-arena</h3>${arenaBoard(S.arena, S.arena.desks[d.id], 3)}
+    <p class="hint">Uitdagers op papier sinds ${esc(S.arena.start)}. Meer in het Onderzoekslab.</p>` : ""}
   <h3 class="px">Wat het team volgt</h3>
   <table><tr><th>Instrument</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
   ${d.instruments.map(i => `<tr><td>${esc(i.symbol)} ${i.in_market ? '<span class="pill in">in</span>' : ""}</td>
@@ -545,6 +595,25 @@ function deskPanel(d) {
     `<div class="card hint"><b class="${f.kind === "trade" ? "up" : "dn"}">${esc(f.text)}</b> · ${when(f.ts)}<br>${esc(strat(f.why || f.detail))}${f.kind === "refused" ? `<br><span class="dn">${esc(f.detail.split("Risico: ").pop())}</span>` : ""}</div>`).join("")
     || '<div class="hint">Nog geen trades.</div>'}
   <p class="hint">Strategieën worden elke week opnieuw gekozen op de laatste 500 dagen${d.selected_at ? " (laatst: " + when(d.selected_at) + ")" : ""}.</p>`;
+}
+
+function arenaBoard(a, d, n = 4) {
+  const top = d.board.slice(0, n);
+  const live = d.board.find(r => r.live);
+  if (live && !top.includes(live)) top.push(live);
+  return `<table><tr><th>#</th><th>Uitdager</th><th class="r">Sinds start</th><th class="r">Sharpe</th></tr>
+    ${top.map(r => `<tr${r.live ? ' style="background:rgba(43,179,163,.15)"' : ""}><td>${d.board.indexOf(r) + 1}</td>
+      <td class="hint">${r.live ? "<b>" : ""}${esc(r.name)}${r.live ? "</b>" : ""}${r.promote ? " 🏆" : ""}</td>
+      <td class="r ${cls(r.return)}">${pct(r.return)}</td><td class="r">${r.days >= 30 ? r.sharpe.toFixed(2).replace(".", ",") : "–"}</td></tr>`).join("")}</table>`;
+}
+function arenaSection() {
+  const a = S.arena;
+  if (!a || !a.desks || !Object.keys(a.desks).length) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena start bij de eerste paper-ronde.</div>`;
+  const days = Math.max(...Object.values(a.desks).flatMap(d => d.board.map(r => r.days)), 0);
+  if (!days) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena is net begonnen (${esc(a.start)}). ${Object.values(a.desks)[0].board.length - 1} uitdagers per afdeling draaien vanaf nu op papier mee. De eerste uitslag staat er morgen.</div>`;
+  return `<h3 class="px">Schaduw-arena</h3>
+  <div class="hint">Andere strategieën draaien op papier mee met hetzelfde geld en dezelfde echte koersen, vanaf ${esc(a.start)} (${days} dagen). Alleen wat daarna gebeurt telt. Wint een uitdager ${a.promote_days} dagen lang op rendement én Sharpe, dan krijgt hij een 🏆 en meldt Jarvis het. Promoveren beslist alleen Phil. Sharpe verschijnt na 30 dagen; eerder zegt die niets.</div>
+  ${Object.values(a.desks).map(d => `<div class="card"><div class="row"><b>${esc(d.name)}</b><span class="hint">huidige regels op plek ${d.live_rank} van ${d.board.length}</span></div>${arenaBoard(a, d)}</div>`).join("")}`;
 }
 
 function labAlerts24h() {
@@ -593,6 +662,8 @@ function labPanel() {
   ${L.reports.length ? L.reports.map(r => `<div class="card hint"><b>${esc(who[r.desk] || r.desk)}</b> · ${when(r.ts)}<br>${esc(strat(r.reason.replace(/^weekrapport: /, "")))}</div>`).join("")
     : '<div class="hint">Het eerste weekrapport komt na 7 dagen.</div>'}
 
+  ${arenaSection()}
+
   <h3 class="px">Strategietoernooi</h3>
   <div class="hint">Elke week strijden alle strategieën per instrument op de laatste 500 dagen, na kosten. Vasthouden wint, tenzij een strategie duidelijk beter is.</div>
   <table>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k.replaceAll("_", "-"))}</td><td class="r">${v}×</td></tr>`).join("")}</table>`;
@@ -616,6 +687,7 @@ function select(id) {
   side.innerHTML = d ? deskPanel(d) : id === "lab" ? labPanel() : id === "risk" ? riskPanel() : hqPanel();
   const sp = document.getElementById("sp");
   if (sp) spark(sp, d ? d.equity_curve : S.total.equity_curve, d ? d.capital_eur : S.total.capital_eur);
+  whatifUpdate();
   placeSigns();
 }
 

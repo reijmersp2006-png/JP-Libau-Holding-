@@ -274,8 +274,10 @@ def live_variant(mode: str) -> Variant:
 
 
 def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidates: list[Strategy],
-            variants: list[Variant] = VARIANTS, window: int = WINDOW) -> dict[str, dict[str, dict]]:
-    """Per afdeling per variant: rendement, Sharpe, max daling, trades, kosten, wissels."""
+            variants: list[Variant] = VARIANTS, window: int = WINDOW, start=None) -> dict[str, dict[str, dict]]:
+    """Per afdeling per variant: rendement, Sharpe, max daling, trades, kosten, wissels.
+    Met ``start`` (een datum) telt alleen wat er vanaf die dag gebeurt: zo kijkt de
+    schaduw-arena alleen vooruit."""
     out: dict[str, dict[str, dict]] = {}
     for cls, share in config.desks.items():
         insts = [i for i in config.instruments if i.asset_class.value == cls]
@@ -290,16 +292,17 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
         if lead_sym and len(candles_of.get(lead_sym, [])) > 250:
             li = config.instrument(lead_sym)
             leader = _prepare(li, candles_of[lead_sym], [BuyHold()], config.costs[li.asset_class.value], ppy)
-        start = max(s.candles[min(window, len(s.candles) - 1)].ts.date() for s in series)
+        first = max(s.candles[min(window, len(s.candles) - 1)].ts.date() for s in series)
+        begin = max(first, start) if start else first
         capital = config.start_capital_eur * share
         out[cls] = {}
         for v in list(variants) + [live_variant(config.desk_modes.get(cls, "actief"))]:
-            r = run_desk(cls, series, leader, config, v, start, capital)
+            r = run_desk(cls, series, leader, config, v, begin, capital)
             rets = [b / a - 1 for a, b in zip([capital] + r.equity, r.equity)]
             m = metrics(rets, r.trades, r.fees, 0, ppy)
             out[cls][v.name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
                                 "trades": r.trades, "fees": r.fees, "switches": r.switches, "days": len(r.equity)}
-            if v.name == "gekozen (live)":
+            if v.name in ("gekozen (live)", "vasthouden (maatlat)"):
                 out[cls][v.name]["curve"] = list(zip(r.dates, r.equity))
     return out
 
@@ -310,11 +313,12 @@ MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost sam
 
 
 def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
-               vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10) -> dict[str, dict]:
-    """Slimmer verdelen tussen afdelingen? Speelt de live-curves van alle afdelingen samen na
-    vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
-    curves = {c: dict(rows["gekozen (live)"]["curve"]) for c, rows in result.items()
-              if rows.get("gekozen (live)", {}).get("curve") and c not in skip}
+               vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10,
+               variant: str = "gekozen (live)") -> dict[str, dict]:
+    """Slimmer verdelen tussen afdelingen? Speelt de curves (standaard: live) van alle afdelingen
+    samen na vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
+    curves = {c: dict(rows[variant]["curve"]) for c, rows in result.items()
+              if rows.get(variant, {}).get("curve") and c not in skip}
     if len(curves) < 2:
         return {}
     start = max(min(c) for c in curves.values())
@@ -357,7 +361,7 @@ def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], eve
         dr = [b / a - 1 for a, b in zip([1.0] + eq, eq)]
         m = metrics(dr, 0, 0, 0, 365)
         out[name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
-                     "moved": moved, "since": start}
+                     "moved": moved, "since": start, "curve": list(zip(days, eq))}
     return out
 
 

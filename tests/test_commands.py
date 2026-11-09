@@ -56,3 +56,50 @@ def test_only_phils_chat_is_obeyed_and_updates_are_used_once(tmp_path):
     assert not (home / "KILL").exists()                     # vreemde chat mag niets
     assert fake.sent == [("42", fake.sent[0][1])] and "/noodstop" in fake.sent[0][1]
     assert listen(load_config(None), home, fake, log=lambda *_: None, now=NOW) == 0   # al gedaan
+
+
+class Px:
+    """Nepkoersbron: geeft steeds de koers die je erin zet."""
+    name = "fake"
+
+    def __init__(self, price):
+        self.price = price
+
+    def candles(self, symbol, interval="1h", limit=200):
+        from jplh.models import Candle
+        return [Candle(NOW, self.price, self.price, self.price, self.price, 1.0)]
+
+
+def test_alarm_is_set_listed_fired_once_and_removed(tmp_path):
+    home = _home(tmp_path)
+    cfg, market = load_config(None), Store(home / "data" / "holding.sqlite3")
+    market.set_state("telegram", {"chat": "42"})
+    px = Px(70_000.0)
+    src = {"bitvavo": px, "yahoo": px}
+    memo = {}
+    reply = answer("/alarm BTC 80.000", cfg, home, market, NOW, memo, src)
+    assert "BTC-EUR" in reply and "boven" in reply and memo["alarms"][0]["level"] == 80_000
+    assert "BTC-EUR boven" in answer("/alarmen", cfg, home, market, NOW, memo, src)
+    assert "ken ik niet" in answer("/alarm RAKET 5", cfg, home, market, NOW, memo, src)
+
+    (home / "jarvis.json").write_text(__import__("json").dumps(memo))
+    fake = Fake([])
+    listen(cfg, home, fake, log=lambda *_: None, now=NOW, sources=src)
+    assert fake.sent == []                                   # nog niet geraakt
+    px.price = 80_500.0
+    listen(cfg, home, fake, log=lambda *_: None, now=NOW, sources=src)
+    assert len(fake.sent) == 1 and "Alarm" in fake.sent[0][1]
+    listen(cfg, home, fake, log=lambda *_: None, now=NOW, sources=src)
+    assert len(fake.sent) == 1                               # maar één keer melden
+
+
+def test_alarm_remove_and_small_coin_prices(tmp_path):
+    home = _home(tmp_path)
+    cfg, market = load_config(None), Store(home / "data" / "holding.sqlite3")
+    src = {"bitvavo": Px(0.0000105), "yahoo": Px(1.0)}
+    memo = {}
+    reply = answer("/alarm PEPE 0,000009", cfg, home, market, NOW, memo, src)
+    assert "onder" in reply and abs(memo["alarms"][0]["level"] - 0.000009) < 1e-12
+    assert "0,0000090" in reply
+    assert "1 alarm" in answer("/alarm weg PEPE", cfg, home, market, NOW, memo, src)
+    assert memo["alarms"] == []
