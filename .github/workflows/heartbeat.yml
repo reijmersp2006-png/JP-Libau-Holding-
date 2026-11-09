@@ -1,0 +1,41 @@
+name: Hartslag
+
+# GitHub start geplande runs (cron) in deze repo niet betrouwbaar. Daarom houdt deze
+# workflow zichzelf in leven: hij maakt elke 10 minuten Jarvis wakker (die beantwoordt
+# Telegram en start de uurronde als die te lang stilstaat) en start vlak voor zijn eigen
+# tijdslimiet een opvolger. Jarvis start de hartslag opnieuw als die ooit wegvalt.
+# Handelt zelf nooit; zet alleen andere workflows aan.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "11 */6 * * *"   # extra vangnet, voor als GitHub de planning wel uitvoert
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: heartbeat
+  cancel-in-progress: false
+
+jobs:
+  tik:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Elke 10 minuten Jarvis wakker maken
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          end=$(( $(date +%s) + 330 * 60 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            gh workflow run jarvis.yml --repo "$GITHUB_REPOSITORY" --ref main || echo "Jarvis starten mislukt, volgende keer opnieuw"
+            sleep 600
+          done
+
+      - name: Opvolger starten
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run heartbeat.yml --repo "$GITHUB_REPOSITORY" --ref main
