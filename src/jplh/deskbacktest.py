@@ -10,7 +10,8 @@ de huidige versie, op precies dezelfde koersen en met dezelfde kosten:
                      boven zijn 200-dagengemiddelde staat;
 - ``trail``        : meebewegende stop: verkopen als de koers ``trail`` x de dagelijkse
                      beweeglijkheid x 10 onder de top sinds aankoop zakt;
-- ``vote``         : de beste ``vote`` strategieën stemmen; in de markt bij een meerderheid.
+- ``vote``         : de beste ``vote`` strategieën stemmen; in de markt bij een meerderheid;
+- ``handicap``     : hoeveel Sharpe een strategie moet inleveren t.o.v. vasthouden (nu 0,1).
 
 Zonder in de toekomst te kijken: de keuze op dag d gebruikt alleen koersen t/m dag d, en de
 order wordt uitgevoerd op de opening van dag d+1.
@@ -47,6 +48,7 @@ class Variant:
     trail: float = 0.0
     vote: int = 1
     hold_only: bool = False
+    handicap: float = 0.1     # Sharpe die een strategie moet inleveren t.o.v. vasthouden
 
 
 VARIANTS = [
@@ -57,8 +59,12 @@ VARIANTS = [
     Variant("3 marktweer-filter", regime=True),
     Variant("4 meebewegende stop", trail=3.0),
     Variant("5 stemmen (top 3)", vote=3),
-    Variant("1+2", risk_sizing=True, switch_margin=0.3),
-    Variant("alles", risk_sizing=True, switch_margin=0.3, regime=True, trail=3.0, vote=3),
+    Variant("6 strenge drempel", handicap=0.5),
+    Variant("2+3", switch_margin=0.3, regime=True),
+    Variant("2+6", switch_margin=0.3, handicap=0.5),
+    Variant("2+3+6", switch_margin=0.3, regime=True, handicap=0.5),
+    Variant("1+2+3+6", risk_sizing=True, switch_margin=0.3, regime=True, handicap=0.5),
+    Variant("alles", risk_sizing=True, switch_margin=0.3, regime=True, trail=3.0, vote=3, handicap=0.5),
 ]
 
 
@@ -189,7 +195,7 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
                 i = idxs[s.inst.symbol] if idxs[s.inst.symbol] is not None else last_idx(s, d)
                 if i is None:
                     continue
-                score = {lab: _sharpe(s, lab, i, ppy) - (0 if lab == "koop_en_houd" else 0.1) for lab in labels}
+                score = {lab: _sharpe(s, lab, i, ppy) - (0 if lab == "koop_en_houd" else variant.handicap) for lab in labels}
                 ranked = sorted(score, key=score.get, reverse=True)
                 old = chosen.get(s.inst.symbol)
                 new = ["koop_en_houd"] if variant.hold_only else ranked[:variant.vote]
