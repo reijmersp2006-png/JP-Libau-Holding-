@@ -1,0 +1,71 @@
+name: Jarvis
+
+# Elke 10 minuten: commando's van Phil via Telegram beantwoorden (/stand, /noodstop, ...)
+# en controleren of de uurronde nog loopt. Is de laatste paper-ronde ouder dan 70 minuten,
+# dan start Jarvis hem zelf. Zo vangen de twee planningen elkaar op.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: jarvis
+  cancel-in-progress: false
+
+jobs:
+  luisteren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      - name: Stand ophalen
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git clone --depth 30 --branch paper-data "$url" state
+          mkdir -p data
+          cp -r state/data/. data/
+          [ -f state/KILL ] && cp state/KILL KILL || true
+          [ -f state/jarvis.json ] && cp state/jarvis.json jarvis.json || true
+
+      - name: Commando's beantwoorden
+        run: jplh jarvis
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
+      - name: Noodstop en geheugen bewaren
+        run: |
+          if [ -f KILL ]; then cp KILL state/KILL; else rm -f state/KILL; fi
+          [ -f jarvis.json ] && cp jarvis.json state/jarvis.json || true
+          cd state
+          git config user.name "jplh-bot"
+          git config user.email "jplh-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "niets veranderd"; exit 0; fi
+          git commit -qm "Jarvis $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do git push origin paper-data && break; git pull --rebase origin paper-data; done
+
+      - name: Wachter - uurronde gemist? Dan zelf starten
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          last=$(git -C state log -1 --grep="Paper-ronde" --format=%ct || echo 0)
+          age=$(( $(date +%s) - ${last:-0} ))
+          echo "Laatste paper-ronde: $(( age / 60 )) minuten geleden"
+          running=$(gh run list --workflow paper.yml --repo "$GITHUB_REPOSITORY" --status in_progress --json databaseId --jq length)
+          queued=$(gh run list --workflow paper.yml --repo "$GITHUB_REPOSITORY" --status queued --json databaseId --jq length)
+          if [ "$age" -gt 4200 ] && [ "$running" = "0" ] && [ "$queued" = "0" ]; then
+            echo "Te lang geleden: paper-ronde starten"
+            gh workflow run paper.yml --repo "$GITHUB_REPOSITORY" --ref main
+          fi
