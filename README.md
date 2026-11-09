@@ -103,6 +103,10 @@ dezelfde echte koersen, vanaf de eerste paper-dag (alleen vooruit kijken). Wint 
 90 dagen op rendement én Sharpe, dan meldt Jarvis dat. Promoveren beslist alleen Phil, en
 alleen als hij ook `jplh backtest --desks` wint. Te zien in het Onderzoekslab.
 
+Wat als?: kies op het dashboard een bedrag, een afdeling en een instapdatum en zie wat de
+huidige regels op echte koersen hadden opgeleverd naast gewoon vasthouden. Hiervoor haalt de
+uurronde één keer per dag 1500 dagkoersen op.
+
 Je hoeft dit niet op je eigen computer te draaien: vanaf fase 3 draait de bot in de
 cloud via GitHub Actions. Bij elke pull request controleert GitHub al automatisch of de
 tests slagen en of de databronnen bereikbaar zijn.

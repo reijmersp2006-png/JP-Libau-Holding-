@@ -74,6 +74,9 @@ td.r,th.r{text-align:right}
 .pill{display:inline-block;padding:1px 5px;border:1px solid var(--edge);font-size:10px;color:var(--dim)}
 .pill.in{color:var(--good);border-color:var(--good)}
 canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
+.whatif select,.whatif input[type=number]{background:#0b0816;color:inherit;border:1px solid #3a2f63;font:inherit;padding:3px 5px;max-width:100%}
+.whatif input[type=range]{width:100%;accent-color:#d9a521}
+.whatif .legend i{display:inline-block;width:10px;height:3px;margin:0 4px 2px 8px;vertical-align:middle}
 .tabs{display:flex;gap:6px;margin-bottom:6px}
 .tabs button{flex:1;background:#0b0816;color:var(--ink);border:2px solid var(--edge);padding:6px;font:inherit;
   font-size:11px;cursor:pointer}
@@ -490,6 +493,50 @@ function speak() {
   if (v) u.voice = v;
   speechSynthesis.speak(u);
 }
+let WI = {series: "Hele holding", amount: 1000, start: 0};
+const wiDate = s => new Date(s).toLocaleDateString("nl-NL", {day: "numeric", month: "short", year: "numeric"});
+function whatifCard() {
+  const W = S.whatif;
+  if (!W || !W.series || !Object.keys(W.series).length) return "";
+  if (!W.series[WI.series]) WI.series = Object.keys(W.series)[0];
+  const n = W.series[WI.series].length;
+  WI.start = Math.min(WI.start, n - 2);
+  return `<h3 class="px">Wat als?</h3><div class="card whatif">
+    <div class="row"><select id="wi-s" onchange="WI.series=this.value;WI.start=0;whatifUpdate(true)">${Object.keys(W.series).map(k => `<option ${k === WI.series ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
+      <span>€ <input type="number" min="10" step="100" value="${WI.amount}" style="width:90px" oninput="WI.amount=Math.max(1,+this.value||1000);whatifUpdate()"></span></div>
+    <div class="hint" style="margin:6px 0 2px">Ingestapt op <b id="wi-d"></b></div>
+    <input id="wi-r" type="range" min="0" max="${n - 2}" value="${WI.start}" oninput="WI.start=+this.value;whatifUpdate()">
+    <div id="wi-res"></div>
+    <canvas class="spark" id="wi"></canvas>
+    <div class="hint legend"><i style="background:#d9a521"></i>huidige regels<i style="background:#8a95ad"></i>vasthouden</div>
+    <div class="hint" style="margin-top:4px">Teruggerekend met de regels van nu op echte koersen, na kosten. Een terugblik, geen belofte.</div></div>`;
+}
+function whatifUpdate(reset) {
+  const el = document.getElementById("wi");
+  if (!el || !S.whatif || !S.whatif.series) return;
+  const all = S.whatif.series[WI.series];
+  if (reset) { const r = document.getElementById("wi-r"); r.max = all.length - 2; r.value = WI.start; }
+  const pts = all.slice(WI.start), p0 = pts[0], p1 = pts[pts.length - 1];
+  const mine = WI.amount * p1[1] / p0[1], hold = WI.amount * p1[2] / p0[2];
+  let peak = 0, dd = 0;
+  for (const p of pts) { peak = Math.max(peak, p[1]); dd = Math.max(dd, 1 - p[1] / peak); }
+  document.getElementById("wi-d").textContent = `${wiDate(p0[0])} (tot ${wiDate(p1[0])})`;
+  document.getElementById("wi-res").innerHTML = `
+    <div class="row"><span>Met de huidige regels</span><b class="${cls(mine / WI.amount - 1)}">${eur(mine, 0)} (${pct(mine / WI.amount - 1)})</b></div>
+    <div class="row"><span>Gewoon vasthouden</span><span class="${cls(hold / WI.amount - 1)}">${eur(hold, 0)} (${pct(hold / WI.amount - 1)})</span></div>
+    <div class="row"><span>Grootste tussentijdse daling</span><span class="dn">${pct(-dd)}</span></div>`;
+  const c = el.getContext("2d"), w = el.width = el.clientWidth, h = el.height = 90;
+  c.fillStyle = "#0b0816"; c.fillRect(0, 0, w, h);
+  const a = pts.map(p => p[1] / p0[1]), b = pts.map(p => p[2] / p0[2]);
+  const lo = Math.min(...a, ...b, 1), hi = Math.max(...a, ...b, 1), pad = (hi - lo) * .1 || .01;
+  const Y = x => h - 6 - (x - lo + pad) / (hi - lo + 2 * pad) * (h - 12);
+  c.fillStyle = "#3a2f63"; for (let x = 0; x < w; x += 4) c.fillRect(x, Math.round(Y(1)), 2, 1);
+  for (const [v, col] of [[b, "#8a95ad"], [a, "#d9a521"]]) {
+    c.fillStyle = col;
+    for (let i = 0; i < w; i += 2) { const k = Math.min(v.length - 1, Math.round(i / w * (v.length - 1))); c.fillRect(i, Math.round(Y(v[k])), 2, 2); }
+  }
+}
+
 function hqPanel() {
   const t = S.total;
   const ranked = [...S.desks].sort((a, b) => b.pnl_pct - a.pnl_pct);
@@ -506,6 +553,7 @@ function hqPanel() {
     <td class="r ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r ${cls(d.benchmark_eur == null ? null : d.benchmark_eur / d.capital_eur - 1)}">${d.benchmark_eur == null ? "–" : pct(d.benchmark_eur / d.capital_eur - 1)}</td></tr>`).join("")}
   </table>
   <p class="hint">Tik op een gebouw voor het dossier van dat team. K&H = wat koop-en-houd sinds de start had opgeleverd.</p>
+  ${whatifCard()}
   ${S.radar && S.radar.length ? `<h3 class="px">Memecoin-radar (alleen kijken)</h3><table><tr><th>Munt</th><th class="r">24u</th><th>Waarschuwing</th></tr>
     ${S.radar.slice(0, 6).map(r => `<tr><td>${esc(r.symbol)} <span class="pill">${esc(r.chain)}</span></td><td class="r ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100, 0)}</td><td class="hint">${esc(r.flags.join(", ") || "geen")}</td></tr>`).join("")}</table>` : ""}`;
 }
@@ -639,6 +687,7 @@ function select(id) {
   side.innerHTML = d ? deskPanel(d) : id === "lab" ? labPanel() : id === "risk" ? riskPanel() : hqPanel();
   const sp = document.getElementById("sp");
   if (sp) spark(sp, d ? d.equity_curve : S.total.equity_curve, d ? d.capital_eur : S.total.capital_eur);
+  whatifUpdate();
   placeSigns();
 }
 

@@ -29,7 +29,11 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
     if collect:
         sources = {"bitvavo": Bitvavo(), "yahoo": Yahoo()}
         results = collect_candles(config, market, sources, "1h", 48, now)
-        results += collect_candles(config, market, sources, "1d", 600, now)
+        # Eén keer per dag diep terug (voor de 'wat als'-machine), anders alleen het recente stuk.
+        deep = market.get_state("deep_1d") != now.date().isoformat()
+        results += collect_candles(config, market, sources, "1d", 1500 if deep else 600, now)
+        if deep:
+            market.set_state("deep_1d", now.date().isoformat())
         results += collect_fx_reference(config, market, now=now)
         results += collect_radar(market, now=now)
         for r in results:

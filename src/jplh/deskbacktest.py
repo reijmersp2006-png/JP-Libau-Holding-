@@ -302,7 +302,7 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
             m = metrics(rets, r.trades, r.fees, 0, ppy)
             out[cls][v.name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
                                 "trades": r.trades, "fees": r.fees, "switches": r.switches, "days": len(r.equity)}
-            if v.name == "gekozen (live)":
+            if v.name in ("gekozen (live)", "vasthouden (maatlat)"):
                 out[cls][v.name]["curve"] = list(zip(r.dates, r.equity))
     return out
 
@@ -313,11 +313,12 @@ MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost sam
 
 
 def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
-               vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10) -> dict[str, dict]:
-    """Slimmer verdelen tussen afdelingen? Speelt de live-curves van alle afdelingen samen na
-    vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
-    curves = {c: dict(rows["gekozen (live)"]["curve"]) for c, rows in result.items()
-              if rows.get("gekozen (live)", {}).get("curve") and c not in skip}
+               vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10,
+               variant: str = "gekozen (live)") -> dict[str, dict]:
+    """Slimmer verdelen tussen afdelingen? Speelt de curves (standaard: live) van alle afdelingen
+    samen na vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
+    curves = {c: dict(rows[variant]["curve"]) for c, rows in result.items()
+              if rows.get(variant, {}).get("curve") and c not in skip}
     if len(curves) < 2:
         return {}
     start = max(min(c) for c in curves.values())
@@ -360,7 +361,7 @@ def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], eve
         dr = [b / a - 1 for a, b in zip([1.0] + eq, eq)]
         m = metrics(dr, 0, 0, 0, 365)
         out[name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
-                     "moved": moved, "since": start}
+                     "moved": moved, "since": start, "curve": list(zip(days, eq))}
     return out
 
 

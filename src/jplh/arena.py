@@ -14,7 +14,7 @@ from dataclasses import replace
 from datetime import date, datetime
 
 from jplh.config import HoldingConfig
-from jplh.deskbacktest import VARIANTS, compare, live_variant
+from jplh.deskbacktest import ALLOCATIONS, VARIANTS, allocation, compare, live_variant
 from jplh.desks import ALL_CANDIDATES, DESK_NAMES
 from jplh.store import Store
 
@@ -77,6 +77,44 @@ def run_arena(config: HoldingConfig, market: Store, start: date, now: datetime) 
             "desks": desks}
 
 
+WHATIF_POINTS = 260     # zoveel punten per curve op het dashboard (ongeveer wekelijks)
+
+
+def _thin(rows: list, n: int = WHATIF_POINTS) -> list:
+    if len(rows) <= n:
+        return rows
+    step = len(rows) / n
+    return [rows[int(i * step)] for i in range(n - 1)] + [rows[-1]]
+
+
+def run_whatif(config: HoldingConfig, market: Store, now: datetime) -> dict | None:
+    """Voor de 'wat als'-machine: hoe de huidige regels het op echte koersen hadden gedaan,
+    naast gewoon vasthouden. Per afdeling en voor de hele holding (elk kwartaal terug naar de
+    vaste verdeling, zoals live). Curves beginnen op 1,0."""
+    candles_of = {i.symbol: market.candles(i.symbol, "1d", known_at=now) for i in config.instruments}
+    hold = [v for v in VARIANTS if v.name == "vasthouden (maatlat)"]
+    res = compare(config, candles_of, ALL_CANDIDATES, hold)
+    out: dict = {"computed_at": now.isoformat(), "series": {}}
+
+    def pack(name: str, live: list, base: list) -> None:
+        b = dict(base)
+        rows = [(d, v) for d, v in live if d in b]
+        if len(rows) < 30:
+            return
+        l0, b0 = rows[0][1], b[rows[0][0]]
+        out["series"][name] = [[d.isoformat(), round(v / l0, 5), round(b[d] / b0, 5)] for d, v in _thin(rows)]
+
+    for cls, rows in res.items():
+        live, base = rows.get(LIVE, {}).get("curve"), rows.get(hold[0].name, {}).get("curve")
+        if live and base:
+            pack(DESK_NAMES.get(cls, cls), live, base)
+    a_live = allocation(res, config.desks).get(ALLOCATIONS[1])
+    a_hold = allocation(res, config.desks, variant=hold[0].name).get(ALLOCATIONS[1])
+    if a_live and a_hold:
+        pack("Hele holding", a_live["curve"], a_hold["curve"])
+    return out if out["series"] else None
+
+
 def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], now: datetime, log=print) -> dict | None:
     """Eén keer per dag de arena bijwerken (de dagkoersen veranderen maar één keer per dag)."""
     old = market.get_state("arena")
@@ -92,6 +130,12 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
         log(f"arena mislukt: {type(exc).__name__}: {exc}")
         return old
     market.set_state("arena", new)
+    try:
+        w = run_whatif(config, market, now)
+        if w:
+            market.set_state("whatif", w)
+    except (ValueError, KeyError, ZeroDivisionError) as exc:
+        log(f"wat-als mislukt: {type(exc).__name__}: {exc}")
     for d in new["desks"].values():
         top = d["board"][0] if d["board"] else None
         if top:

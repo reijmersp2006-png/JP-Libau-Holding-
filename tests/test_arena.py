@@ -51,3 +51,13 @@ def test_jarvis_announces_a_promotion_once():
     msgs = messages(st, memory, NOW)
     assert any("Schaduw-arena" in m and "Meme Arcade" in m for m in msgs)
     assert not any("Schaduw-arena" in m for m in messages(st, memory, NOW))
+
+
+def test_whatif_series_start_at_one_and_compare_with_holding(tmp_path):
+    home = tmp_path / "h"
+    build_demo(load_config(None), home, hours=6, history_days=5, now=NOW)
+    w = Store(home / "data" / "holding.sqlite3").get_state("whatif")
+    assert "Hele holding" in w["series"] and "Crypto Lab" in w["series"]
+    for pts in w["series"].values():
+        assert pts[0][1:] == [1.0, 1.0] and len(pts) >= 30
+        assert [p[0] for p in pts] == sorted(p[0] for p in pts)
