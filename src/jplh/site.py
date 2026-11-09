@@ -98,6 +98,7 @@ def desk_state(desk: Desk, now: datetime, max_age: timedelta) -> dict:
         "xp": xp, "level": _level(xp), "days_active": days,
         "positions": positions, "instruments": instruments,
         "selected_at": h.meta.get("selected_at"),
+        "mode": desk.mode, "weather": desk.regime(now)[1] if desk.mode != "vasthouden" else "",
         "equity_curve": _downsample(curve),
     }
 

@@ -20,9 +20,10 @@ def test_compare_runs_every_variant_for_every_desk():
     res = compare(config, candles, ALL_CANDIDATES)
     assert set(res) == set(config.desks)
     for rows in res.values():
-        assert {v.name for v in VARIANTS} == set(rows)
+        assert {v.name for v in VARIANTS} | {"gekozen (live)"} == set(rows)
         assert rows["vasthouden (maatlat)"]["switches"] == 0
-    assert "Oordeel" in compare_report(res, END, demo=True)
+    report = compare_report(res, END, demo=True)
+    assert "Oordeel" in report and "Spelregel" in report
 
 
 def test_desk_replay_does_not_look_ahead():

@@ -31,6 +31,18 @@ Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 
 Nog niet gebouwd: het wekelijkse leerrapport en nabesprekingen per trade (fase 5).
 
+## Kern + jacht, en de spelregel
+
+Op ~2,5 jaar echte koersen verloor actief handelen na kosten van gewoon vasthouden bij aandelen, goud/zilver en valuta. Daarom werkt elke afdeling nu zo (`[desk_mode]` in de config):
+
+| Afdeling | Werkwijze |
+|---|---|
+| Crypto | **kern + noodrem**: vasthouden, eruit als bitcoin onder zijn 200-dagengemiddelde staat |
+| Memecoins | **jacht**: weekkeuze van strategieën, alleen wisselen als een nieuwe duidelijk beter is, niet kopen bij slecht marktweer |
+| Aandelen, goud/zilver, valuta | **kern**: vasthouden, elk kwartaal terug naar gelijke delen |
+
+**Spelregel**: een aanpassing gaat pas live als ze in `jplh backtest --desks` op echte koersen minstens zo goed is als wat er draait. De CI draait die toets bij elke pull request, en het rapport laat per afdeling zien of de live-werkwijze "in orde" is.
+
 ## Het dashboard openen
 
 - **Online**: `https://reijmersp2006-png.github.io/JP-Libau-Holding-/` (eenmalig aanzetten: Settings,

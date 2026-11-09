@@ -153,6 +153,18 @@ stocks = 0.35
 metals = 0.15
 fx = 0.15
 
+# ---------------------------------------------------------------- werkwijze per afdeling
+# Kern + jacht, gekozen op ~2,5 jaar echte koersen (zie 'jplh backtest --desks'):
+# bij aandelen, goud/zilver en valuta verloor actief handelen na kosten van vasthouden.
+# vasthouden | vasthouden_marktweer | actief
+
+[desk_mode]
+crypto = "vasthouden_marktweer"
+meme = "actief"
+stocks = "vasthouden"
+metals = "vasthouden"
+fx = "vasthouden"
+
 # ---------------------------------------------------------------- kosten (paper)
 # Aannames, bewust aan de voorzichtige kant. Controleer bij de echte broker.
 # fee_pct: commissie per order  slippage_pct: hoeveel slechter je vult dan de koers

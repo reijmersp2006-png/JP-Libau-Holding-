@@ -14,6 +14,14 @@ class ConfigError(ValueError):
     pass
 
 
+# Hoe een afdeling werkt:
+#   vasthouden           : kern. Alles gelijk verdeeld kopen en vasthouden, elk kwartaal herverdelen.
+#   vasthouden_marktweer : kern met noodrem. Vasthouden, maar eruit als de marktleider (BTC voor
+#                          crypto/memes, IWDA voor aandelen) onder zijn 200-dagengemiddelde staat.
+#   actief               : jacht. Weekkeuze van strategieën, met minder wisselen en marktweer-filter.
+DESK_MODES = ("vasthouden", "vasthouden_marktweer", "actief")
+
+
 @dataclass(frozen=True)
 class RiskLimits:
     max_drawdown_pct: float = 0.15
@@ -44,6 +52,7 @@ class HoldingConfig:
     costs: dict[str, CostModel]
     desks: dict[str, float] = field(default_factory=dict)
     watch: tuple[Watch, ...] = ()
+    desk_modes: dict[str, str] = field(default_factory=dict)
 
     def instrument(self, symbol: str) -> Instrument:
         for inst in self.instruments:
@@ -91,6 +100,8 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         raw["risk"] = _merge_risk(raw["risk"], user.get("risk", {}))
         if "instrument" in user:
             raw["instrument"] = user["instrument"]
+        if "desk_mode" in user:
+            raw["desk_mode"] = {**raw.get("desk_mode", {}), **user["desk_mode"]}
         if "watch" in user:
             raw["watch"] = user["watch"]
         if "desks" in user:
@@ -122,6 +133,11 @@ def load_config(path: Path | None = None) -> HoldingConfig:
     if sum(desks.values()) > 1.0 + 1e-9:
         raise ConfigError("desks: samen meer dan 100% van het startkapitaal")
 
+    modes = dict(raw.get("desk_mode", {}))
+    bad = {k: v for k, v in modes.items() if v not in DESK_MODES}
+    if bad:
+        raise ConfigError(f"desk_mode onbekend: {bad}; kies uit {', '.join(DESK_MODES)}")
+
     return HoldingConfig(
         name=holding["name"],
         base_currency=holding["base_currency"],
@@ -131,6 +147,7 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         risk=RiskLimits(**raw["risk"]),
         costs=costs,
         desks=desks,
+        desk_modes=modes,
         watch=tuple(Watch(w["symbol"], w.get("name", w["symbol"]), w["source"], w.get("kind", "markt"))
                     for w in raw.get("watch", []) if w["symbol"] not in seen),
     )

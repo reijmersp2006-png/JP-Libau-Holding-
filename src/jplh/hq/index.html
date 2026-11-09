@@ -367,7 +367,12 @@ function hqPanel() {
 function deskPanel(d) {
   const xpNext = 20 * d.level * d.level, xpPrev = 20 * (d.level - 1) * (d.level - 1);
   const xpFrac = Math.max(0, Math.min(1, (d.xp - xpPrev) / (xpNext - xpPrev || 1)));
+  const modes = {vasthouden: ["KERN", "Houdt vast en verdeelt elk kwartaal opnieuw. Op echte koersen won vasthouden hier van actief handelen."],
+    vasthouden_marktweer: ["KERN + NOODREM", "Houdt vast, maar stapt uit als de marktleider onder zijn 200-dagengemiddelde zakt."],
+    actief: ["JACHT", "Kiest elke week strategieën, wisselt alleen als een nieuwe duidelijk beter is, en koopt niet bij slecht marktweer."]};
+  const md = modes[d.mode] || ["", ""];
   return `<h2 class="px">${esc(d.name)}</h2><div class="mute">Team ${esc(d.team)} · status: <b>${esc(d.status)}</b></div>
+  ${md[0] ? `<div class="card"><span class="pill in">${md[0]}</span> <span class="hint">${esc(md[1])}</span>${d.weather ? `<div class="hint" style="margin-top:4px">${esc(d.weather)}</div>` : ""}</div>` : ""}
   ${d.paused_reason ? `<div class="card dn">${esc(d.paused_reason)}</div>` : ""}
   <div class="card"><div class="row"><span class="px" style="font-size:11px">Level ${d.level}</span><span class="hint">${d.xp} XP</span></div>
     <div class="bar xp"><i style="width:${xpFrac * 100}%"></i></div>

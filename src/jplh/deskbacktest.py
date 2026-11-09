@@ -233,6 +233,15 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
     return res
 
 
+def live_variant(mode: str) -> Variant:
+    """De variant die precies doet wat de afdeling live doet (zie ``desk_mode`` in de config)."""
+    if mode == "vasthouden":
+        return Variant("gekozen (live)", hold_only=True)
+    if mode == "vasthouden_marktweer":
+        return Variant("gekozen (live)", hold_only=True, regime=True, regime_exit=True)
+    return Variant("gekozen (live)", switch_margin=0.3, regime=True)
+
+
 def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidates: list[Strategy],
             variants: list[Variant] = VARIANTS, window: int = WINDOW) -> dict[str, dict[str, dict]]:
     """Per afdeling per variant: rendement, Sharpe, max daling, trades, kosten, wissels."""
@@ -253,7 +262,7 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
         start = max(s.candles[min(window, len(s.candles) - 1)].ts.date() for s in series)
         capital = config.start_capital_eur * share
         out[cls] = {}
-        for v in variants:
+        for v in list(variants) + [live_variant(config.desk_modes.get(cls, "actief"))]:
             r = run_desk(cls, series, leader, config, v, start, capital)
             rets = [b / a - 1 for a, b in zip([capital] + r.equity, r.equity)]
             m = metrics(rets, r.trades, r.fees, 0, ppy)
@@ -268,7 +277,7 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
         lines += ["**Let op: nep-koersen.** Deze cijfers zeggen niets over echte markten.", ""]
     lines += ["Elke variant speelt de hele afdeling na met weekkeuze, kosten en uitvoering op de volgende opening.",
               "Een verbetering telt alleen als ze de Sharpe verhoogt zonder een diepere daling, over de meeste afdelingen.", ""]
-    names = [v.name for v in VARIANTS if v.name in next(iter(result.values()), {})]
+    names = [v.name for v in VARIANTS if v.name in next(iter(result.values()), {})] + ["gekozen (live)"]
     score = {n: 0 for n in names}
     for cls, rows in result.items():
         base = rows["huidig"]
@@ -276,13 +285,20 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
                   "|---|---:|---:|---:|---:|---:|---:|"]
         for n in names:
             r = rows[n]
-            better = n != "vasthouden (maatlat)" and r["sharpe"] > base["sharpe"] + 0.05 and r["max_dd"] <= base["max_dd"] + 0.01
+            better = n not in ("vasthouden (maatlat)", "gekozen (live)") and r["sharpe"] > base["sharpe"] + 0.05 and r["max_dd"] <= base["max_dd"] + 0.01
             if better:
                 score[n] += 1
             lines.append(f"| {n}{' ✅' if better and n != 'huidig' else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
                          f"{-r['max_dd']:.1%} | {r['trades']} | {r['fees']:.2f} | {r['switches']} |")
         lines.append("")
     lines += ["## Oordeel", "", "| Variant | Afdelingen beter |", "|---|---:|"]
-    for n in names[2:]:
+    for n in names[2:-1]:
         lines.append(f"| {n} | {score[n]} van {len(result)} |")
+    lines += ["", "## Spelregel: wat live draait moet zich bewijzen", "",
+              "| Afdeling | Live: Sharpe | Vorige versie | Vasthouden | Oordeel |", "|---|---:|---:|---:|---|"]
+    for cls, rows in result.items():
+        live, base, hold = rows["gekozen (live)"], rows["huidig"], rows["vasthouden (maatlat)"]
+        ok = live["sharpe"] >= base["sharpe"] - 0.05 and live["sharpe"] >= hold["sharpe"] - 0.15
+        lines.append(f"| {cls} | {live['sharpe']:.2f} | {base['sharpe']:.2f} | {hold['sharpe']:.2f} | "
+                     f"{'in orde' if ok else 'NIET in orde: aanpassen'} |")
     return "\n".join(lines) + "\n"
