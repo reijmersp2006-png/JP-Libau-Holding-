@@ -33,6 +33,18 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 .badge.paper{color:var(--blue)} .badge.kill{color:var(--bad);animation:blink 1s steps(2) infinite}
 .badge.demo{color:var(--warn)}
 #hud .spacer{flex:1}
+.badge.jarvis{color:#5ee7ff;cursor:pointer} .badge.jarvis.warn{color:var(--warn)} .badge.jarvis.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
+/* Jarvis */
+.jarvis-card{border:2px solid #5ee7ff;background:linear-gradient(160deg,#0b2233,#0b0816);box-shadow:0 0 14px rgba(94,231,255,.25);
+  padding:12px;margin:10px 0;position:relative}
+.jarvis-card .head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.arc{width:26px;height:26px;border-radius:50%;border:3px solid #5ee7ff;box-shadow:0 0 10px #5ee7ff,inset 0 0 8px #5ee7ff;
+  animation:pulse 2.4s ease-in-out infinite;flex:none}
+.arc.warn{border-color:var(--warn);box-shadow:0 0 10px var(--warn),inset 0 0 8px var(--warn)}
+.arc.alarm{border-color:var(--bad);box-shadow:0 0 10px var(--bad),inset 0 0 8px var(--bad)}
+@keyframes pulse{50%{transform:scale(.85);opacity:.7}}
+.jarvis-card ul{margin:4px 0 8px 16px;padding:0} .jarvis-card li{margin:3px 0;line-height:1.35}
+.jarvis-card button{background:#0b0816;color:#5ee7ff;border:2px solid #5ee7ff;padding:4px 10px;font:inherit;cursor:pointer}
 @keyframes blink{50%{opacity:.25}}
 
 /* Wereld */
@@ -96,11 +108,11 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
 .bdg{width:30px;height:30px;display:grid;place-items:center;font-size:16px;background:#0b0816;border:2px solid var(--edge);
   filter:grayscale(1);opacity:.35} .bdg.got{filter:none;opacity:1;border-color:var(--gold)}
 @media (max-width: 900px){
-  html,body{overflow:auto}
+  html,body{overflow:visible;height:auto}
   #app{height:auto}
   #hud{flex-wrap:wrap;gap:10px} .stat{min-width:120px} #hud .spacer{display:none}
   #main{grid-template-columns:1fr} #world{height:56vh}
-  #side{border-left:0;border-top:4px solid #0b0816}
+  #side{border-left:0;border-top:4px solid #0b0816;overflow:visible}
   #bottom{grid-template-columns:1fr;height:auto} #feed{max-height:260px} #quests{border-left:0}
   .sign{font-size:9px;padding:2px 4px} .sign b{font-size:9px} .sign .lv,.sign .up,.sign .dn{font-size:8px}
   .bubble{font-size:9px;max-width:140px}
@@ -120,6 +132,7 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
     <div class="stat"><span class="lbl px">Demofase</span><div class="bar xp"><i id="h-day"></i></div><span class="hint" id="h-dayt"></span></div>
     <div class="spacer"></div>
     <span class="badge px demo" id="b-demo" hidden>Nep-data</span>
+    <span class="badge px jarvis" id="b-jarvis" onclick="select('hq')" title="Jarvis bewaakt de holding">JARVIS</span>
     <span class="badge px paper">Paper</span>
     <span class="badge px kill" id="b-kill" hidden>Noodstop</span>
     <div class="stat" style="min-width:110px;text-align:right"><span class="lbl px">Laatste ronde</span><span id="h-time" class="hint"></span></div>
@@ -447,10 +460,41 @@ function spark(canvas, pts, base) {
   for (let i = 0; i < w; i += 2) { const k = Math.min(v.length - 1, Math.round(i / w * (v.length - 1))); c.fillRect(i, Math.round(Y(v[k])), 2, 2); }
 }
 
+function jarvisStatus() {
+  const h = (S.jarvis && S.jarvis.health) || {status: "ok", issues: []};
+  const issues = [...h.issues];
+  const ageH = (Date.now() - new Date(S.generated_at)) / 3600e3;
+  if (!S.demo && ageH > 2.5) issues.unshift({level: "alarm", text: `de laatste ronde is ${Math.round(ageH)} uur geleden: de bot draait niet`});
+  const status = issues.some(i => i.level === "alarm") ? "alarm" : issues.length ? "let op" : "ok";
+  return {status, issues};
+}
+function jarvisCard() {
+  const b = S.jarvis && S.jarvis.briefing;
+  if (!b) return "";
+  const h = jarvisStatus();
+  const c = h.status === "alarm" ? "alarm" : h.status === "ok" ? "" : "warn";
+  return `<div class="jarvis-card"><div class="head"><div class="arc ${c}"></div>
+    <div><b class="px">JARVIS</b><div class="hint">${h.status === "ok" ? "alle systemen normaal" : esc(h.status)} · ${when(b.at)}</div></div></div>
+    <div>${esc(b.hello)} Phil.</div>
+    <ul>${b.lines.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+    ${h.issues.length ? `<div class="${c === "alarm" ? "dn" : ""}">${h.issues.map(i => "⚠ " + esc(i.text)).join("<br>")}</div>` : ""}
+    <button onclick="speak()">🔊 Voorlezen</button></div>`;
+}
+function speak() {
+  const b = S.jarvis && S.jarvis.briefing;
+  if (!b || !window.speechSynthesis) return toast("Voorlezen kan niet in deze browser");
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(b.speech.replace(/€/g, "euro "));
+  u.lang = "nl-NL"; u.rate = 1.02;
+  const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith("nl"));
+  if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
 function hqPanel() {
   const t = S.total;
   const ranked = [...S.desks].sort((a, b) => b.pnl_pct - a.pnl_pct);
   return `<h2 class="px">Hoofdkwartier</h2><div class="mute">${esc(S.name)} · alles met nepgeld</div>
+  ${jarvisCard()}
   <div class="card"><div class="big">${eur(t.equity_eur)}</div>
     <div class="row"><span>Resultaat</span><span class="${cls(t.pnl_pct)}">${eur(t.pnl_eur)} (${pct(t.pnl_pct)})</span></div>
     <div class="row"><span>Koop-en-houd zou zijn</span><span>${eur(t.benchmark_eur)}</span></div>
@@ -592,6 +636,9 @@ function hud() {
   document.getElementById("h-time").textContent = when(S.generated_at);
   document.getElementById("b-kill").hidden = !S.kill;
   document.getElementById("b-demo").hidden = !S.demo;
+  const j = jarvisStatus(), jb = document.getElementById("b-jarvis");
+  jb.textContent = "JARVIS: " + (j.status === "ok" ? "OK" : j.status.toUpperCase());
+  jb.className = "badge jarvis " + (j.status === "alarm" ? "alarm" : j.status === "ok" ? "" : "warn");
 }
 
 function feed() {

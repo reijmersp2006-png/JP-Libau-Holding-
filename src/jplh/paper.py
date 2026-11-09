@@ -11,6 +11,7 @@ from jplh.config import HoldingConfig
 from jplh.data import Bitvavo, Demo, Yahoo
 from jplh.desks import open_desks, rebalance_desks
 from jplh.models import Candle
+from jplh.notify import notify
 from jplh.scouts import scan
 from jplh.site import build_state, write_site
 from jplh.store import Store
@@ -23,6 +24,7 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
     now = now or datetime.now(tz=UTC)
     market = Store(home / "data" / "holding.sqlite3")
     failed = 0
+    problems: list[str] = []
     if collect:
         sources = {"bitvavo": Bitvavo(), "yahoo": Yahoo()}
         results = collect_candles(config, market, sources, "1h", 48, now)
@@ -32,6 +34,7 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
         for r in results:
             if not r.ok:
                 failed += 1
+                problems.append(f"{r.symbol} ({r.error})")
                 log(f"FAIL  {r.symbol}: {r.error}")
         log(f"Koersen: {len(results) - failed} van {len(results)} gelukt")
         watch = collect_watch(config, market, sources, now)
@@ -53,7 +56,9 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
     for a in scan(market, watch_list(config), now):
         log(f"verkenner {a.level:<6} {a.text}")
     if site_dir is not None:
-        write_site(build_state(config, desks, market, home, now), site_dir)
+        state = build_state(config, desks, market, home, now, problems=problems)
+        write_site(state, site_dir)
+        notify(state, market, now, log=log)
         log(f"Dashboard bijgewerkt in {site_dir}")
     return failed
 

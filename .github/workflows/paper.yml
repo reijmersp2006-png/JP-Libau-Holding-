@@ -48,6 +48,8 @@ jobs:
 
       - name: Paper-ronde
         run: jplh run
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
 
       - name: Stand bewaren
         run: |
@@ -67,3 +69,23 @@ jobs:
           path: site
       - id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Wachter - melden als de ronde mislukt
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import UTC, datetime
+          from pathlib import Path
+          from jplh.notify import Telegram
+          from jplh.store import Store
+          token = os.environ.get("TELEGRAM_TOKEN")
+          db = Path("data/holding.sqlite3")
+          chat = Store(db).get_state("telegram", {}).get("chat") if db.exists() else None
+          if token and chat:
+              Telegram(token).send(chat, "🚨 Jarvis: de paper-ronde van "
+                                   f"{datetime.now(tz=UTC):%H:%M} UTC is mislukt. Details: {os.environ['RUN_URL']}")
+          PY
