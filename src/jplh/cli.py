@@ -90,9 +90,13 @@ def cmd_backtest(args) -> int:
             print(f"Te weinig koersen voor: {', '.join(short)}. Draai eerst "
                   f"'jplh collect --interval {args.interval} --limit 1500'.")
     if args.desks:
-        from jplh.deskbacktest import compare, compare_report
+        from jplh.deskbacktest import allocation, allocation_lines, compare, compare_report
         from jplh.desks import ALL_CANDIDATES
-        report = compare_report(compare(config, candles_of, ALL_CANDIDATES), now, args.demo)
+        res = compare(config, candles_of, ALL_CANDIDATES)
+        report = compare_report(res, now, args.demo, allocation(res, config.desks))
+        longer = allocation(res, config.desks, skip=("meme",))
+        if longer:
+            report += "\n".join(allocation_lines(longer, " zonder memecoins")) + "\n"
         out = args.home / "reports" / f"afdelingen-{now:%Y-%m-%d}{'-demo' if args.demo else ''}.md"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(report, encoding="utf-8")

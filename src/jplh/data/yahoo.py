@@ -47,7 +47,12 @@ class Yahoo:
 
     def candles(self, symbol: str, interval: str = "1h", limit: int = 200) -> list[Candle]:
         rng = "1mo" if interval == "1d" and limit <= 20 else _RANGE.get(interval, "60d")
-        q = urllib.parse.urlencode({"interval": interval, "range": rng})
+        params = {"interval": interval, "range": rng}
+        if interval == "1d" and limit > 1250:
+            # Meer dan 5 jaar: met range=max geeft Yahoo maandkoersen, dus een expliciete periode.
+            end = int(datetime.now(tz=UTC).timestamp())
+            params = {"interval": "1d", "period1": end - int(limit * 1.5) * 86400, "period2": end}
+        q = urllib.parse.urlencode(params)
         url = f"{self.base_url}/{urllib.parse.quote(symbol)}?{q}"
         candles = parse_chart(get_json(url))
         # De laatste rij is vaak de lopende, nog niet gesloten periode: die laten we weg.

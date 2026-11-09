@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
-      - run: jplh collect --interval 1d --limit 1440
+      - run: jplh collect --interval 1d --limit 4000
       - run: jplh backtest --interval 1d
       - run: jplh backtest --interval 1d --desks
       - run: cat reports/afdelingen-*.md reports/backtest-*.md >> "$GITHUB_STEP_SUMMARY"

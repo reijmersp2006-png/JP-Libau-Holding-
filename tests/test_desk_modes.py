@@ -101,3 +101,34 @@ def test_mode_change_triggers_new_selection(tmp_path):
 
 def test_switch_margin_is_meaningful():
     assert SWITCH_MARGIN >= 0.2
+
+
+def test_weather_brake_waits_for_the_margin(tmp_path):
+    m = Store(tmp_path / "m.sqlite3")
+    m.save_observed("BTC-EUR", "1d", _daily([100.0] * 399 + [98.0]), "t", timedelta(days=1))  # 2% onder het gemiddelde
+    desk = Desk("crypto", _cfg(), m, Store(tmp_path / "c.sqlite3"), None, None)
+    desk.meta["regime_bull"] = True
+    ok, text = desk.regime(NOW)
+    assert ok is True and "marge" in text           # binnen 5%: vorige (goede) stand blijft
+    desk.meta.pop("regime_bull")
+    ok, _ = desk.regime(NOW)
+    assert ok is False                              # zonder vorige stand telt de kant van de lijn
+
+
+def test_desks_are_rebalanced_back_to_their_share_each_quarter(tmp_path):
+    from jplh.desks import open_desks, rebalance_desks
+    m = _market(tmp_path, symbols=("BTC-EUR", "ETH-EUR", "SOL-EUR", "XRP-EUR", "IWDA.AS", "AAPL"))
+    cfg = dataclasses.replace(_cfg(), desks={"crypto": 0.5, "stocks": 0.5})
+    desks = open_desks(cfg, tmp_path, m, use_kill_file=False)
+    start = NOW - timedelta(days=100)
+    for d in desks.values():
+        d.meta["started_at"] = start.isoformat()
+    desks["crypto"].holding.portfolio.cash_eur += 400.0      # crypto is flink gegroeid
+    total = sum(d.holding.portfolio.equity_eur(d.holding.prices(NOW)) for d in desks.values())
+    notes = rebalance_desks(desks, m, NOW)
+    assert notes and "Crypto Lab geeft" in notes[0]
+    eq = {c: d.holding.portfolio.equity_eur(d.holding.prices(NOW)) for c, d in desks.items()}
+    assert abs(eq["crypto"] - eq["stocks"]) < 1.0
+    assert abs(sum(eq.values()) - total) < 1e-6              # er verdwijnt geen geld
+    assert desks["crypto"].meta["transfers_eur"] < 0 < desks["stocks"].meta["transfers_eur"]
+    assert rebalance_desks(desks, m, NOW + timedelta(days=1)) == []   # pas weer na een kwartaal

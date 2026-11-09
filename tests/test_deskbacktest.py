@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from jplh.config import load_config
 from jplh.data.demo import Demo
 from jplh.desks import ALL_CANDIDATES
-from jplh.deskbacktest import VARIANTS, Variant, _prepare, compare, compare_report, run_desk
+from jplh.deskbacktest import ALLOCATIONS, VARIANTS, allocation, Variant, _prepare, compare, compare_report, run_desk
 from jplh.models import Candle
 
 END = datetime(2026, 11, 1, tzinfo=UTC)
@@ -22,8 +22,19 @@ def test_compare_runs_every_variant_for_every_desk():
     for rows in res.values():
         assert {v.name for v in VARIANTS} | {"gekozen (live)"} == set(rows)
         assert rows["vasthouden (maatlat)"]["switches"] == 0
-    report = compare_report(res, END, demo=True)
-    assert "Oordeel" in report and "Spelregel" in report
+    alloc = allocation(res, config.desks)
+    assert set(alloc) == set(ALLOCATIONS)
+    assert alloc[ALLOCATIONS[0]]["moved"] == 0
+    assert alloc[ALLOCATIONS[2]]["moved"] > 0
+    assert allocation(res, config.desks, band=0.0)[ALLOCATIONS[1]]["moved"] > 0
+    report = compare_report(res, END, demo=True, alloc=alloc)
+    assert "Oordeel" in report and "Spelregel" in report and "Verdeling tussen afdelingen" in report
+
+
+def test_regime_band_trades_less_around_the_line():
+    config, candles = _world()
+    res = compare(config, candles, ALL_CANDIDATES)["crypto"]
+    assert res["9b vasthouden + marktweer, marge 5%"]["trades"] <= res["7 vasthouden + marktweer"]["trades"]
 
 
 def test_desk_replay_does_not_look_ahead():

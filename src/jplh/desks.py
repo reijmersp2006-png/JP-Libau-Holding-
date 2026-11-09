@@ -30,6 +30,8 @@ from jplh.store import Store
 from jplh.strategies import FAMILIES, BuyHold, Strategy, _nl, _p
 
 DESK_ORDER = ("crypto", "meme", "stocks", "metals", "fx")
+DESK_NAMES = {"crypto": "Crypto Lab", "meme": "Meme Arcade", "stocks": "Beurstoren", "metals": "De Kluis",
+              "fx": "Wisselhaven"}
 SELECTION_WINDOW = 500      # dagen waarop de strategie gekozen wordt
 RESELECT_EVERY = timedelta(days=7)
 MIN_DAILY_BARS = 220        # genoeg voor de langste strategie (200 dagen) plus marge
@@ -37,6 +39,9 @@ SWITCH_MARGIN = 0.3         # zoveel Sharpe beter moet een nieuwe strategie zijn
 REBALANCE_EVERY = timedelta(days=91)
 REBALANCE_BAND = 0.10       # pas herverdelen als een deel meer dan 10% naast zijn doel zit
 LEADER = {"crypto": "BTC-EUR", "meme": "BTC-EUR", "stocks": "IWDA.AS"}
+# Marge rond het 200-dagengemiddelde per werkwijze: pas omslaan als de leider er zoveel voorbij is.
+# Getest in de afdelingen-backtest: crypto 5% gaf Sharpe 1,01 i.p.v. 0,91 en kosten €19 i.p.v. €71.
+REGIME_BAND = {"vasthouden_marktweer": 0.05}
 
 ALL_CANDIDATES: list[Strategy] = [BuyHold()] + [s for fam in FAMILIES.values() for s in fam]
 _BY_LABEL = {s.label: s for s in ALL_CANDIDATES}
@@ -112,11 +117,16 @@ class Desk:
         if len(daily) < 200:
             return None, ""
         sma = sum(c.close for c in daily) / len(daily)
-        last = daily[-1].close
-        gap = last / sma - 1
-        if last > sma:
-            return True, f"marktweer goed: {sym} staat {_p(gap)} t.o.v. zijn 200-dagengemiddelde"
-        return False, f"marktweer slecht: {sym} staat {_p(gap)} onder zijn 200-dagengemiddelde"
+        gap = daily[-1].close / sma - 1
+        band = REGIME_BAND.get(self.mode, 0.0)
+        prev = self.meta.get("regime_bull")
+        bull = gap > 0 if prev is None or abs(gap) > band else bool(prev)
+        self.meta["regime_bull"] = bull
+        where = "boven" if gap > 0 else "onder"
+        text = f"{sym} staat {_nl(f'{abs(gap):.1%}')} {where} zijn 200-dagengemiddelde"
+        if band and abs(gap) <= band and (gap > 0) != bull:
+            text += f", binnen de marge van {_nl(f'{band:.0%}')}: we houden de vorige stand aan om heen-en-weer te voorkomen"
+        return bull, f"marktweer {'goed' if bull else 'slecht'}: {text}"
 
     @property
     def meta(self) -> dict:
@@ -314,6 +324,82 @@ def open_desks(config: HoldingConfig, home: Path, market: Store, use_kill_file: 
         book = Store(home / "data" / "desks" / f"{cls}.sqlite3")
         out[cls] = Desk(cls, config, market, book, home if use_kill_file else None, home / "logs" / cls)
     return out
+
+
+def rebalance_desks(desks: dict[str, Desk], market: Store, now: datetime) -> list[str]:
+    """Elk kwartaal het geld tussen de afdelingen terug naar de vaste verdeling uit de config
+    (``[desks]``), als een afdeling meer dan 10% naast haar deel zit. Getest in de
+    afdelingen-backtest: zelfde of hoger rendement, kleinere daling (zie 'Verdeling')."""
+    if len(desks) < 2:
+        return []
+    state = market.get_state("desk_rebalance", {})
+    starts = [d.meta.get("started_at") for d in desks.values() if d.meta.get("started_at")]
+    last = state.get("at") or (min(starts) if starts else None)
+    if not last or now - datetime.fromisoformat(last) < REBALANCE_EVERY:
+        return []
+    market.set_state("desk_rebalance", {"at": now.isoformat()})
+    shares = {c: d.config.start_capital_eur for c, d in desks.items()}
+    prices = {c: d.holding.prices(now) for c, d in desks.items()}
+    value = {c: d.holding.portfolio.equity_eur(prices[c]) for c, d in desks.items()}
+    total = sum(value.values())
+    target = {c: total * shares[c] / sum(shares.values()) for c in desks}
+    over = {c: value[c] - target[c] for c in desks if value[c] > target[c] * (1 + REBALANCE_BAND)}
+    under = {c: target[c] - value[c] for c in desks if value[c] < target[c] * (1 - REBALANCE_BAND)}
+    if not over or not under:
+        return []
+    notes = []
+    freed = 0.0
+    for c, excess in over.items():   # 1. te grote afdelingen maken cash vrij
+        d = desks[c]
+        need = excess - d.holding.portfolio.cash_eur
+        held = {}
+        for sym, pos in d.holding.portfolio.positions.items():
+            try:
+                held[sym] = pos.quantity * prices[c].price_eur(sym)
+            except KeyError:
+                pass
+        if need > 0 and held:
+            for sym, v in held.items():
+                part = min(v, need * v / sum(held.values()))
+                why = (f"herverdeling tussen afdelingen: {DESK_NAMES.get(c, c)} is "
+                       f"{_p(value[c] / target[c] - 1)} t.o.v. haar deel van de holding")
+                d.holding.submit(Signal(sym, Side.SELL, "koop_en_houd", why, part), now)
+        give = min(excess, d.holding.portfolio.cash_eur)
+        _transfer(d, -give, now)
+        freed += give
+        notes.append(f"{DESK_NAMES.get(c, c)} geeft {_nl(format(give, ',.2f'))} euro af")
+    want = sum(under.values())
+    for c, short in under.items():   # 2. te kleine afdelingen krijgen het naar verhouding
+        d = desks[c]
+        got = freed * short / want
+        _transfer(d, got, now)
+        notes.append(f"{DESK_NAMES.get(c, c)} krijgt {_nl(format(got, ',.2f'))} euro")
+        if d.mode != "actief" and d.meta.get("regime_bull") is not False:
+            held = {}
+            for sym, pos in d.holding.portfolio.positions.items():
+                try:
+                    held[sym] = pos.quantity * prices[c].price_eur(sym)
+                except KeyError:
+                    pass
+            for sym, v in held.items():
+                why = "herverdeling tussen afdelingen: extra geld naar verhouding bijgekocht"
+                d.holding.submit(Signal(sym, Side.BUY, "koop_en_houd", why, got * v / sum(held.values())), now)
+    for c in set(over) | set(under):
+        d = desks[c]
+        d.holding.journal.write(now, "selection", {"reason": "kwartaal-herverdeling tussen afdelingen: " + "; ".join(notes)})
+        d.holding._save()
+    return notes
+
+
+def _transfer(desk: Desk, amount: float, now: datetime) -> None:
+    """Cash tussen potjes schuiven. Top en dagstart schuiven mee, zodat een overboeking
+    geen nep-verlies (en geen pauze) oplevert."""
+    h = desk.holding
+    h.portfolio.cash_eur += amount
+    h.meta["peak_equity"] = max(h.meta.get("peak_equity", 0.0) + amount, 0.0)
+    h.meta["day_start_equity"] = h.meta.get("day_start_equity", 0.0) + amount
+    desk.meta["transfers_eur"] = desk.meta.get("transfers_eur", 0.0) + amount
+    h.journal.write(now, "transfer", {"amount_eur": amount})
 
 
 def benchmark_equity(desk: Desk, now: datetime | None = None) -> float | None:

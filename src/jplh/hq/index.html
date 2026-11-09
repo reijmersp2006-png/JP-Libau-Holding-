@@ -39,7 +39,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 #main{display:grid;grid-template-columns:1fr 380px;min-height:0}
 #world{position:relative;min-height:0;overflow:hidden;background:#123a5c}
 #world canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;cursor:pointer}
-#labels{position:absolute;inset:0;pointer-events:none}
+#labels,#bubbles{position:absolute;inset:0;pointer-events:none}
 .sign{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;
   background:#1f1934ee;border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge);padding:4px 7px;
   font-size:11px;white-space:nowrap;text-align:center}
@@ -84,11 +84,33 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
 .quest .bar{height:10px;margin-top:3px} .quest.done .qt{color:var(--good)}
 .quest.locked{opacity:.65}
 .hint{font-size:10px;color:var(--dim)}
+.bubble{position:absolute;transform:translate(-50%,-100%);background:#f4ecd8;color:#1f1934;font-size:11px;
+  padding:4px 7px;border:2px solid #0b0816;max-width:190px;white-space:normal;pointer-events:none;
+  animation:pop .25s steps(3)}
+.bubble:after{content:"";position:absolute;left:50%;bottom:-8px;border:4px solid transparent;border-top-color:#0b0816}
+@keyframes pop{from{transform:translate(-50%,-80%) scale(.6);opacity:0}}
+#toast{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:var(--gold);color:#2a1a00;padding:10px 16px;
+  border:3px solid #2a1a00;box-shadow:0 0 0 3px var(--gold);font-weight:700;display:none;z-index:9;text-align:center}
+#toast.show{display:block;animation:pop .3s steps(3)}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.bdg{width:30px;height:30px;display:grid;place-items:center;font-size:16px;background:#0b0816;border:2px solid var(--edge);
+  filter:grayscale(1);opacity:.35} .bdg.got{filter:none;opacity:1;border-color:var(--gold)}
+@media (max-width: 900px){
+  html,body{overflow:auto}
+  #app{height:auto}
+  #hud{flex-wrap:wrap;gap:10px} .stat{min-width:120px} #hud .spacer{display:none}
+  #main{grid-template-columns:1fr} #world{height:56vh}
+  #side{border-left:0;border-top:4px solid #0b0816}
+  #bottom{grid-template-columns:1fr;height:auto} #feed{max-height:260px} #quests{border-left:0}
+  .sign{font-size:9px;padding:2px 4px} .sign b{font-size:9px} .sign .lv,.sign .up,.sign .dn{font-size:8px}
+  .bubble{font-size:9px;max-width:140px}
+}
 #err{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:#0b0816;padding:16px;
   border:2px solid var(--bad);display:none;max-width:420px}
 </style>
 </head>
 <body>
+<div id="toast"></div>
 <div id="app">
   <header id="hud">
     <div id="logo"><div class="crest px">JP</div><div><div class="t1 px">JP-libau Holding</div><div class="t2">Hoofdkwartier</div></div></div>
@@ -104,7 +126,7 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
   </header>
 
   <div id="main">
-    <div id="world"><canvas id="cv"></canvas><div id="labels"></div><div id="weather"></div><div id="err"></div></div>
+    <div id="world"><canvas id="cv"></canvas><div id="labels"></div><div id="bubbles"></div><div id="weather"></div><div id="err"></div></div>
     <aside id="side"></aside>
   </div>
 
@@ -267,19 +289,99 @@ function workers() {
   }
 }
 
+// Het weer volgt het echte marktweer: zon als bitcoin en de beurs boven hun 200-dagengemiddelde staan.
+function sky() {
+  const mw = (S && S.market_weather) || [];
+  const bad = mw.filter(w => !w.ok).length;
+  const dd = S ? S.total.drawdown : 0;
+  if (dd > 0.05) return "storm";
+  if (!mw.length) return "helder";
+  return bad === 0 ? "zon" : bad === mw.length ? "regen" : "wolken";
+}
+
+function cloud(x, y, k) {
+  blob(x, y, 12 * k, 4 * k, "rgba(235,235,245,.85)", 0); blob(x + 8 * k, y - 3 * k, 8 * k, 4 * k, "rgba(245,245,250,.9)", 1);
+}
+
 function weather() {
-  const dd = S ? S.total.drawdown : 0, el = document.getElementById("weather");
-  if (dd > 0.05) {                       // storm als het vermogen flink onder de top staat
-    ctx.fillStyle = "rgba(20,20,40,.35)"; ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = .6;
-    for (let i = 0; i < 120; i++) { const x = (i * 29 + tick * 2) % W, y = (i * 17 + tick * 4) % H; rect(x, y, 1, 3, "#9fc4ff"); }
+  const el = document.getElementById("weather"), kind = sky(), n = night();
+  const vix = S && S.vix, scary = vix != null && vix >= 30;
+  if (kind === "zon" && !n) {
+    const r = 9 + Math.sin(tick / 30);
+    ctx.globalAlpha = .9; blob(292, 18, r, r, "#ffdf5a", 0); ctx.globalAlpha = .25;
+    for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2 + tick / 200; rect(292 + Math.cos(t) * 16, 18 + Math.sin(t) * 16, 2, 2, "#ffdf5a"); }
     ctx.globalAlpha = 1;
-    if (tick % 200 < 4) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillRect(0, 0, W, H); }
-    el.textContent = `Storm: ${pct(dd)} onder de top. De Wachttoren bewaakt de grens van ${pct(S.limits.max_drawdown_pct, 0)}.`;
-  } else {
-    if (night()) { ctx.fillStyle = "rgba(10,10,40,.28)"; ctx.fillRect(0, 0, W, H); }
-    el.textContent = night() ? "Nacht op het eiland. Crypto werkt door, de beurs slaapt." : "Helder weer op het eiland.";
   }
+  if (n) {
+    ctx.fillStyle = "rgba(10,10,40,.28)"; ctx.fillRect(0, 0, W, H);
+    blob(290, 18, 6, 6, "#f4ecd8", 0); blob(293, 16, 5, 5, n ? "#0d2440" : "#1e5f8f", 0);
+  }
+  if (kind === "wolken" || kind === "regen" || kind === "storm") {
+    for (let i = 0; i < (kind === "wolken" ? 3 : 6); i++) cloud((i * 70 + tick * .08) % (W + 40) - 20, 14 + (i % 3) * 8, kind === "wolken" ? 1 : 1.3);
+  }
+  if (kind === "regen" || kind === "storm") {
+    ctx.fillStyle = kind === "storm" ? "rgba(20,20,40,.35)" : "rgba(30,40,70,.18)"; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = .6;
+    const drops = kind === "storm" ? 120 : 60;
+    for (let i = 0; i < drops; i++) { const x = (i * 29 + tick * 2) % W, y = (i * 17 + tick * 4) % H; rect(x, y, 1, 3, "#9fc4ff"); }
+    ctx.globalAlpha = 1;
+  }
+  if ((kind === "storm" || scary) && tick % 240 < 4) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillRect(0, 0, W, H); }
+  const mw = (S && S.market_weather) || [];
+  const parts = mw.map(w => `${w.name}: ${w.ok ? "zon" : "regen"}`);
+  if (vix != null) parts.push(`angstindex ${Math.round(vix)}${scary ? " (onweer!)" : ""}`);
+  el.textContent = kind === "storm" ? `Storm: ${pct(S.total.drawdown)} onder de top. De Wachttoren bewaakt de grens.`
+    : (parts.length ? "Marktweer · " + parts.join(" · ") : n ? "Nacht op het eiland." : "Helder weer op het eiland.");
+  el.title = mw.map(w => w.text).join("\n");
+}
+
+// ------------------------------------------------------------------ muntjes bij trades
+const coins = [];
+function spawnCoins(id, buy, n = 8) {
+  const b = B[id]; if (!b) return;
+  const door = [b.x + b.w / 2, b.y - 4], hq = [160, 94];
+  const [from, to] = buy ? [hq, door] : [door, hq];
+  for (let i = 0; i < n; i++) coins.push({from, to, t: -i * 6, life: 70});
+}
+function drawCoins() {
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i]; c.t++;
+    if (c.t < 0) continue;
+    if (c.t > c.life) { coins.splice(i, 1); continue; }
+    const p = c.t / c.life, x = c.from[0] + (c.to[0] - c.from[0]) * p, y = c.from[1] + (c.to[1] - c.from[1]) * p - Math.sin(p * Math.PI) * 18;
+    const w = Math.abs(Math.cos(c.t / 4)) * 3 + 1;
+    rect(x - w / 2, y - 2, w, 4, "#ffcc4d"); rect(x - w / 2, y - 2, Math.max(1, w / 3), 1, "#fff2b0");
+  }
+}
+
+// ------------------------------------------------------------------ tekstballonnen
+function catchphrase(d) {
+  const last = S.feed.find(f => f.desk === d.id && (f.kind === "trade" || f.kind === "refused" || f.kind === "reflection"));
+  const why = last ? (last.why || last.detail || "") : "";
+  let m;
+  if (/noodrem/.test(why)) return "Noodrem! Het marktweer is slecht, wij staan droog.";
+  if ((m = why.match(/RSI \((\d+)\)/)) && last.text.includes("koopt")) return `RSI ${m[1]}, ik koop de dip!`;
+  if (/terugkeer klaar/.test(why)) return "Herstel binnen, winst pakken!";
+  if (/trend omhoog/.test(why)) return "De trend is omhoog, wij gaan mee!";
+  if (/trend omlaag/.test(why)) return "Trend omlaag. Wij stappen eruit.";
+  if (/uitbraak:/.test(why)) return "Uitbraak! Nieuwe top in zicht.";
+  if (/momentum:/.test(why)) return "Momentum! Stijgers blijven stijgen.";
+  if (/herverdeling/.test(why)) return "Even herverdelen, alles weer in balans.";
+  if (last && last.kind === "reflection") return "Terugblik gedaan. Weer wat geleerd!";
+  if (last && last.kind === "refused") return "De Wachttoren zei nee. Veiligheid eerst.";
+  if (d.mode === "vasthouden") return d.positions.length ? "Wij houden vast. Geduld wint." : "Klaar om in te stappen.";
+  if (d.weather && /slecht/.test(d.weather)) return "We wachten op beter weer.";
+  if (d.status === "gesloten") return "Zzz... de markt is dicht.";
+  return d.positions.length ? "Alles onder controle." : "Wij wachten op een kans.";
+}
+let bubbleAt = 0, bubbleIdx = 0;
+function bubbles() {
+  const box = document.getElementById("bubbles");
+  if (!S || Date.now() - bubbleAt < 6000) return;
+  bubbleAt = Date.now();
+  const d = S.desks[bubbleIdx++ % S.desks.length], b = B[d.id];
+  const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 7) * scale - 34;
+  box.innerHTML = `<div class="bubble" style="left:${x}px;top:${y}px">${esc(catchphrase(d))}</div>`;
 }
 
 function frame() {
@@ -287,8 +389,8 @@ function frame() {
   drawWater(); drawIsland();
   const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
   for (const id of order) building(id, desk(id));
-  workers(); weather();
-  if (tick % 15 === 0) placeSigns();
+  workers(); drawCoins(); weather();
+  if (tick % 15 === 0) { placeSigns(); bubbles(); }
   requestAnimationFrame(frame);
 }
 
@@ -499,20 +601,63 @@ function feed() {
     `<div class="msg ${f.kind}"><span class="t">[${when(f.ts)}]</span> <span class="who">${esc(who[f.desk] || f.desk)}:</span> <span class="txt">${esc(strat(f.text))}</span> <span class="t">${esc(strat(f.strategy || ""))}</span>${f.detail ? `<div class="det">${esc(strat(f.detail))}</div>` : ""}</div>`).join("")
     : '<div class="msg t">Nog geen gebeurtenissen. De eerste ronde draait binnen het uur.</div>';
   box.querySelectorAll(".msg").forEach(el => el.onclick = () => el.classList.toggle("open"));
-  document.getElementById("quests").innerHTML = '<div class="px" style="font-size:12px;margin-bottom:4px">Missies</div>' + S.missions.map(m => {
+  const bl = badgeList();
+  document.getElementById("quests").innerHTML = `<div class="px" style="font-size:12px">Badges ${bl.filter(b => b.got).length}/${bl.length}</div>
+    <div class="badges">${bl.map(b => `<div class="bdg ${b.got ? "got" : ""}" title="${esc(b.title)}">${b.icon}</div>`).join("")}</div>
+    <div class="px" style="font-size:12px;margin-bottom:4px">Missies</div>` + S.missions.map(m => {
     const done = m.progress >= m.goal;
     return `<div class="quest ${done ? "done" : ""} ${m.locked ? "locked" : ""}"><div class="qt"><span>${done ? "✔ " : m.locked ? "🔒 " : ""}${esc(m.title)}</span><span>${m.progress}/${m.goal}</span></div>
       <div class="bar xp"><i style="width:${Math.min(1, m.progress / m.goal) * 100}%"></i></div>${m.hint ? `<div class="hint">${esc(m.hint)}</div>` : ""}</div>`;
   }).join("");
 }
 
+// ------------------------------------------------------------------ feestjes: muntjes, missies en badges
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.innerHTML = text; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 4500);
+}
+function celebrate(prev) {
+  const seenTs = localStorage.getItem("jplh-seen-ts") || (prev ? prev.generated_at : new Date(Date.now() - 3600e3).toISOString());
+  const fresh = S.feed.filter(f => f.kind === "trade" && f.ts > seenTs);
+  fresh.slice(0, 6).forEach((f, i) => setTimeout(() => spawnCoins(f.desk, f.text.includes("koopt")), i * 600));
+  localStorage.setItem("jplh-seen-ts", S.generated_at);
+  const got = JSON.parse(localStorage.getItem("jplh-badges") || "[]");
+  for (const bd of badgeList()) {
+    if (bd.got && !got.includes(bd.id)) {
+      got.push(bd.id);
+      if (!S.demo) toast(`${bd.icon} Badge verdiend: ${esc(bd.title)}`);
+    }
+  }
+  localStorage.setItem("jplh-badges", JSON.stringify(got));
+}
+function badgeList() {
+  const m = id => S.missions.find(x => x.id === id) || {progress: 0, goal: 1};
+  const done = id => m(id).progress >= m(id).goal;
+  const L = S.lab || {reviewed: 0, alerts: []};
+  return [
+    {id: "first", icon: "🪙", title: "Eerste paper trade", got: done("first")},
+    {id: "fifty", icon: "💰", title: "50 paper trades", got: done("fifty")},
+    {id: "lesson", icon: "🔬", title: "Eerste terugblik in het lab", got: L.reviewed > 0},
+    {id: "scout", icon: "🔭", title: "Eerste melding van de verkenners", got: L.alerts.length > 0},
+    {id: "week", icon: "📅", title: "Een week actief", got: S.days_active >= 7},
+    {id: "level5", icon: "⭐", title: "Een team op level 5", got: S.desks.some(d => d.level >= 5)},
+    {id: "green", icon: "📈", title: "Holding in de plus", got: S.total.pnl_pct > 0},
+    {id: "beat", icon: "🏆", title: "Beter dan koop-en-houd na 30 dagen", got: done("beat")},
+    {id: "discipline", icon: "🛡️", title: "30 dagen binnen de risicogrenzen", got: done("discipline")},
+    {id: "demo", icon: "🎓", title: "Demofase afgerond", got: done("demo")},
+  ];
+}
+
 async function load() {
   try {
     const r = await fetch("state.json?t=" + Date.now(), {cache: "no-store"});
     if (!r.ok) throw new Error("HTTP " + r.status);
+    const prev = S;
     S = await r.json();
     document.getElementById("err").style.display = "none";
     hud(); feed(); select(selected);
+    celebrate(prev);
   } catch (e) {
     const el = document.getElementById("err");
     el.style.display = "block";

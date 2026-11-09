@@ -32,6 +32,7 @@ from jplh.backtest import PERIODS_PER_YEAR, metrics, simulate, unit_prices
 from jplh.config import HoldingConfig
 from jplh.models import Candle, Instrument
 from jplh.strategies import BuyHold, Strategy
+from jplh.desks import REGIME_BAND
 
 WINDOW = 500
 RESELECT_DAYS = 7
@@ -50,10 +51,13 @@ class Variant:
     hold_only: bool = False
     handicap: float = 0.1     # Sharpe die een strategie moet inleveren t.o.v. vasthouden
     regime_exit: bool = False # bij slecht marktweer ook verkopen (niet alleen niet kopen)
+    rotate: int = 0           # alleen de ``rotate`` sterkste instrumenten (momentum) houden; 0 = uit
+    rotate_days: int = 126    # momentum over zoveel dagen (~6 maanden)
+    regime_band: float = 0.0  # marge rond het 200-dagengemiddelde: pas wisselen als de leider er zoveel voorbij is
 
 
 VARIANTS = [
-    Variant("huidig"),
+    Variant("oude versie"),
     Variant("vasthouden (maatlat)", hold_only=True),
     Variant("1 grootte op risico", risk_sizing=True),
     Variant("2 minder wisselen", switch_margin=0.3),
@@ -66,6 +70,12 @@ VARIANTS = [
     Variant("2+3+6", switch_margin=0.3, regime=True, handicap=0.5),
     Variant("1+2+3+6", risk_sizing=True, switch_margin=0.3, regime=True, handicap=0.5),
     Variant("7 vasthouden + marktweer", hold_only=True, regime=True, regime_exit=True),
+    Variant("8 rotatie top 2 (6 mnd)", rotate=2),
+    Variant("8b rotatie top 2 + marktweer", rotate=2, regime=True, regime_exit=True),
+    Variant("8c rotatie top 1 (3 mnd)", rotate=1, rotate_days=63),
+    Variant("9 vasthouden + marktweer, marge 3%", hold_only=True, regime=True, regime_exit=True, regime_band=0.03),
+    Variant("9b vasthouden + marktweer, marge 5%", hold_only=True, regime=True, regime_exit=True, regime_band=0.05),
+    Variant("9c 2+3 met marge 3%", switch_margin=0.3, regime=True, regime_band=0.03),
     Variant("alles", risk_sizing=True, switch_margin=0.3, regime=True, trail=3.0, vote=3, handicap=0.5),
 ]
 
@@ -120,6 +130,7 @@ class DeskResult:
     variant: str
     desk: str
     equity: list[float] = field(default_factory=list)
+    dates: list = field(default_factory=list)
     trades: int = 0
     fees: float = 0.0
     switches: int = 0
@@ -136,8 +147,12 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
     chosen: dict[str, list[str]] = {}
     pending: dict[str, int] = {}
     res = DeskResult(variant.name, cls)
+    res.dates = dates
     last_pick = None
-    max_pos = max(config.risk.max_position_pct, 1 / max(len(series), 1))
+    bull_state: bool | None = None
+    rotation: set = set()
+    max_pos = max(config.risk.max_position_pct, 1 / max(len(series), 1),
+                  1 / variant.rotate if variant.rotate else 0)
 
     def last_idx(s: _Series, d) -> int | None:
         i = s.index.get(d)
@@ -172,6 +187,8 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
                         if j is not None and x.vol[j] > 0:
                             inv[x.inst.symbol] = 1 / x.vol[j]
                     w = inv.get(sym, 0.0) / sum(inv.values()) if sym in inv else 1 / len(series)
+                elif variant.rotate:
+                    w = 1 / variant.rotate
                 else:
                     w = 1 / len(series)
                 size = min(equity_open * min(w, max_pos), cash)
@@ -193,6 +210,14 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
         # 2. Weekkeuze.
         if last_pick is None or (d - last_pick).days >= RESELECT_DAYS:
             last_pick = d
+            if variant.rotate:
+                mom = {}
+                for s in series:
+                    i = idxs[s.inst.symbol] if idxs[s.inst.symbol] is not None else last_idx(s, d)
+                    if i is not None and i >= variant.rotate_days:
+                        mom[s.inst.symbol] = s.candles[i].close / s.candles[i - variant.rotate_days].close - 1
+                top = sorted(mom, key=mom.get, reverse=True)[:variant.rotate]
+                rotation = {sym for sym in top if mom[sym] > 0}   # alleen als het echt stijgt
             for s in series:
                 i = idxs[s.inst.symbol] if idxs[s.inst.symbol] is not None else last_idx(s, d)
                 if i is None:
@@ -212,13 +237,18 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
             li = last_idx(leader, d)
             if li is not None and li >= 200:
                 sma = sum(c.close for c in leader.candles[li - 199:li + 1]) / 200
-                bull = leader.candles[li].close > sma
+                gap = leader.candles[li].close / sma - 1
+                if bull_state is None or abs(gap) > variant.regime_band:
+                    bull_state = gap > 0
+                bull = bull_state
         for s in series:
             sym, i = s.inst.symbol, idxs[s.inst.symbol]
             if i is None or sym not in chosen:
                 continue
             votes = [s.targets[lab][i] for lab in chosen[sym]]
             want = int(sum(votes) * 2 > len(votes))
+            if variant.rotate:
+                want = int(sym in rotation)
             c = s.candles[i].close
             if qty[sym] > 0:
                 peak_since[sym] = max(peak_since[sym], c)
@@ -238,7 +268,8 @@ def live_variant(mode: str) -> Variant:
     if mode == "vasthouden":
         return Variant("gekozen (live)", hold_only=True)
     if mode == "vasthouden_marktweer":
-        return Variant("gekozen (live)", hold_only=True, regime=True, regime_exit=True)
+        return Variant("gekozen (live)", hold_only=True, regime=True, regime_exit=True,
+                       regime_band=REGIME_BAND.get(mode, 0.0))
     return Variant("gekozen (live)", switch_margin=0.3, regime=True)
 
 
@@ -268,19 +299,79 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
             m = metrics(rets, r.trades, r.fees, 0, ppy)
             out[cls][v.name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
                                 "trades": r.trades, "fees": r.fees, "switches": r.switches, "days": len(r.equity)}
+            if v.name == "gekozen (live)":
+                out[cls][v.name]["curve"] = list(zip(r.dates, r.equity))
     return out
 
 
-def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool = False) -> str:
+ALLOCATIONS = ("vaste potjes, nooit herverdelen", "vaste verdeling, elk kwartaal terug (live)",
+               "naar risico, elk kwartaal")
+MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost samen ~0,5% van het verschoven bedrag
+
+
+def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
+               vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10) -> dict[str, dict]:
+    """Slimmer verdelen tussen afdelingen? Speelt de live-curves van alle afdelingen samen na
+    vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
+    curves = {c: dict(rows["gekozen (live)"]["curve"]) for c, rows in result.items()
+              if rows.get("gekozen (live)", {}).get("curve") and c not in skip}
+    if len(curves) < 2:
+        return {}
+    start = max(min(c) for c in curves.values())
+    days = sorted({d for c in curves.values() for d in c if d >= start})
+    last = {c: None for c in curves}
+    rets: dict[str, list[float]] = {c: [] for c in curves}
+    for d in days:   # dagrendement per afdeling; geen koers die dag (weekend) = 0
+        for c, cur in curves.items():
+            v = cur.get(d, last[c])
+            rets[c].append(v / last[c] - 1 if last[c] and v else 0.0)
+            last[c] = v if v else last[c]
+    out = {}
+    total_share = sum(shares[c] for c in curves)
+    for name in ALLOCATIONS:
+        w = {c: shares[c] / total_share for c in curves}
+        val = {c: w[c] for c in curves}
+        eq, moved = [], 0.0
+        for k in range(len(days)):
+            for c in curves:
+                val[c] *= 1 + rets[c][k]
+            tot = sum(val.values())
+            if name != ALLOCATIONS[0] and k > 0 and k % every == 0:
+                if name == ALLOCATIONS[2] and k >= vol_days:
+                    inv = {}
+                    for c in curves:
+                        r = rets[c][k - vol_days + 1:k + 1]
+                        m = sum(r) / len(r)
+                        sd = math.sqrt(sum((x - m) ** 2 for x in r) / len(r))
+                        inv[c] = 1 / sd if sd > 0 else 0.0
+                    w = {c: inv[c] / sum(inv.values()) for c in curves} if sum(inv.values()) else w
+                target = {c: tot * w[c] for c in curves}
+                if name == ALLOCATIONS[1] and all(abs(val[c] / target[c] - 1) <= band for c in curves):
+                    eq.append(tot)
+                    continue
+                shift = sum(abs(target[c] - val[c]) for c in curves) / 2
+                moved += shift
+                tot -= shift * MOVE_COST
+                val = {c: tot * w[c] for c in curves}
+            eq.append(tot)
+        dr = [b / a - 1 for a, b in zip([1.0] + eq, eq)]
+        m = metrics(dr, 0, 0, 0, 365)
+        out[name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
+                     "moved": moved, "since": start}
+    return out
+
+
+def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool = False,
+                   alloc: dict[str, dict] | None = None, alloc_title: str = "") -> str:
     lines = [f"# Afdelingen-backtest: verbeteringen tegen de huidige versie ({now:%Y-%m-%d})", ""]
     if demo:
         lines += ["**Let op: nep-koersen.** Deze cijfers zeggen niets over echte markten.", ""]
     lines += ["Elke variant speelt de hele afdeling na met weekkeuze, kosten en uitvoering op de volgende opening.",
-              "Een verbetering telt alleen als ze de Sharpe verhoogt zonder een diepere daling, over de meeste afdelingen.", ""]
+              "✅ = beter dan wat nu live draait: hogere Sharpe (+0,05) zonder diepere daling. Alleen zo'n variant mag live.", ""]
     names = [v.name for v in VARIANTS if v.name in next(iter(result.values()), {})] + ["gekozen (live)"]
     score = {n: 0 for n in names}
     for cls, rows in result.items():
-        base = rows["huidig"]
+        base = rows["gekozen (live)"]
         lines += [f"## {cls}", "", "| Variant | Rendement | Sharpe | Max daling | Trades | Kosten € | Wissels |",
                   "|---|---:|---:|---:|---:|---:|---:|"]
         for n in names:
@@ -291,14 +382,28 @@ def compare_report(result: dict[str, dict[str, dict]], now: datetime, demo: bool
             lines.append(f"| {n}{' ✅' if better and n != 'huidig' else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
                          f"{-r['max_dd']:.1%} | {r['trades']} | {r['fees']:.2f} | {r['switches']} |")
         lines.append("")
-    lines += ["## Oordeel", "", "| Variant | Afdelingen beter |", "|---|---:|"]
+    lines += ["## Oordeel: beter dan live", "", "| Variant | Afdelingen beter dan live |", "|---|---:|"]
     for n in names[2:-1]:
         lines.append(f"| {n} | {score[n]} van {len(result)} |")
     lines += ["", "## Spelregel: wat live draait moet zich bewijzen", "",
               "| Afdeling | Live: Sharpe | Vorige versie | Vasthouden | Oordeel |", "|---|---:|---:|---:|---|"]
     for cls, rows in result.items():
-        live, base, hold = rows["gekozen (live)"], rows["huidig"], rows["vasthouden (maatlat)"]
+        live, base, hold = rows["gekozen (live)"], rows["oude versie"], rows["vasthouden (maatlat)"]
         ok = live["sharpe"] >= base["sharpe"] - 0.05 and live["sharpe"] >= hold["sharpe"] - 0.15
         lines.append(f"| {cls} | {live['sharpe']:.2f} | {base['sharpe']:.2f} | {hold['sharpe']:.2f} | "
                      f"{'in orde' if ok else 'NIET in orde: aanpassen'} |")
+    if alloc:
+        lines += allocation_lines(alloc, alloc_title)
     return "\n".join(lines) + "\n"
+
+
+def allocation_lines(alloc: dict[str, dict], title: str = "") -> list[str]:
+    live = alloc[ALLOCATIONS[1]]
+    lines = ["", f"## Verdeling tussen afdelingen{title} (samen, sinds {live['since']})", "",
+             f"Herverdelen kost {MOVE_COST:.1%} van het verschoven bedrag. ✅ = beter dan live.", "",
+             "| Verdeling | Rendement | Sharpe | Max daling | Verschoven (x pot) |", "|---|---:|---:|---:|---:|"]
+    for n, r in alloc.items():
+        better = n != ALLOCATIONS[1] and r["sharpe"] > live["sharpe"] + 0.05 and r["max_dd"] <= live["max_dd"] + 0.01
+        lines.append(f"| {n}{' ✅' if better else ''} | {r['return']:+.1%} | {r['sharpe']:.2f} | "
+                     f"{-r['max_dd']:.1%} | {r['moved']:.2f} |")
+    return lines
