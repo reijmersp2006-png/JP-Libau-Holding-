@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from jplh.arena import maybe_run_arena
-from jplh.collect import collect_candles, collect_fx_reference, collect_radar, collect_watch
+from jplh.collect import collect_candles, collect_fx_reference, collect_radar, collect_shadow, collect_watch
 from jplh.config import HoldingConfig
 from jplh.data import Bitvavo, Demo, Yahoo
 from jplh.desks import open_desks, rebalance_desks
@@ -47,6 +47,12 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
             if not r.ok:
                 log(f"verkenner mist {r.symbol}: {r.error}")
         log(f"Verkenners: {sum(r.ok for r in watch)} van {len(watch)} extra markten binnen")
+        shadow = collect_shadow(config, market, sources, now, 1500 if deep else 600)
+        for r in shadow:
+            if not r.ok:
+                log(f"schaduw mist {r.symbol}: {r.error}")
+        if shadow:
+            log(f"Schaduw-afdelingen: {sum(r.ok for r in shadow)} van {len(shadow)} koersen binnen")
     desks = open_desks(config, home, market)
     for cls, desk in desks.items():
         rnd = desk.run(now)
@@ -103,6 +109,12 @@ def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime
                 d.append(Candle(day, cs[0].open, max(c.high for c in cs), min(c.low for c in cs), cs[-1].close,
                                 sum(c.volume for c in cs)))
         market.save_observed(inst.symbol, "1d", d, "demo", timedelta(days=1))
+    # Schaduw-afdelingen: alleen dagkoersen (rustig voor geldmarkt/obligaties).
+    calm = {"schatkist": "fx", "obligaties": "fx", "vastgoed": "stocks", "grondstoffen": "metals"}
+    kinds.update({x.symbol: calm.get(x.desk, "stocks") for x in config.shadow})
+    for x in config.shadow:
+        d = Demo(kinds, seed=7, end=now.replace(hour=0)).candles(x.symbol, "1d", 760)
+        market.save_observed(x.symbol, "1d", d, "demo", timedelta(days=1))
     desks = open_desks(config, home, market, use_kill_file=False)
     steps = [now - timedelta(hours=hours + 24 * d) for d in range(history_days, 0, -1)]
     steps += [now - timedelta(hours=i) for i in range(hours, -1, -1)]

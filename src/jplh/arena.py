@@ -10,9 +10,12 @@ en ook dan moet hij eerst in ``jplh backtest --desks`` winnen (de spelregel)."""
 
 from __future__ import annotations
 
+import bisect
+import math
 from dataclasses import replace
 from datetime import date, datetime
 
+from jplh.backtest import metrics
 from jplh.config import HoldingConfig
 from jplh.deskbacktest import ALLOCATIONS, VARIANTS, allocation, compare, live_variant
 from jplh.desks import ALL_CANDIDATES, DESK_NAMES
@@ -87,7 +90,92 @@ def _thin(rows: list, n: int = WHATIF_POINTS) -> list:
     return [rows[int(i * step)] for i in range(n - 1)] + [rows[-1]]
 
 
-def run_whatif(config: HoldingConfig, market: Store, now: datetime) -> dict | None:
+SHADOW_NAMES = {"schatkist": "De Schatkist", "obligaties": "Obligatiebank", "vastgoed": "Vastgoedkantoor",
+                "grondstoffen": "Grondstoffenhal"}
+SHADOW_WHY = {
+    "schatkist": "geld dat stilligt laten renderen, bijna zonder risico",
+    "obligaties": "rustige rente-inkomsten die vaak stijgen als aandelen dalen",
+    "vastgoed": "huurinkomsten van gebouwen, beweegt anders dan crypto",
+    "grondstoffen": "olie, metalen en landbouw: bescherming tegen inflatie",
+}
+MIX_SHARE = 0.10        # de test: wat als 10% van de holding naar deze afdeling was gegaan?
+
+
+def _close_at(dates: list, closes: list, d) -> float | None:
+    """Laatste slotkoers op of voor dag ``d``."""
+    i = bisect.bisect_right(dates, d) - 1
+    return closes[i] if i >= 0 else None
+
+
+def _corr(a: list[float], b: list[float]) -> float | None:
+    n = len(a)
+    if n < 30:
+        return None
+    ma, mb = sum(a) / n, sum(b) / n
+    va = sum((x - ma) ** 2 for x in a)
+    vb = sum((y - mb) ** 2 for y in b)
+    if va <= 0 or vb <= 0:
+        return None
+    return sum((x - ma) * (y - mb) for x, y in zip(a, b)) / math.sqrt(va * vb)
+
+
+def shadow_desks(config: HoldingConfig, market: Store, start: date | None, now: datetime,
+                 holding_curve: list | None) -> list[dict]:
+    """Schaduw-afdelingen: hoe doen ze het sinds de start (alleen vooruit), bewegen ze anders
+    dan de holding, en zou 10% erin de holding op echte koersen sterker hebben gemaakt?"""
+    out = []
+    groups: dict[str, list] = {}
+    for x in config.shadow:
+        groups.setdefault(x.desk, []).append(x)
+    for desk, items in groups.items():
+        series = {}
+        insts = []
+        for x in items:
+            cs = market.candles(x.symbol, "1d", known_at=now)
+            if len(cs) < 2:
+                insts.append({"symbol": x.symbol, "name": x.name, "since_start": None, "fresh": False})
+                continue
+            dates, closes = [c.ts.date() for c in cs], [c.close for c in cs]
+            series[x.symbol] = (dates, closes)
+            base = _close_at(dates, closes, start) if start else None
+            base = base if base is not None else closes[0]
+            fresh = (now.date() - dates[-1]).days <= 5
+            insts.append({"symbol": x.symbol, "name": x.name, "since_start": closes[-1] / base - 1 if start else None,
+                          "fresh": fresh, "price": closes[-1]})
+        rets = [i["since_start"] for i in insts if i["since_start"] is not None]
+        days = (now.date() - start).days if start else 0
+        row = {"id": desk, "name": SHADOW_NAMES.get(desk, desk.capitalize()), "why": SHADOW_WHY.get(desk, ""),
+               "instruments": insts, "since_start": sum(rets) / len(rets) if rets else None, "days": max(days - 1, 0),
+               "corr": None, "mix": None, "stronger": False}
+        if holding_curve and series:
+            hd = [d for d, _ in holding_curve]
+            hv = [v for _, v in holding_curve]
+            r_h, r_s = [], []
+            for k in range(1, len(hd)):
+                daily = []
+                for dates, closes in series.values():
+                    if dates[0] > hd[k - 1]:
+                        continue
+                    a, b = _close_at(dates, closes, hd[k - 1]), _close_at(dates, closes, hd[k])
+                    if a and b:
+                        daily.append(b / a - 1)
+                if not daily:
+                    continue
+                r_h.append(hv[k] / hv[k - 1] - 1)
+                r_s.append(sum(daily) / len(daily))
+            if len(r_h) >= 180:
+                mix = [(1 - MIX_SHARE) * a + MIX_SHARE * b for a, b in zip(r_h, r_s)]
+                mb, mm = metrics(r_h, 0, 0, 0, 365), metrics(mix, 0, 0, 0, 365)
+                row["corr"] = _corr(r_h, r_s)
+                row["mix"] = {"share": MIX_SHARE, "days": len(r_h),
+                              "base": {"return": mb.total_return, "sharpe": mb.sharpe, "max_dd": mb.max_drawdown},
+                              "mix": {"return": mm.total_return, "sharpe": mm.sharpe, "max_dd": mm.max_drawdown}}
+                row["stronger"] = mm.sharpe >= mb.sharpe + 0.02 and mm.max_drawdown <= mb.max_drawdown + 0.005
+        out.append(row)
+    return out
+
+
+def run_whatif(config: HoldingConfig, market: Store, now: datetime, start: date | None = None) -> dict | None:
     """Voor de 'wat als'-machine: hoe de huidige regels het op echte koersen hadden gedaan,
     naast gewoon vasthouden. Per afdeling en voor de hele holding (elk kwartaal terug naar de
     vaste verdeling, zoals live). Curves beginnen op 1,0."""
@@ -112,7 +200,9 @@ def run_whatif(config: HoldingConfig, market: Store, now: datetime) -> dict | No
     a_hold = allocation(res, config.desks, variant=hold[0].name).get(ALLOCATIONS[1])
     if a_live and a_hold:
         pack("Hele holding", a_live["curve"], a_hold["curve"])
-    return out if out["series"] else None
+    if config.shadow:
+        out["shadow"] = shadow_desks(config, market, start, now, a_live["curve"] if a_live else None)
+    return out if out["series"] or out.get("shadow") else None
 
 
 def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], now: datetime, log=print) -> dict | None:
@@ -129,13 +219,18 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
     except (ValueError, KeyError, ZeroDivisionError) as exc:   # de arena mag de ronde nooit stoppen
         log(f"arena mislukt: {type(exc).__name__}: {exc}")
         return old
-    market.set_state("arena", new)
     try:
-        w = run_whatif(config, market, now)
+        w = run_whatif(config, market, now, start)
         if w:
+            new["shadow"] = w.pop("shadow", [])
             market.set_state("whatif", w)
     except (ValueError, KeyError, ZeroDivisionError) as exc:
         log(f"wat-als mislukt: {type(exc).__name__}: {exc}")
+    market.set_state("arena", new)
+    for sd in new.get("shadow", []):
+        if sd["mix"]:
+            log(f"schaduw {sd['name']}: 10% erbij -> Sharpe {sd['mix']['base']['sharpe']:.2f} -> "
+                f"{sd['mix']['mix']['sharpe']:.2f}, daling {sd['mix']['base']['max_dd']:.0%} -> {sd['mix']['mix']['max_dd']:.0%}")
     for d in new["desks"].values():
         top = d["board"][0] if d["board"] else None
         if top:

@@ -61,3 +61,19 @@ def test_whatif_series_start_at_one_and_compare_with_holding(tmp_path):
     for pts in w["series"].values():
         assert pts[0][1:] == [1.0, 1.0] and len(pts) >= 30
         assert [p[0] for p in pts] == sorted(p[0] for p in pts)
+
+
+def test_shadow_desks_are_measured_but_never_traded(tmp_path):
+    home = tmp_path / "h"
+    cfg = load_config(None)
+    assert {x.desk for x in cfg.shadow} == {"schatkist", "obligaties", "vastgoed", "grondstoffen"}
+    assert not {x.symbol for x in cfg.shadow} & {i.symbol for i in cfg.instruments}   # nooit verhandelbaar
+    build_demo(cfg, home, hours=6, history_days=12, now=NOW)
+    a = Store(home / "data" / "holding.sqlite3").get_state("arena")
+    by = {s["id"]: s for s in a["shadow"]}
+    assert set(by) == {"schatkist", "obligaties", "vastgoed", "grondstoffen"}
+    for s in by.values():
+        assert s["since_start"] is not None and s["mix"] and s["mix"]["share"] == 0.10
+        assert s["stronger"] == (s["mix"]["mix"]["sharpe"] >= s["mix"]["base"]["sharpe"] + 0.02
+                                 and s["mix"]["mix"]["max_dd"] <= s["mix"]["base"]["max_dd"] + 0.005)
+    assert len(by["vastgoed"]["instruments"]) == 2

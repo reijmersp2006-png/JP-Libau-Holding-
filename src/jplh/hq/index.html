@@ -57,6 +57,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
   background:#1f1934ee;border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge);padding:4px 7px;
   font-size:11px;white-space:nowrap;text-align:center}
 .sign b{display:block;font-size:12px}
+.sign.shadow{opacity:.85;border-style:dashed;box-shadow:0 0 0 2px #c9a36b;font-size:10px}
+.sign.shadow b{font-size:10px;color:#ffcc4d}
 .sign .lv{color:var(--purple)} .sign .up{color:var(--good)} .sign .dn{color:var(--bad)}
 .sign.sel{box-shadow:0 0 0 2px var(--gold)}
 .sign.alarm{box-shadow:0 0 0 2px var(--bad);animation:blink .8s steps(2) infinite}
@@ -188,6 +190,14 @@ const B = {
   hq:     {x: 146, y: 96, w: 0, h: 0, label: "HQ"},
 };
 const DESKS = ["crypto", "meme", "stocks", "metals", "fx"];
+// bouwplaatsen voor de schaduw-afdelingen: ze groeien mee met de 90 dagen proef
+const P = {
+  schatkist:    {x: 102, y: 126, w: 18, h: 14, wall: "#cfd6e6", label: "De Schatkist"},
+  obligaties:   {x: 186, y: 142, w: 20, h: 14, wall: "#a7c4e8", label: "Obligatiebank"},
+  vastgoed:     {x: 140, y: 160, w: 16, h: 16, wall: "#e2a77a", label: "Vastgoedkantoor"},
+  grondstoffen: {x: 224, y: 152, w: 22, h: 12, wall: "#b98a5e", label: "Grondstoffenhal"},
+};
+const shadows = () => (S && S.arena && S.arena.shadow) || [];
 const desk = id => S && S.desks.find(d => d.id === id);
 
 function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
@@ -232,6 +242,28 @@ function drawIsland() {
   for (const [x, y] of [[40, 110], [50, 70], [100, 50], [140, 48], [230, 56], [286, 104], [270, 140], [200, 150], [130, 158], [100, 140], [180, 60]]) {
     rect(x, y - 2, 2, 4, "#6b4a2b"); blob(x + 1, y - 6, 4, 4, night() ? "#1f4f2a" : "#2f8f3f", x);
   }
+}
+
+function plot(id, sd) {
+  const b = P[id];
+  if (!b) return;
+  const n = night(), t = tick;
+  const grow = Math.max(.12, Math.min(1, (sd.days || 0) / 90));       // bouwt mee met de proef
+  rect(b.x - 3, b.y - 2, b.w + 6, 4, n ? "#5a4630" : "#8a6a42");        // bouwgrond
+  for (let x = b.x - 3; x <= b.x + b.w + 3; x += 3) rect(x, b.y - 4, 1, 2, "#e8c26a"); // hekje
+  const hh = Math.round(b.h * grow), top = b.y - hh;
+  rect(b.x, top, b.w, hh, b.wall);                                     // muren tot zover gebouwd
+  for (let y = top + 2; y < b.y - 1; y += 3) rect(b.x, y, b.w, 1, "rgba(0,0,0,.12)");
+  // steigers
+  for (const x of [b.x - 2, b.x + b.w + 1]) rect(x, b.y - b.h - 4, 1, b.h + 4, "#c9a36b");
+  for (let y = b.y - b.h - 2; y < b.y; y += 5) rect(b.x - 2, y, b.w + 4, 1, "#c9a36b");
+  // kraantje met slingerende haak
+  const cx = b.x + b.w + 4, ctop = b.y - b.h - 12;
+  rect(cx, ctop, 2, b.h + 12, "#ffcc4d");
+  rect(cx - b.w + 2, ctop, b.w + 2, 2, "#ffcc4d");
+  const hx = cx - b.w / 2 + Math.sin(t / 25) * 3;
+  rect(hx, ctop + 2, 1, 6 + Math.sin(t / 18) * 2, "#ddd"); rect(hx - 1, ctop + 8 + Math.sin(t / 18) * 2, 3, 2, "#9aa");
+  if (sd.stronger) { rect(b.x + b.w / 2, top - 8, 1, 8, "#ddd"); rect(b.x + b.w / 2 + 1, top - 8, 5, 3, "#5fe08a"); }
 }
 
 function building(id, d) {
@@ -405,6 +437,7 @@ function bubbles() {
 function frame() {
   tick++;
   drawWater(); drawIsland();
+  for (const sd of shadows()) plot(sd.id, sd);
   const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
   for (const id of order) building(id, desk(id));
   workers(); drawCoins(); weather();
@@ -439,8 +472,15 @@ function placeSigns() {
     const alarm = d && d.status === "alarm";
     html.push(`<div class="sign ${selected === id ? "sel" : ""} ${alarm ? "alarm" : ""}" data-id="${id}" style="left:${x}px;top:${y}px">${inner}</div>`);
   }
+  for (const sd of shadows()) {
+    const b = P[sd.id];
+    if (!b) continue;
+    const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 13) * scale;
+    const r = sd.since_start == null ? "" : ` · <span class="${cls(sd.since_start)}">${pct(sd.since_start)}</span>`;
+    html.push(`<div class="sign shadow" data-id="lab" data-shadow="1" style="left:${x}px;top:${y}px"><b>${esc(b.label)}</b><span class="mute">in aanbouw</span>${r}</div>`);
+  }
   box.innerHTML = html.join("");
-  box.querySelectorAll(".sign").forEach(el => el.onclick = () => select(el.dataset.id));
+  box.querySelectorAll(".sign").forEach(el => el.onclick = () => el.dataset.shadow ? openShadow() : select(el.dataset.id));
 }
 
 cv.addEventListener("click", ev => {
@@ -450,6 +490,7 @@ cv.addEventListener("click", ev => {
     const b = B[id];
     if (b.w && x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - b.h - 8 && y <= b.y + 3) return select(id);
   }
+  for (const b of Object.values(P)) if (x >= b.x - 4 && x <= b.x + b.w + 8 && y >= b.y - b.h - 12 && y <= b.y + 3) return openShadow();
   if (Math.hypot(x - 160, y - 100) < 16) return select("hq");
 });
 
@@ -608,6 +649,26 @@ function arenaBoard(a, d, n = 4) {
       <td class="hint">${r.live ? "<b>" : ""}${esc(r.name)}${r.live ? "</b>" : ""}${r.promote ? " 🏆" : ""}</td>
       <td class="r ${cls(r.return)}">${pct(r.return)}</td><td class="r">${r.days >= 30 ? r.sharpe.toFixed(2).replace(".", ",") : "–"}</td></tr>`).join("")}</table>`;
 }
+function openShadow() {
+  select("lab");
+  const el = document.getElementById("shadow-sec");
+  if (el) el.scrollIntoView({behavior: "smooth", block: "start"});
+}
+function shadowSection() {
+  const list = shadows();
+  if (!list.length) return "";
+  const f = v => v.toFixed(2).replace(".", ",");
+  return `<h3 class="px" id="shadow-sec">Nieuwe afdelingen in aanbouw</h3>
+  <div class="hint">Deze afdelingen draaien alleen op papier mee, met echte koersen. Er wordt niet mee gehandeld. Ze groeien op het eiland mee met de 90 dagen proef. Hun eindexamen: wat als 10% van de holding erin had gezeten? Wordt de holding daar sterker van (hogere Sharpe, geen diepere val), dan krijgen ze een groene vlag. Of ze echt mogen, beslist alleen Phil.</div>
+  ${list.map(sd => { const m = sd.mix;
+    return `<div class="card"><div class="row"><b>${esc(sd.name)}</b><span class="${sd.stronger ? "up" : "mute"}">${sd.stronger ? "🟩 maakt sterker" : m ? "nog niet overtuigend" : "verzamelt data"}</span></div>
+      <div class="hint">${esc(sd.why)}</div>
+      ${sd.instruments.map(i => `<div class="row"><span class="hint">${esc(i.name)}</span><span class="${cls(i.since_start)}">${i.since_start == null ? "geen koers" : pct(i.since_start) + " sinds start"}</span></div>`).join("")}
+      ${m ? `<div class="row"><span>Holding nu (terugblik)</span><span>Sharpe ${f(m.base.sharpe)} · val ${pct(-m.base.max_dd, 0)}</span></div>
+        <div class="row"><span>Met 10% ${esc(sd.name)}</span><span class="${m.mix.sharpe > m.base.sharpe ? "up" : "dn"}">Sharpe ${f(m.mix.sharpe)} · val ${pct(-m.mix.max_dd, 0)}</span></div>
+        <div class="hint">${sd.corr == null ? "" : `Samenhang met de holding: ${f(sd.corr)} (${sd.corr < .3 ? "beweegt duidelijk anders, goed voor spreiding" : sd.corr < .6 ? "beweegt deels mee" : "beweegt sterk mee"}). `}Over ${m.days} dagen echte koersen.</div>` : ""}
+    </div>`; }).join("")}`;
+}
 function arenaSection() {
   const a = S.arena;
   if (!a || !a.desks || !Object.keys(a.desks).length) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena start bij de eerste paper-ronde.</div>`;
@@ -665,6 +726,7 @@ function labPanel() {
     : '<div class="hint">Het eerste weekrapport komt na 7 dagen.</div>'}
 
   ${arenaSection()}
+  ${shadowSection()}
 
   <h3 class="px">Strategietoernooi</h3>
   <div class="hint">Elke week strijden alle strategieën per instrument op de laatste 500 dagen, na kosten. Vasthouden wint, tenzij een strategie duidelijk beter is.</div>
