@@ -258,25 +258,148 @@ function blob(cx, cy, rx, ry, c, wob) {
   }
 }
 
+// ------------------------------------------------------------------ de stad (pixel-Manhattan)
+const ISLE = {cx: 160, cy: 104, rx: 136, ry: 70};
+const inIsle = (x, y, m = 0) => ((x - ISLE.cx) / (ISLE.rx - m)) ** 2 + ((y - ISLE.cy) / (ISLE.ry - m)) ** 2 < 1;
+const AVENUES = [44, 92, 128, 156];          // straten van west naar oost (y)
+const STREETS = [90, 126, 196, 232, 278];   // straten van noord naar zuid (x)
+const PARK = {x: 134, y: 84, w: 52, h: 22};  // park met fontein en standbeeld in het midden
+const hash = n => { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); return ((n ^ (n >>> 15)) >>> 0) / 4294967296; };
+let FILLER = null;
+function fillers() {
+  // kleine wolkenkrabbers in de lege blokken, nooit op een afdeling, bouwplaats, park of straat
+  if (FILLER) return FILLER;
+  const taken = [...Object.values(B).filter(b => b.w), ...Object.values(P)].map(b => [b.x - 3, b.y - b.h - 6, b.w + 6, b.h + 9]);
+  taken.push([PARK.x - 2, PARK.y - 2, PARK.w + 4, PARK.h + 4], [278, 88, 42, 30], [BB.x - 2, BB.y - 2, BB.w + 4, BB.h + 8]);
+  const free = (x, y, w, h) => !taken.some(([tx, ty, tw, th]) => x < tx + tw && x + w > tx && y - h < ty + th && y > ty)
+    && !AVENUES.some(a => a > y - 4 && a < y + 4) && !STREETS.some(sx => sx > x - 3 && sx < x + w + 3);
+  FILLER = [];
+  for (let gy = 38; gy <= 172; gy += 7)
+    for (let gx = 26; gx <= 296; gx += 8) {
+      const r = hash(gx * 131 + gy * 7), w = 6 + Math.floor(r * 5), h = 8 + Math.floor(hash(gx + gy * 977) ** 1.6 * 30);
+      const x = gx + Math.floor(hash(gy * 31 + gx) * 4), y = gy;
+      if (!inIsle(x, y, 9) || !inIsle(x + w, y, 9)) continue;
+      if (!free(x, y, w, h)) continue;
+      FILLER.push({x, y, w, h, c: ["#7d7f8c", "#8c7a6b", "#6b8aa8", "#a39888", "#5d6170", "#4f7fa0", "#b0a48e"][Math.floor(r * 7)], glass: r > .7, seed: gx * 3 + gy});
+      taken.push([x - 1, y - h, w + 2, h + 2]);
+    }
+  FILLER.sort((a, b) => a.y - b.y);
+  return FILLER;
+}
+
 function drawIsland() {
-  blob(160, 104, 136, 70, "#e6cf8b", 1);       // zand
-  blob(160, 102, 124, 62, night() ? "#2e6b3a" : "#4fa64f", 2);   // gras
-  blob(160, 102, 110, 52, night() ? "#2a6235" : "#5bb85a", 3);
-  // paden naar het plein
-  const path = night() ? "#8e7a52" : "#cdb27a";
-  for (const id of ["crypto", "meme", "stocks", "metals", "fx", "risk", "lab"]) {
-    const b = B[id], tx = b.x + b.w / 2, ty = b.y + 2, hx = 160, hy = 100;
-    const steps = 40;
-    for (let i = 0; i <= steps; i++) { const t = i / steps; rect(hx + (tx - hx) * t - 1, hy + (ty - hy) * t - 1, 3, 3, path); }
+  const n = night();
+  blob(ISLE.cx, ISLE.cy, ISLE.rx, ISLE.ry, n ? "#4a4c58" : "#8d8f99", 1);           // kademuur
+  blob(ISLE.cx, ISLE.cy - 1, ISLE.rx - 4, ISLE.ry - 4, n ? "#3a3c46" : "#b9b6ad", 2); // trottoir
+  blob(ISLE.cx, ISLE.cy - 1, ISLE.rx - 8, ISLE.ry - 8, n ? "#2f313b" : "#9d9a92", 3); // stadsgrond
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(ISLE.cx, ISLE.cy - 1, ISLE.rx - 8, ISLE.ry - 8, 0, 0, Math.PI * 2); ctx.clip();
+  const road = n ? "#1c1d25" : "#3d3f4a", line = n ? "#8a7a30" : "#e8c84a";
+  for (const y of AVENUES) { rect(0, y - 3, W, 6, road); for (let x = (tick * .0) % 8; x < W; x += 8) rect(x, y, 4, 1, line); rect(0, y - 4, W, 1, n ? "#55555f" : "#d6d3ca"); rect(0, y + 3, W, 1, n ? "#55555f" : "#d6d3ca"); }
+  for (const x of STREETS) { rect(x - 2, 0, 4, H, road); for (let y = 0; y < H; y += 8) rect(x, y, 1, 3, n ? "#666" : "#f4f1e8"); }
+  // zebrapaden op de kruisingen
+  for (const y of AVENUES) for (const x of STREETS) for (let k = -2; k <= 2; k += 2) rect(x - 4, y + k, 1, 1, "#eee");
+  ctx.restore();
+  // park met fontein en standbeeld
+  rect(PARK.x - 1, PARK.y - 1, PARK.w + 2, PARK.h + 2, n ? "#3a3c46" : "#cfc9b8");
+  rect(PARK.x, PARK.y, PARK.w, PARK.h, n ? "#1f4a2a" : "#4fa64f");
+  for (let i = 0; i < 9; i++) { const x = PARK.x + 3 + (i * 17) % (PARK.w - 6), y = PARK.y + 3 + (i * 11) % (PARK.h - 6); blob(x, y, 3, 3, n ? "#173a20" : "#2f8f3f", i); }
+  rect(PARK.x, PARK.y + PARK.h / 2, PARK.w, 1, n ? "#6e6450" : "#e0d3a8"); rect(PARK.x + PARK.w / 2, PARK.y, 1, PARK.h, n ? "#6e6450" : "#e0d3a8");
+  blob(160, 95, 7, 4, n ? "#5d5a50" : "#d8d2c0", 0); blob(160, 95, 5, 3, "#5ab8ff", 0);
+  rect(159, 85, 3, 9, "#7fd1b0"); rect(157, 84, 7, 2, "#7fd1b0"); rect(162, 80, 1, 5, "#7fd1b0"); rect(161, 78, 3, 2, tick % 30 < 15 ? "#ffcc4d" : "#ffdf70");
+  // bomen langs de avenues
+  for (const y of AVENUES) for (let x = 20; x < W - 20; x += 13) {
+    const tx = x + (y % 5), ty = y - 5;
+    if (!inIsle(tx, ty, 12) || STREETS.some(sx => Math.abs(sx - tx) < 4) || (tx > PARK.x - 2 && tx < PARK.x + PARK.w + 2 && ty > PARK.y - 2 && ty < PARK.y + PARK.h + 2)) continue;
+    blob(tx, ty, 2, 2, n ? "#173a20" : "#3f9a4a", tx);
   }
-  // plein met fontein en JP-standbeeld
-  blob(160, 100, 14, 8, path, 0);
-  blob(160, 100, 7, 4, "#5ab8ff", 0);
-  rect(158, 90, 4, 9, "#ffcc4d"); rect(156, 89, 8, 2, "#ffcc4d");
-  // bomen
-  for (const [x, y] of [[40, 110], [50, 70], [100, 50], [140, 48], [230, 56], [286, 104], [270, 140], [200, 150], [130, 158], [100, 140], [180, 60]]) {
-    rect(x, y - 2, 2, 4, "#6b4a2b"); blob(x + 1, y - 6, 4, 4, night() ? "#1f4f2a" : "#2f8f3f", x);
+  // achtergrondgebouwen
+  for (const f of fillers()) tower(f);
+  bridge(); billboard();
+}
+
+function tower(f) {
+  const n = night(), top = f.y - f.h;
+  rect(f.x + 1, f.y, f.w, 2, "rgba(0,0,0,.25)");
+  rect(f.x, top, f.w, f.h, f.c);
+  rect(f.x, top, 1, f.h, "rgba(255,255,255,.12)"); rect(f.x + f.w - 1, top, 1, f.h, "rgba(0,0,0,.18)");
+  if (f.glass && !n) { ctx.globalAlpha = .25; for (let k = 0; k < f.h; k += 1) rect(f.x + ((k + tick / 20) % f.w), top + k, 1, 1, "#e8f6ff"); ctx.globalAlpha = 1; }
+  if (f.h > 20) { rect(f.x + 2, top - 3, f.w - 4, 3, f.c); rect(f.x + f.w / 2, top - 6, 1, 3, "#ccc"); }   // trapsgewijs dak
+  for (let wy = top + 2; wy < f.y - 2; wy += 3)
+    for (let wx = f.x + 1; wx < f.x + f.w - 1; wx += 2) {
+      const on = n ? hash(f.seed * 97 + wx * 13 + wy * 7 + Math.floor(tick / 300)) < .55 : false;
+      rect(wx, wy, 1, 1, on ? "#ffe9a0" : n ? "#1b1e2a" : "rgba(30,40,60,.45)");
+    }
+  if (f.h > 24 && n && tick % 60 < 30) rect(f.x + f.w / 2, top - 7, 1, 1, "#ff5d6c");     // vliegtuiglampje
+}
+
+// hangbrug naar de wal in het oosten
+function bridge() {
+  const y = 103, x0 = 286, n = night();
+  rect(x0, y - 1, W - x0, 4, n ? "#3a3c46" : "#7a6f64"); rect(x0, y + 3, W - x0, 1, "rgba(0,0,0,.3)");
+  for (const tx of [296, 314]) { rect(tx, y - 16, 3, 16, n ? "#5a4f46" : "#a08a72"); rect(tx - 1, y - 17, 5, 2, n ? "#5a4f46" : "#8a7560"); }
+  ctx.strokeStyle = n ? "#8a7f70" : "#d8cbb5"; ctx.lineWidth = .6; ctx.beginPath();
+  ctx.moveTo(x0, y - 2); ctx.quadraticCurveTo(306, y - 2, 297, y - 16); ctx.moveTo(298, y - 16); ctx.quadraticCurveTo(306, y - 4, 315, y - 16);
+  ctx.moveTo(316, y - 16); ctx.quadraticCurveTo(320, y - 8, 324, y - 4); ctx.stroke();
+  for (let x = 298; x < 315; x += 2) { const k = (x - 306.5) / 8.5; rect(x, y - 4 - (1 - k * k) * -0 - (k * k) * 11, .5, (k * k) * 11 + 2, n ? "#8a7f70" : "#d8cbb5"); }
+  // auto's op de brug
+  for (let i = 0; i < 3; i++) { const x = x0 + ((tick * .25 + i * 13) % (W - x0 + 6)) - 3; rect(x, y, 3, 1, ["#ffcc4d", "#ff5d6c", "#e8e4f0"][i]); if (n) rect(x + 3, y, 1, 1, "#fff8c0"); }
+}
+
+// lichtscherm op het plein (zoals op Times Square) met de stand van de holding
+const BB = {x: 144, y: 64, w: 36, h: 13};
+function billboard() {
+  if (!S) return;
+  const {x, y, w, h} = BB;
+  rect(x - 1, y - 1, w + 2, h + 2, "#111"); rect(x, y, w, h, "#060812");
+  rect(x + 6, y + h + 1, 1, 4, "#555"); rect(x + w - 7, y + h + 1, 1, 4, "#555");
+  const t = S.total, up = t.pnl_pct >= 0;
+  const msgs = [`JP-LIBAU ${eur(t.equity_eur, 0)}`, `${up ? "▲" : "▼"} ${pct(t.pnl_pct)} SINDS START`];
+  for (const k of (S.ticker || []).slice(0, 6)) msgs.push(`${k.name.toUpperCase()} ${(k.change ?? 0) >= 0 ? "▲" : "▼"}${pct(k.change)}`);
+  const text = msgs.join("   ·   ") + "   ·   ";
+  ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
+  ctx.font = "bold 5px monospace"; ctx.textBaseline = "middle";
+  const tw = ctx.measureText(text).width, off = (tick * .35) % tw;
+  ctx.fillStyle = "#ffcc4d"; ctx.fillText(text, x + 1 - off, y + 3.5); ctx.fillText(text, x + 1 - off + tw, y + 3.5);
+  ctx.fillStyle = up ? "#5fe08a" : "#ff5d6c";
+  ctx.fillRect(x + 1, y + 7, (w - 2) * Math.min(1, Math.abs(t.pnl_pct) * 10), 1);
+  for (let i = 0; i < 6; i++) rect(x + 2 + i * 4.5, y + 9, 3, 1, (Math.floor(tick / 10) + i) % 3 ? "#ff4fd8" : "#5ab8ff");
+  ctx.restore();
+  ctx.globalAlpha = night() ? .25 : .08; blob(x + w / 2, y + h + 6, 18, 5, "#ffcc4d", 0); ctx.globalAlpha = 1;
+}
+
+// verkeer: gele taxi's en andere auto's op de straten
+function traffic() {
+  const n = night();
+  for (let i = 0; i < 18; i++) {
+    const vertical = i % 3 === 0, lane = vertical ? STREETS[i % STREETS.length] : AVENUES[i % AVENUES.length];
+    const dir = i % 2 ? 1 : -1, speed = .25 + hash(i) * .3, len = vertical ? H : W;
+    let p = (tick * speed + i * 47) % (len + 20) - 10; if (dir < 0) p = len - p;
+    const x = vertical ? lane - 1 + (dir > 0 ? 1 : -1) : p, y = vertical ? p : lane - 1 + (dir > 0 ? 1 : -1);
+    if (!inIsle(x, y, 10)) continue;
+    const c = hash(i * 7) < .55 ? "#ffcc33" : ["#e8e4f0", "#ff5d6c", "#5ab8ff", "#2a2a2a"][i % 4];
+    if (vertical) { rect(x, y, 2, 4, c); rect(x, y + (dir > 0 ? 3 : 0), 2, 1, n ? "#fff8c0" : "#333"); }
+    else { rect(x, y, 4, 2, c); rect(x + (dir > 0 ? 3 : 0), y, 1, 2, n ? "#fff8c0" : "#333"); if (c === "#ffcc33") rect(x + 1, y - 1, 2, 1, "#222"); }
   }
+}
+
+// lucht en water: veerboten, een helikopter en de zeppelin van de holding
+function skyTraffic() {
+  const n = night();
+  for (let i = 0; i < 2; i++) {
+    const x = (tick * (.12 + i * .05) + i * 150) % (W + 40) - 20, y = i ? 172 : 14 + 0;
+    if (i === 0) continue;
+    rect(x, y, 16, 3, "#e8e4f0"); rect(x + 3, y - 3, 9, 3, "#f4a340"); rect(x + 4, y - 2, 7, 1, n ? "#ffe9a0" : "#5ab8ff");
+    ctx.globalAlpha = .4; rect(x - 6, y + 2, 6, 1, "#cfe8ff"); ctx.globalAlpha = 1;
+  }
+  { const x = 300 - (tick * .1) % (W + 60), y = 168; rect(x, y, 14, 3, "#c94a3a"); rect(x + 4, y - 3, 6, 3, "#e8e4f0"); }
+  const hx = 160 + Math.cos(tick / 140) * 110, hy = 30 + Math.sin(tick / 140) * 10;
+  rect(hx - 3, hy, 7, 3, "#2a3a5a"); rect(hx + 4, hy + 1, 6, 1, "#2a3a5a"); rect(hx + 9, hy - 1, 1, 3, "#2a3a5a");
+  rect(hx - 6 + (tick % 4), hy - 2, 13 - (tick % 4) * 2, 1, "#ccc");
+  if (n && tick % 30 < 15) rect(hx, hy + 3, 1, 1, "#ff5d6c");
+  const zx = (tick * .06) % (W + 80) - 40, zy = 22;
+  blob(zx, zy, 14, 4, "#d8d2e6", 0); rect(zx - 4, zy + 4, 8, 2, "#5e4a8a"); rect(zx + 12, zy - 3, 3, 6, "#8b4fd8");
+  ctx.fillStyle = "#2a1a00"; ctx.font = "bold 5px monospace"; ctx.textBaseline = "middle"; ctx.fillText("JP", zx - 5, zy + .5);
 }
 
 function plot(id, sd) {
@@ -308,6 +431,13 @@ function building(id, d) {
   rect(b.x + 2, b.y, b.w, 3, "rgba(0,0,0,.25)");                 // schaduw
   rect(b.x, top, b.w, b.h, b.wall);
   rect(b.x - 2, top - 4, b.w + 4, 5, b.roof);                    // dak
+  if (id === "stocks") {                                           // trapsgewijze top met spits
+    rect(b.x + 3, top - 10, b.w - 6, 6, b.wall); rect(b.x + 2, top - 11, b.w - 4, 2, b.roof);
+    rect(b.x + 7, top - 17, b.w - 14, 6, b.wall); rect(b.x + 6, top - 18, b.w - 12, 2, b.roof);
+    rect(b.x + b.w / 2 - 1, top - 30, 2, 12, "#c9ccd6"); rect(b.x + b.w / 2, top - 36, 1, 6, "#e8e4f0");
+    if (night() && tick % 50 < 25) rect(b.x + b.w / 2, top - 37, 1, 1, "#ff5d6c");
+  }
+  if (id === "crypto") { rect(b.x + 4, top - 9, b.w - 8, 5, "#5fd6c8"); rect(b.x + 3, top - 10, b.w - 6, 2, b.roof); }
   // ramen
   for (let wy = top + 4; wy < b.y - 7; wy += 6)
     for (let wx = b.x + 3; wx < b.x + b.w - 4; wx += 6) {
@@ -332,7 +462,7 @@ function extras(id, b, top, d) {
     rect(b.x - 8, b.y - 10, 6, 6, "#ffcc4d"); rect(b.x - 6, b.y - 9, 2, 3, "#2a1a00"); rect(b.x - 6, b.y - 5, 2, 1, "#2a1a00");
   }
   if (id === "stocks") {               // vlag + koerslijn op de gevel
-    rect(b.x + b.w / 2, top - 12, 1, 8, "#ddd"); rect(b.x + b.w / 2 + 1, top - 12, 6, 4, d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a");
+    rect(b.x + b.w / 2 + 1, top - 28, 6, 4, d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a");
   }
   if (id === "metals") {               // ronde kluisdeur + staven
     blob(b.x + b.w / 2, top + b.h / 2, 6, 6, "#8a6a10", 0); blob(b.x + b.w / 2, top + b.h / 2, 3, 3, "#ffdf70", 0);
@@ -516,11 +646,11 @@ function bubbles() {
 function frame() {
   tick++;
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();      // niets buiten de wereld tekenen (geen sporen)
-  drawWater(); drawIsland();
+  drawWater(); drawIsland(); traffic();
   for (const sd of shadows()) plot(sd.id, sd);
   const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
   for (const id of order) building(id, desk(id));
-  workers(); drawCoins(); weather();
+  workers(); drawCoins(); skyTraffic(); weather();
   ctx.restore();
   if (tick % 15 === 0) { placeSigns(); bubbles(); }
   requestAnimationFrame(frame);
