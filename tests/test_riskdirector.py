@@ -107,3 +107,17 @@ def test_site_ships_the_factsheet(tmp_path):
     from jplh.site import write_site
     write_site({"total": {}}, tmp_path)
     assert (tmp_path / "factsheet.html").exists()
+
+
+def test_desks_buy_equal_shares_within_the_cash_floor(tmp_path):
+    """Elk instrument krijgt evenveel, binnen de 90%-grens: het laatste krijgt niet alleen de restjes."""
+    home = tmp_path / "h"
+    cfg = load_config(None)
+    build_demo(cfg, home, hours=4, history_days=3, now=NOW)
+    market = Store(home / "data" / "holding.sqlite3")
+    for desk in open_desks(cfg, home, market, use_kill_file=False).values():
+        h = desk.holding
+        prices = h.prices(NOW)
+        values = [p.quantity * prices.price_eur(s) for s, p in h.portfolio.positions.items()]
+        if len(values) >= 2 and desk.mode != "actief":
+            assert max(values) / min(values) < 1.2, (desk.cls, values)
