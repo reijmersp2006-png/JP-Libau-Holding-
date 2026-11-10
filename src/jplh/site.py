@@ -161,6 +161,26 @@ def lab_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, now:
     }
 
 
+TICKER_NAMES = {"BTC-EUR": "Bitcoin", "ETH-EUR": "Ether", "SOL-EUR": "Solana", "XRP-EUR": "XRP", "DOGE-EUR": "Dogecoin",
+                "SHIB-EUR": "Shiba", "PEPE-EUR": "Pepe", "IWDA.AS": "Wereldindex", "ASML.AS": "ASML", "AAPL": "Apple",
+                "MSFT": "Microsoft", "NVDA": "Nvidia", "GC=F": "Goud", "SI=F": "Zilver", "EURUSD=X": "EUR/USD",
+                "EURGBP=X": "EUR/GBP", "EURJPY=X": "EUR/JPY", "EURCHF=X": "EUR/CHF"}
+
+
+def ticker(config: HoldingConfig, market: Store, now: datetime) -> list[dict]:
+    """De koersband: laatste koers, verandering over 24 uur en een mini-lijntje per instrument."""
+    out = []
+    for inst in config.instruments:
+        cs = market.candles(inst.symbol, "1h", known_at=now, limit=25)
+        if len(cs) < 2:
+            continue
+        last, first = cs[-1].close, cs[0].close
+        out.append({"symbol": inst.symbol, "name": TICKER_NAMES.get(inst.symbol, inst.symbol), "desk": inst.asset_class.value,
+                    "price": last, "currency": inst.currency, "change": last / first - 1 if first else None,
+                    "fresh": (now - cs[-1].ts) <= timedelta(hours=3), "line": [round(c.close, 8) for c in cs]})
+    return out
+
+
 def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, home: Path,
                 now: datetime | None = None, demo: bool = False, problems: list[str] | None = None) -> dict:
     now = now or datetime.now(tz=UTC)
@@ -243,6 +263,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
         "radar": [{"symbol": r[0], "chain": r[1], "price_usd": r[2], "liquidity_usd": r[3], "volume_24h_usd": r[4],
                    "change_24h_pct": r[5], "flags": json.loads(r[6] or "[]")} for r in radar],
     }
+    state["ticker"] = ticker(config, market, now)
     state["arena"] = market.get_state("arena")
     state["whatif"] = market.get_state("whatif")
     state["risk"] = market.get_state("risk") if config.risk_director else None

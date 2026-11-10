@@ -89,3 +89,13 @@ def test_demo_world(tmp_path):
     state = json.loads((site / "state.json").read_text())
     assert state["demo"] is True
     assert (site / "index.html").read_text().count("JP-libau") >= 1
+
+
+def test_state_has_a_ticker_with_24h_change(tmp_path):
+    home = tmp_path / "h"
+    cfg = load_config(None)
+    build_demo(cfg, home, hours=30, history_days=2, now=NOW)
+    state = json.loads((home / "site" / "state.json").read_text())
+    t = {x["symbol"]: x for x in state["ticker"]}
+    assert "BTC-EUR" in t and len(t["BTC-EUR"]["line"]) >= 2
+    assert t["BTC-EUR"]["name"] == "Bitcoin" and t["BTC-EUR"]["change"] is not None
