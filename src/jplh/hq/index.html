@@ -89,6 +89,13 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
 .whatif select,.whatif input[type=number]{background:#0b0816;color:inherit;border:1px solid #3a2f63;font:inherit;padding:3px 5px;max-width:100%}
 .whatif input[type=range]{width:100%;accent-color:#d9a521}
 .whatif .legend i{display:inline-block;width:10px;height:3px;margin:0 4px 2px 8px;vertical-align:middle}
+.org{font-size:11px}
+.org .lvl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;position:relative;padding-top:10px}
+.org .lvl:first-child{padding-top:0}
+.org .lvl:not(:first-child)::before{content:"";position:absolute;top:1px;left:50%;height:8px;border-left:2px solid var(--edge)}
+.org .who{background:#0b0816;border:2px solid var(--edge);padding:4px 6px;text-align:center;min-width:72px;cursor:pointer}
+.org .who b{display:block;font-size:11px} .org .who span{color:var(--dim);font-size:10px}
+.org .who.ceo{border-color:var(--gold)} .org .who.ghost{border-style:dashed;opacity:.8;cursor:default}
 .tabs{display:flex;gap:6px;margin-bottom:6px}
 .tabs button{flex:1;background:#0b0816;color:var(--ink);border:2px solid var(--edge);padding:6px;font:inherit;
   font-size:11px;cursor:pointer}
@@ -451,8 +458,24 @@ function rooftop(x, y, kind) {
   if (kind === "dish") { const k = Math.sin(tick / 40); rect(x + 1, y - 3, 1, 3, "#999"); rect(x - 1 + k, y - 5, 4, 2, "#e8e4f0"); }
 }
 
+// Gebouwen groeien mee met het resultaat: elke 2,5% winst een verdieping erbij (max 8, binnen beeld).
+// Staat een team meer dan 3% onder de start, dan staan er steigers: er wordt aan gewerkt.
+function floors(d) { return d && d.pnl_pct > 0 ? Math.min(8, Math.floor(d.pnl_pct * 100 / 2.5)) : 0; }
+function geo(id) {
+  const b = B[id], d = DESKS.includes(id) ? desk(id) : null;
+  const room = b.y - b.h - Math.max(20, 16 + ((SIGN_AT[id] || [0, 0])[1]));     // bord en kroon blijven in beeld
+  const g = Math.min(floors(d), Math.floor(Math.max(0, room) / 3)) * 3;
+  return g ? {...b, h: b.h + g, extra: g / 3} : b;
+}
+function scaffold(b, top) {
+  const c = "#c9a36b";
+  for (const x of [b.x - 2, b.x + b.w + 1]) rect(x, top + 2, 1, b.h - 2, c);
+  for (let y = top + 4; y < b.y - 2; y += 6) { rect(b.x - 2, y, b.w + 4, 1, c); rect(b.x + b.w - 6, y - 2, 3, 2, "#e8c26a"); }
+  rect(b.x + 2, b.y - 3, 6, 2, "#ffcc4d"); for (let i = 0; i < 6; i += 2) rect(b.x + 2 + i, b.y - 3, 1, 2, "#2a1a00");   // let-op-bord
+}
+
 function building(id, d) {
-  const b = B[id], top = b.y - b.h, t = tick, n = night();
+  const b = geo(id), top = b.y - b.h, t = tick, n = night();
   const closed = d && d.status === "gesloten", alarm = d && d.status === "alarm";
   const lit = d && !closed && (n || d.status === "aan het werk");
   const on = (wx, wy) => lit && ((wx * 7 + wy * 3 + Math.floor(t / 40)) % 5 !== 0);
@@ -544,6 +567,8 @@ function building(id, d) {
   } else {
     facade(b, top, b.wall);
   }
+  if (b.extra) for (let k = 0; k < b.extra; k++) rect(b.x, top + 1 + k * 3, b.w, 0.5, "rgba(255,255,255,.18)");   // nieuwe verdiepingen
+  if (d && d.pnl_pct < -.03) scaffold(b, top);
   extras(id, b, top, d);
   if (alarm && t % 30 < 15) { ctx.strokeStyle = "#ff5d6c"; ctx.lineWidth = 1; ctx.strokeRect(b.x - 4.5, top - 7.5, b.w + 9, b.h + 11); }
 }
@@ -686,6 +711,49 @@ function spawnCoins(id, buy, n = 8) {
   const [from, to] = buy ? [hq, door] : [door, hq];
   for (let i = 0; i < n; i++) coins.push({from, to, t: -i * 6, life: 70});
 }
+// Geldtransport: bij elke koop rijdt een waardetransport van het hoofdkwartier naar de afdeling,
+// bij een verkoop terug. Over de echte straten: langs de park-straat, de avenue en de oprit.
+const trucks = [];
+function route(id) {
+  const b = B[id], dx = Math.round(b.x + b.w / 2), av = AVENUES.find(a => a >= b.y + 2) || AVENUES[AVENUES.length - 1];
+  const sx = dx < 160 ? 126 : 196;
+  return [[sx, 100], [sx, av], [dx, av], [dx, b.y + 1]];
+}
+function sendTruck(id, buy, delay = 0) {
+  if (!B[id] || trucks.length >= 6) return spawnCoins(id, buy);
+  const r = route(id);
+  trucks.push({id, buy, pts: buy ? r : [...r].reverse(), t: -delay});
+}
+function drawTrucks() {
+  const n = night();
+  for (let i = trucks.length - 1; i >= 0; i--) {
+    const k = trucks[i]; k.t++;
+    if (k.t < 0) continue;
+    let dist = k.t * .35, j = 0;
+    const len = (a, c) => Math.abs(c[0] - a[0]) + Math.abs(c[1] - a[1]);
+    while (j < k.pts.length - 1 && dist > len(k.pts[j], k.pts[j + 1])) { dist -= len(k.pts[j], k.pts[j + 1]); j++; }
+    if (j >= k.pts.length - 1) {          // aangekomen: muntjes uitladen
+      const [ex, ey] = k.pts[k.pts.length - 1];
+      for (let c = 0; c < 5; c++) coins.push({from: [ex, ey - 2], to: [ex + (c - 2) * 3, ey - 4], t: -c * 4, life: 28});
+      trucks.splice(i, 1); continue;
+    }
+    const a = k.pts[j], c = k.pts[j + 1], L = len(a, c), p = L ? dist / L : 1;
+    const horiz = a[1] === c[1], dir = horiz ? Math.sign(c[0] - a[0]) : Math.sign(c[1] - a[1]);
+    const x = a[0] + (c[0] - a[0]) * p + (horiz ? 0 : dir), y = a[1] + (c[1] - a[1]) * p + (horiz ? dir : 0);
+    const body = "#3d5a45", cab = "#5f8a6a", gold = "#ffcc4d";
+    if (horiz) {
+      rect(x - 4, y - 2, 8, 3, body); rect(x - 4, y - 1, 8, 1, gold);
+      rect(dir > 0 ? x + 2 : x - 4, y - 2, 2, 3, cab); rect(dir > 0 ? x + 3 : x - 4, y - 2, 1, 1, "#9ad0ff");
+      rect(x - 3, y + 1, 1, 1, "#111"); rect(x + 2, y + 1, 1, 1, "#111");
+      if (n) rect(dir > 0 ? x + 4 : x - 5, y - 1, 1, 1, "#fff8c0");
+    } else {
+      rect(x - 1, y - 4, 3, 8, body); rect(x, y - 4, 1, 8, gold);
+      rect(x - 1, dir > 0 ? y + 2 : y - 4, 3, 2, cab);
+      if (n) rect(x, dir > 0 ? y + 4 : y - 5, 1, 1, "#fff8c0");
+    }
+    if (tick % 16 < 8) rect(x, y - (horiz ? 3 : 5), 1, 1, "#ffa040");          // zwaailicht
+  }
+}
 function drawCoins() {
   for (let i = coins.length - 1; i >= 0; i--) {
     const c = coins[i]; c.t++;
@@ -722,7 +790,7 @@ function bubbles() {
   const box = document.getElementById("bubbles");
   if (!S || Date.now() - bubbleAt < 6000) return;
   bubbleAt = Date.now();
-  const d = S.desks[bubbleIdx++ % S.desks.length], b = B[d.id];
+  const d = S.desks[bubbleIdx++ % S.desks.length], b = geo(d.id);
   const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 7) * scale - 34;
   box.innerHTML = `<div class="bubble" style="left:${x}px;top:${y}px">${esc(catchphrase(d))}</div>`;
 }
@@ -734,7 +802,7 @@ function frame() {
   for (const sd of shadows()) plot(sd.id, sd);
   const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
   for (const id of order) building(id, desk(id));
-  workers(); drawCoins(); skyTraffic(); weather();
+  workers(); drawTrucks(); drawCoins(); skyTraffic(); weather();
   ctx.restore();
   if (tick % 15 === 0) { placeSigns(); bubbles(); }
   requestAnimationFrame(frame);
@@ -757,9 +825,9 @@ function placeSigns() {
   if (!S) return;
   const html = [];
   for (const id of [...DESKS, "risk", "lab"]) {
-    const b = B[id], d = desk(id);
+    const b = geo(id), d = desk(id);
     const [dx, dy] = SIGN_AT[id] || [0, 0];
-    const x = offX + (b.x + b.w / 2 + dx) * scale, y = offY + (b.y - b.h - 7 - dy) * scale;
+    const x = offX + (b.x + b.w / 2 + dx) * scale, y = offY + Math.max(17, b.y - b.h - 7 - dy) * scale;   // bord altijd in beeld
     let inner;
     if (d) inner = `<b>${esc(b.label)}</b><span class="lv">Lv ${d.level}</span> · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
     else if (id === "risk") {
@@ -789,7 +857,7 @@ cv.addEventListener("click", ev => {
   const r = cv.getBoundingClientRect();
   const x = (ev.clientX - r.left - offX) / scale, y = (ev.clientY - r.top - offY) / scale;
   for (const id of Object.keys(B)) {
-    const b = B[id];
+    const b = geo(id);
     if (b.w && x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - b.h - 8 && y <= b.y + 3) return select(id);
     if (id === "risk" && x >= b.x - 17 && x < b.x && y >= b.y - 14 && y <= b.y + 2) return select("risk");
   }
@@ -899,9 +967,26 @@ function hqPanel() {
     <td class="r ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r ${cls(d.benchmark_eur == null ? null : d.benchmark_eur / d.capital_eur - 1)}">${d.benchmark_eur == null ? "–" : pct(d.benchmark_eur / d.capital_eur - 1)}</td></tr>`).join("")}
   </table>
   <p class="hint">Tik op een gebouw voor het dossier van dat team. K&H = wat koop-en-houd sinds de start had opgeleverd.</p>
+  ${orgChart()}
   ${whatifCard()}
   ${S.radar && S.radar.length ? `<h3 class="px">Memecoin-radar (alleen kijken)</h3><table><tr><th>Munt</th><th class="r">24u</th><th>Waarschuwing</th></tr>
     ${S.radar.slice(0, 6).map(r => `<tr><td>${esc(r.symbol)} <span class="pill">${esc(r.chain)}</span></td><td class="r ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100, 0)}</td><td class="hint">${esc(r.flags.join(", ") || "geen")}</td></tr>`).join("")}</table>` : ""}`;
+}
+
+// Het kantoor: wie beslist wat. Klik op een medewerker voor diens dossier.
+function orgChart() {
+  const who = (cls, title, sub, onclick) => `<div class="who ${cls}" ${onclick ? `onclick="${onclick}"` : ""}><b>${title}</b><span>${sub}</span></div>`;
+  const e = S.risk && typeof S.risk.exposure === "number" ? S.risk.exposure : null;
+  const lab = labAlerts24h(), sh = shadows();
+  return `<h3 class="px">Het kantoor</h3><div class="card org">
+    <div class="lvl">${who("ceo", "Phil · CEO", "beslist over geld en promoties")}</div>
+    <div class="lvl">${who("", "Jarvis", "assistent · meldt en bewaakt", "select('hq')")}</div>
+    <div class="lvl">${who("", "Risicodirecteur", e === null ? "nog geen stand" : `${Math.round(e * 100)}% crypto + memes in`, "select('risk')")}
+      ${who("", "Wachttoren", S.kill ? "noodstop aan" : "risicogrenzen", "select('risk')")}
+      ${who("", "Onderzoekslab", lab ? `${lab} melding${lab > 1 ? "en" : ""}` : "backtests · verkenners", "select('lab')")}</div>
+    <div class="lvl">${S.desks.map(d => who("", esc(d.name), `Lv ${d.level} · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span><br>${d.instruments.length} handelaars`, `select('${d.id}')`)).join("")}</div>
+    ${sh.length ? `<div class="lvl">${sh.map(x => who("ghost", esc(x.name), "in aanbouw · schaduw")).join("")}</div>` : ""}
+    <div class="hint" style="margin-top:8px">Elke afdeling heeft één handelaar per instrument. Nieuwe afdelingen proefdraaien eerst als schaduw; alleen Phil bepaalt of ze echt geld krijgen.</div></div>`;
 }
 
 function deskPanel(d) {
@@ -926,8 +1011,10 @@ function deskPanel(d) {
     <canvas class="spark" id="sp"></canvas></div>
   ${S.arena && S.arena.desks && S.arena.desks[d.id] && S.arena.desks[d.id].board.some(r => r.days > 0) ? `<h3 class="px">Schaduw-arena</h3>${arenaBoard(S.arena, S.arena.desks[d.id], 3)}
     <p class="hint">Uitdagers op papier sinds ${esc(S.arena.start)}. Meer in het Onderzoekslab.</p>` : ""}
-  <h3 class="px">Wat het team volgt</h3>
-  <table><tr><th>Instrument</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
+  <div class="card"><div class="row"><span>Gebouw</span><span>${floors(d) ? `+${floors(d)} verdieping${floors(d) > 1 ? "en" : ""}` : d.pnl_pct < -.03 ? "in de steigers" : "basis"}</span></div>
+    <div class="hint">Elke 2,5% winst een verdieping erbij. Meer dan 3% onder de start: steigers tot het herstelt.</div></div>
+  <h3 class="px">Het team · één handelaar per instrument</h3>
+  <table><tr><th>Handelaar</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
   ${d.instruments.map(i => `<tr><td>${esc(i.symbol)} ${i.in_market ? '<span class="pill in">in</span>' : ""}</td>
     <td class="r" style="white-space:nowrap">${tiny(i.price_eur)}</td>
     <td class="r ${cls(i.change_24h)}">${pct(i.change_24h)}</td><td class="hint">${esc(strat(i.strategy))}${i.fresh ? "" : " · koers oud"}</td></tr>`).join("")}
@@ -1174,9 +1261,9 @@ function toast(text) {
   clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 4500);
 }
 function celebrate(prev) {
-  const seenTs = localStorage.getItem("jplh-seen-ts") || (prev ? prev.generated_at : new Date(Date.now() - 3600e3).toISOString());
+  const seenTs = localStorage.getItem("jplh-seen-ts") || (prev ? prev.generated_at : new Date(Date.now() - 2 * 3600e3).toISOString());
   const fresh = S.feed.filter(f => f.kind === "trade" && f.ts > seenTs);
-  fresh.slice(0, 6).forEach((f, i) => setTimeout(() => spawnCoins(f.desk, f.text.includes("koopt")), i * 600));
+  fresh.slice(0, 6).forEach((f, i) => sendTruck(f.desk, f.text.includes("koopt"), i * 90));
   localStorage.setItem("jplh-seen-ts", S.generated_at);
   const got = JSON.parse(localStorage.getItem("jplh-badges") || "[]");
   for (const bd of badgeList()) {
