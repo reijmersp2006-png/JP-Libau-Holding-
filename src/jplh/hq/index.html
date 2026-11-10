@@ -258,25 +258,148 @@ function blob(cx, cy, rx, ry, c, wob) {
   }
 }
 
+// ------------------------------------------------------------------ de stad (pixel-Manhattan)
+const ISLE = {cx: 160, cy: 104, rx: 136, ry: 70};
+const inIsle = (x, y, m = 0) => ((x - ISLE.cx) / (ISLE.rx - m)) ** 2 + ((y - ISLE.cy) / (ISLE.ry - m)) ** 2 < 1;
+const AVENUES = [44, 92, 128, 156];          // straten van west naar oost (y)
+const STREETS = [90, 126, 196, 232, 278];   // straten van noord naar zuid (x)
+const PARK = {x: 134, y: 84, w: 52, h: 22};  // park met fontein en standbeeld in het midden
+const hash = n => { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); return ((n ^ (n >>> 15)) >>> 0) / 4294967296; };
+let FILLER = null;
+function fillers() {
+  // kleine wolkenkrabbers in de lege blokken, nooit op een afdeling, bouwplaats, park of straat
+  if (FILLER) return FILLER;
+  const taken = [...Object.values(B).filter(b => b.w), ...Object.values(P)].map(b => [b.x - 3, b.y - b.h - 6, b.w + 6, b.h + 9]);
+  taken.push([PARK.x - 2, PARK.y - 2, PARK.w + 4, PARK.h + 4], [278, 88, 42, 30], [BB.x - 2, BB.y - 2, BB.w + 4, BB.h + 8]);
+  const free = (x, y, w, h) => !taken.some(([tx, ty, tw, th]) => x < tx + tw && x + w > tx && y - h < ty + th && y > ty)
+    && !AVENUES.some(a => a > y - 4 && a < y + 4) && !STREETS.some(sx => sx > x - 3 && sx < x + w + 3);
+  FILLER = [];
+  for (let gy = 38; gy <= 172; gy += 7)
+    for (let gx = 26; gx <= 296; gx += 8) {
+      const r = hash(gx * 131 + gy * 7), w = 6 + Math.floor(r * 5), h = 8 + Math.floor(hash(gx + gy * 977) ** 1.6 * 30);
+      const x = gx + Math.floor(hash(gy * 31 + gx) * 4), y = gy;
+      if (!inIsle(x, y, 9) || !inIsle(x + w, y, 9)) continue;
+      if (!free(x, y, w, h)) continue;
+      FILLER.push({x, y, w, h, c: ["#7d7f8c", "#8c7a6b", "#6b8aa8", "#a39888", "#5d6170", "#4f7fa0", "#b0a48e"][Math.floor(r * 7)], glass: r > .7, seed: gx * 3 + gy});
+      taken.push([x - 1, y - h, w + 2, h + 2]);
+    }
+  FILLER.sort((a, b) => a.y - b.y);
+  return FILLER;
+}
+
 function drawIsland() {
-  blob(160, 104, 136, 70, "#e6cf8b", 1);       // zand
-  blob(160, 102, 124, 62, night() ? "#2e6b3a" : "#4fa64f", 2);   // gras
-  blob(160, 102, 110, 52, night() ? "#2a6235" : "#5bb85a", 3);
-  // paden naar het plein
-  const path = night() ? "#8e7a52" : "#cdb27a";
-  for (const id of ["crypto", "meme", "stocks", "metals", "fx", "risk", "lab"]) {
-    const b = B[id], tx = b.x + b.w / 2, ty = b.y + 2, hx = 160, hy = 100;
-    const steps = 40;
-    for (let i = 0; i <= steps; i++) { const t = i / steps; rect(hx + (tx - hx) * t - 1, hy + (ty - hy) * t - 1, 3, 3, path); }
+  const n = night();
+  blob(ISLE.cx, ISLE.cy, ISLE.rx, ISLE.ry, n ? "#4a4c58" : "#8d8f99", 1);           // kademuur
+  blob(ISLE.cx, ISLE.cy - 1, ISLE.rx - 4, ISLE.ry - 4, n ? "#3a3c46" : "#b9b6ad", 2); // trottoir
+  blob(ISLE.cx, ISLE.cy - 1, ISLE.rx - 8, ISLE.ry - 8, n ? "#2f313b" : "#9d9a92", 3); // stadsgrond
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(ISLE.cx, ISLE.cy - 1, ISLE.rx - 8, ISLE.ry - 8, 0, 0, Math.PI * 2); ctx.clip();
+  const road = n ? "#1c1d25" : "#3d3f4a", line = n ? "#8a7a30" : "#e8c84a";
+  for (const y of AVENUES) { rect(0, y - 3, W, 6, road); for (let x = (tick * .0) % 8; x < W; x += 8) rect(x, y, 4, 1, line); rect(0, y - 4, W, 1, n ? "#55555f" : "#d6d3ca"); rect(0, y + 3, W, 1, n ? "#55555f" : "#d6d3ca"); }
+  for (const x of STREETS) { rect(x - 2, 0, 4, H, road); for (let y = 0; y < H; y += 8) rect(x, y, 1, 3, n ? "#666" : "#f4f1e8"); }
+  // zebrapaden op de kruisingen
+  for (const y of AVENUES) for (const x of STREETS) for (let k = -2; k <= 2; k += 2) rect(x - 4, y + k, 1, 1, "#eee");
+  ctx.restore();
+  // park met fontein en standbeeld
+  rect(PARK.x - 1, PARK.y - 1, PARK.w + 2, PARK.h + 2, n ? "#3a3c46" : "#cfc9b8");
+  rect(PARK.x, PARK.y, PARK.w, PARK.h, n ? "#1f4a2a" : "#4fa64f");
+  for (let i = 0; i < 9; i++) { const x = PARK.x + 3 + (i * 17) % (PARK.w - 6), y = PARK.y + 3 + (i * 11) % (PARK.h - 6); blob(x, y, 3, 3, n ? "#173a20" : "#2f8f3f", i); }
+  rect(PARK.x, PARK.y + PARK.h / 2, PARK.w, 1, n ? "#6e6450" : "#e0d3a8"); rect(PARK.x + PARK.w / 2, PARK.y, 1, PARK.h, n ? "#6e6450" : "#e0d3a8");
+  blob(160, 95, 7, 4, n ? "#5d5a50" : "#d8d2c0", 0); blob(160, 95, 5, 3, "#5ab8ff", 0);
+  rect(159, 85, 3, 9, "#7fd1b0"); rect(157, 84, 7, 2, "#7fd1b0"); rect(162, 80, 1, 5, "#7fd1b0"); rect(161, 78, 3, 2, tick % 30 < 15 ? "#ffcc4d" : "#ffdf70");
+  // bomen langs de avenues
+  for (const y of AVENUES) for (let x = 20; x < W - 20; x += 13) {
+    const tx = x + (y % 5), ty = y - 5;
+    if (!inIsle(tx, ty, 12) || STREETS.some(sx => Math.abs(sx - tx) < 4) || (tx > PARK.x - 2 && tx < PARK.x + PARK.w + 2 && ty > PARK.y - 2 && ty < PARK.y + PARK.h + 2)) continue;
+    blob(tx, ty, 2, 2, n ? "#173a20" : "#3f9a4a", tx);
   }
-  // plein met fontein en JP-standbeeld
-  blob(160, 100, 14, 8, path, 0);
-  blob(160, 100, 7, 4, "#5ab8ff", 0);
-  rect(158, 90, 4, 9, "#ffcc4d"); rect(156, 89, 8, 2, "#ffcc4d");
-  // bomen
-  for (const [x, y] of [[40, 110], [50, 70], [100, 50], [140, 48], [230, 56], [286, 104], [270, 140], [200, 150], [130, 158], [100, 140], [180, 60]]) {
-    rect(x, y - 2, 2, 4, "#6b4a2b"); blob(x + 1, y - 6, 4, 4, night() ? "#1f4f2a" : "#2f8f3f", x);
+  // achtergrondgebouwen
+  for (const f of fillers()) tower(f);
+  bridge(); billboard();
+}
+
+function tower(f) {
+  const n = night(), top = f.y - f.h;
+  rect(f.x + 1, f.y, f.w, 2, "rgba(0,0,0,.25)");
+  rect(f.x, top, f.w, f.h, f.c);
+  rect(f.x, top, 1, f.h, "rgba(255,255,255,.12)"); rect(f.x + f.w - 1, top, 1, f.h, "rgba(0,0,0,.18)");
+  if (f.glass && !n) { ctx.globalAlpha = .25; for (let k = 0; k < f.h; k += 1) rect(f.x + ((k + tick / 20) % f.w), top + k, 1, 1, "#e8f6ff"); ctx.globalAlpha = 1; }
+  if (f.h > 20) { rect(f.x + 2, top - 3, f.w - 4, 3, f.c); rect(f.x + f.w / 2, top - 6, 1, 3, "#ccc"); }   // trapsgewijs dak
+  for (let wy = top + 2; wy < f.y - 2; wy += 3)
+    for (let wx = f.x + 1; wx < f.x + f.w - 1; wx += 2) {
+      const on = n ? hash(f.seed * 97 + wx * 13 + wy * 7 + Math.floor(tick / 300)) < .55 : false;
+      rect(wx, wy, 1, 1, on ? "#ffe9a0" : n ? "#1b1e2a" : "rgba(30,40,60,.45)");
+    }
+  if (f.h > 24 && n && tick % 60 < 30) rect(f.x + f.w / 2, top - 7, 1, 1, "#ff5d6c");     // vliegtuiglampje
+}
+
+// hangbrug naar de wal in het oosten
+function bridge() {
+  const y = 103, x0 = 286, n = night();
+  rect(x0, y - 1, W - x0, 4, n ? "#3a3c46" : "#7a6f64"); rect(x0, y + 3, W - x0, 1, "rgba(0,0,0,.3)");
+  for (const tx of [296, 314]) { rect(tx, y - 16, 3, 16, n ? "#5a4f46" : "#a08a72"); rect(tx - 1, y - 17, 5, 2, n ? "#5a4f46" : "#8a7560"); }
+  ctx.strokeStyle = n ? "#8a7f70" : "#d8cbb5"; ctx.lineWidth = .6; ctx.beginPath();
+  ctx.moveTo(x0, y - 2); ctx.quadraticCurveTo(306, y - 2, 297, y - 16); ctx.moveTo(298, y - 16); ctx.quadraticCurveTo(306, y - 4, 315, y - 16);
+  ctx.moveTo(316, y - 16); ctx.quadraticCurveTo(320, y - 8, 324, y - 4); ctx.stroke();
+  for (let x = 298; x < 315; x += 2) { const k = (x - 306.5) / 8.5; rect(x, y - 4 - (1 - k * k) * -0 - (k * k) * 11, .5, (k * k) * 11 + 2, n ? "#8a7f70" : "#d8cbb5"); }
+  // auto's op de brug
+  for (let i = 0; i < 3; i++) { const x = x0 + ((tick * .25 + i * 13) % (W - x0 + 6)) - 3; rect(x, y, 3, 1, ["#ffcc4d", "#ff5d6c", "#e8e4f0"][i]); if (n) rect(x + 3, y, 1, 1, "#fff8c0"); }
+}
+
+// lichtscherm op het plein (zoals op Times Square) met de stand van de holding
+const BB = {x: 144, y: 64, w: 36, h: 13};
+function billboard() {
+  if (!S) return;
+  const {x, y, w, h} = BB;
+  rect(x - 1, y - 1, w + 2, h + 2, "#111"); rect(x, y, w, h, "#060812");
+  rect(x + 6, y + h + 1, 1, 4, "#555"); rect(x + w - 7, y + h + 1, 1, 4, "#555");
+  const t = S.total, up = t.pnl_pct >= 0;
+  const msgs = [`JP-LIBAU ${eur(t.equity_eur, 0)}`, `${up ? "▲" : "▼"} ${pct(t.pnl_pct)} SINDS START`];
+  for (const k of (S.ticker || []).slice(0, 6)) msgs.push(`${k.name.toUpperCase()} ${(k.change ?? 0) >= 0 ? "▲" : "▼"}${pct(k.change)}`);
+  const text = msgs.join("   ·   ") + "   ·   ";
+  ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
+  ctx.font = "bold 5px monospace"; ctx.textBaseline = "middle";
+  const tw = ctx.measureText(text).width, off = (tick * .35) % tw;
+  ctx.fillStyle = "#ffcc4d"; ctx.fillText(text, x + 1 - off, y + 3.5); ctx.fillText(text, x + 1 - off + tw, y + 3.5);
+  ctx.fillStyle = up ? "#5fe08a" : "#ff5d6c";
+  ctx.fillRect(x + 1, y + 7, (w - 2) * Math.min(1, Math.abs(t.pnl_pct) * 10), 1);
+  for (let i = 0; i < 6; i++) rect(x + 2 + i * 4.5, y + 9, 3, 1, (Math.floor(tick / 10) + i) % 3 ? "#ff4fd8" : "#5ab8ff");
+  ctx.restore();
+  ctx.globalAlpha = night() ? .25 : .08; blob(x + w / 2, y + h + 6, 18, 5, "#ffcc4d", 0); ctx.globalAlpha = 1;
+}
+
+// verkeer: gele taxi's en andere auto's op de straten
+function traffic() {
+  const n = night();
+  for (let i = 0; i < 18; i++) {
+    const vertical = i % 3 === 0, lane = vertical ? STREETS[i % STREETS.length] : AVENUES[i % AVENUES.length];
+    const dir = i % 2 ? 1 : -1, speed = .25 + hash(i) * .3, len = vertical ? H : W;
+    let p = (tick * speed + i * 47) % (len + 20) - 10; if (dir < 0) p = len - p;
+    const x = vertical ? lane - 1 + (dir > 0 ? 1 : -1) : p, y = vertical ? p : lane - 1 + (dir > 0 ? 1 : -1);
+    if (!inIsle(x, y, 10)) continue;
+    const c = hash(i * 7) < .55 ? "#ffcc33" : ["#e8e4f0", "#ff5d6c", "#5ab8ff", "#2a2a2a"][i % 4];
+    if (vertical) { rect(x, y, 2, 4, c); rect(x, y + (dir > 0 ? 3 : 0), 2, 1, n ? "#fff8c0" : "#333"); }
+    else { rect(x, y, 4, 2, c); rect(x + (dir > 0 ? 3 : 0), y, 1, 2, n ? "#fff8c0" : "#333"); if (c === "#ffcc33") rect(x + 1, y - 1, 2, 1, "#222"); }
   }
+}
+
+// lucht en water: veerboten, een helikopter en de zeppelin van de holding
+function skyTraffic() {
+  const n = night();
+  for (let i = 0; i < 2; i++) {
+    const x = (tick * (.12 + i * .05) + i * 150) % (W + 40) - 20, y = i ? 172 : 14 + 0;
+    if (i === 0) continue;
+    rect(x, y, 16, 3, "#e8e4f0"); rect(x + 3, y - 3, 9, 3, "#f4a340"); rect(x + 4, y - 2, 7, 1, n ? "#ffe9a0" : "#5ab8ff");
+    ctx.globalAlpha = .4; rect(x - 6, y + 2, 6, 1, "#cfe8ff"); ctx.globalAlpha = 1;
+  }
+  { const x = 300 - (tick * .1) % (W + 60), y = 168; rect(x, y, 14, 3, "#c94a3a"); rect(x + 4, y - 3, 6, 3, "#e8e4f0"); }
+  const hx = 160 + Math.cos(tick / 140) * 110, hy = 30 + Math.sin(tick / 140) * 10;
+  rect(hx - 3, hy, 7, 3, "#2a3a5a"); rect(hx + 4, hy + 1, 6, 1, "#2a3a5a"); rect(hx + 9, hy - 1, 1, 3, "#2a3a5a");
+  rect(hx - 6 + (tick % 4), hy - 2, 13 - (tick % 4) * 2, 1, "#ccc");
+  if (n && tick % 30 < 15) rect(hx, hy + 3, 1, 1, "#ff5d6c");
+  const zx = (tick * .06) % (W + 80) - 40, zy = 22;
+  blob(zx, zy, 14, 4, "#d8d2e6", 0); rect(zx - 4, zy + 4, 8, 2, "#5e4a8a"); rect(zx + 12, zy - 3, 3, 6, "#8b4fd8");
+  ctx.fillStyle = "#2a1a00"; ctx.font = "bold 5px monospace"; ctx.textBaseline = "middle"; ctx.fillText("JP", zx - 5, zy + .5);
 }
 
 function plot(id, sd) {
@@ -301,48 +424,142 @@ function plot(id, sd) {
   if (sd.stronger) { rect(b.x + b.w / 2, top - 8, 1, 8, "#ddd"); rect(b.x + b.w / 2 + 1, top - 8, 5, 3, "#5fe08a"); }
 }
 
+function shade(hex, k) {           // k > 0 lichter, k < 0 donkerder
+  const n = parseInt(hex.slice(1), 16), f = c => Math.max(0, Math.min(255, Math.round(k > 0 ? c + (255 - c) * k : c * (1 + k))));
+  return "#" + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(f).map(c => c.toString(16).padStart(2, "0")).join("");
+}
+function win(x, y, w, h, on, alarm, glass) {
+  const c = alarm ? (tick % 20 < 10 ? "#ff5d6c" : "#5e1f1f") : on ? "#ffe9a0" : glass || (night() ? "#1b2236" : "#2c3a58");
+  rect(x, y, w, h, c);
+  if (!on && !alarm && !night()) rect(x, y, 1, 1, "rgba(255,255,255,.35)");      // glinstering
+  if (on && night()) { ctx.globalAlpha = .18; rect(x - 1, y - 1, w + 2, h + 2, "#ffe9a0"); ctx.globalAlpha = 1; }
+}
+function facade(b, top, wall) {
+  rect(b.x, top, b.w, b.h, wall);
+  rect(b.x, top, 2, b.h, shade(wall, .18)); rect(b.x + b.w - 2, top, 2, b.h, shade(wall, -.22));   // licht links, schaduw rechts
+}
+function lobby(b, color, lights) {
+  const y = b.y - 6;
+  rect(b.x, y, b.w, 6, shade(color, -.35)); rect(b.x, y - 1, b.w, 1, shade(color, .3));
+  const dx = b.x + b.w / 2 - 3;
+  rect(dx, y + 1, 6, 5, lights ? "#ffe9a0" : "#4a5a78"); rect(dx + 3, y + 1, 1, 5, shade(color, -.5));
+  rect(dx - 2, y - 2, 10, 2, "#c94a3a"); for (let i = 0; i < 10; i += 2) rect(dx - 2 + i, y - 2, 1, 2, "#f4ecd8");   // luifel
+}
+function rooftop(x, y, kind) {
+  if (kind === "tank") { rect(x, y - 5, 4, 4, "#7a5530"); rect(x - 1, y - 6, 6, 1, "#5a3a20"); rect(x, y - 1, 1, 1, "#444"); rect(x + 3, y - 1, 1, 1, "#444"); }
+  if (kind === "ac") { rect(x, y - 2, 4, 2, "#b8bcc8"); rect(x + 1, y - 2, 2, 1, "#6a6e7a"); }
+  if (kind === "dish") { const k = Math.sin(tick / 40); rect(x + 1, y - 3, 1, 3, "#999"); rect(x - 1 + k, y - 5, 4, 2, "#e8e4f0"); }
+}
+
 function building(id, d) {
-  const b = B[id], top = b.y - b.h;
+  const b = B[id], top = b.y - b.h, t = tick, n = night();
   const closed = d && d.status === "gesloten", alarm = d && d.status === "alarm";
-  const lit = d && !closed && (night() || d.status === "aan het werk");
-  rect(b.x + 2, b.y, b.w, 3, "rgba(0,0,0,.25)");                 // schaduw
-  rect(b.x, top, b.w, b.h, b.wall);
-  rect(b.x - 2, top - 4, b.w + 4, 5, b.roof);                    // dak
-  // ramen
-  for (let wy = top + 4; wy < b.y - 7; wy += 6)
-    for (let wx = b.x + 3; wx < b.x + b.w - 4; wx += 6) {
-      const on = lit && ((wx * 7 + wy * 3 + Math.floor(tick / 40)) % 5 !== 0);
-      rect(wx, wy, 3, 3, alarm ? (tick % 20 < 10 ? "#ff5d6c" : "#5e1f1f") : on ? "#ffe9a0" : "#25304a");
+  const lit = d && !closed && (n || d.status === "aan het werk");
+  const on = (wx, wy) => lit && ((wx * 7 + wy * 3 + Math.floor(t / 40)) % 5 !== 0);
+  rect(b.x + 3, b.y, b.w, 3, "rgba(0,0,0,.28)");                    // schaduw op straat
+
+  if (id === "crypto") {                 // glazen toren met lichtkroon
+    facade(b, top, "#1f8f86");
+    for (let y = top + 2; y < b.y - 7; y += 4) for (let x = b.x + 2; x < b.x + b.w - 2; x += 3) win(x, y, 2, 3, on(x, y), alarm, n ? "#123c40" : "#4fd0c2");
+    if (!n) { ctx.globalAlpha = .22; for (let k = 0; k < b.h; k++) rect(b.x + ((k * 1.4 + t / 6) % (b.w + 10)) - 5, top + k, 3, 1, "#ffffff"); ctx.globalAlpha = 1; }
+    lobby(b, "#1f8f86", lit);
+    rect(b.x + 3, top - 8, b.w - 6, 8, "#167068"); rect(b.x + 3, top - 3, b.w - 6, 1, (t >> 3) % 2 ? "#5fe08a" : "#2bb3a3");
+    rect(b.x + 6, top - 13, b.w - 12, 5, "#145e58");
+    for (let i = 0; i < b.w - 6; i += 2) rect(b.x + 3 + i, top - 8, 1, 1, ((i + (t >> 2)) % 6) < 3 ? "#7fffe8" : "#2a6a64");
+    rect(b.x + 4, top - 2, 3, 2, "#b8bcc8"); rooftop(b.x + b.w - 8, top - 13, "dish");
+  } else if (id === "meme") {            // speelhal met lichtrand en neonletters
+    facade(b, top, "#6f35c0");
+    for (let y = top + 9; y < b.y - 8; y += 5) for (let x = b.x + 3; x < b.x + b.w - 4; x += 5) win(x, y, 3, 3, on(x, y), alarm, n ? "#2a1640" : "#9a6ae0");
+    rect(b.x + 2, top + 1, b.w - 4, 7, "#1a0b2a");
+    ctx.font = "bold 6px monospace"; ctx.textBaseline = "top"; ctx.fillStyle = t % 24 < 18 ? "#ff4fd8" : "#7fffe8";
+    ctx.fillText("MEME", b.x + b.w / 2 - 7, top + 1.5);
+    for (let i = 0; i < 2 * (b.w + b.h); i += 3) {   // knipperende lampjes rondom
+      const k = i < b.w ? [b.x + i, top] : i < b.w + b.h ? [b.x + b.w - 1, top + i - b.w] : i < 2 * b.w + b.h ? [b.x + b.w - (i - b.w - b.h), b.y - 1] : [b.x, b.y - (i - 2 * b.w - b.h)];
+      rect(k[0], k[1], 1, 1, ((i / 3 + (t >> 3)) % 2) ? "#ffcc4d" : "#5a2050");
     }
-  rect(b.x + b.w / 2 - 2, b.y - 6, 4, 6, "#2a1a10");               // deur
+    lobby(b, "#6f35c0", true);
+    rect(b.x + b.w / 2 - 4, b.y - 1, 8, 2, "#c94a3a");                  // rode loper
+    rect(b.x + 3, top - 4, 5, 4, "#3a1a5a"); rect(b.x + 4, top - 7, 3, 3, t % 40 < 20 ? "#ffcc4d" : "#ff4fd8");   // dakbord
+  } else if (id === "stocks") {          // art-deco wolkenkrabber
+    facade(b, top, "#7d889f");
+    for (let x = b.x + 3; x < b.x + b.w - 2; x += 4) rect(x, top, 1, b.h - 6, shade("#7d889f", .25));   // pilasters
+    for (let y = top + 3; y < b.y - 9; y += 4) for (let x = b.x + 4; x < b.x + b.w - 3; x += 4) win(x, y, 2, 3, on(x, y), alarm);
+    // lichtkrant om de gevel
+    rect(b.x - 1, b.y - 10, b.w + 2, 3, "#060812");
+    for (let i = 0; i < b.w; i += 2) rect(b.x + i, b.y - 9, 1, 1, ((i + (t >> 2)) % 7) < 4 ? (d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a") : "#1a2a1a");
+    lobby(b, "#7d889f", lit);
+    rect(b.x + 1, b.y - 6, 2, 6, "#d8d2c0"); rect(b.x + b.w - 3, b.y - 6, 2, 6, "#d8d2c0");     // zuilen bij de ingang
+    // trapsgewijze top met gouden banden en spits
+    rect(b.x - 1, top - 2, b.w + 2, 2, "#c9a24a");
+    rect(b.x + 3, top - 10, b.w - 6, 8, "#8a95ad"); for (let x = b.x + 5; x < b.x + b.w - 4; x += 3) win(x, top - 8, 1, 4, n, false);
+    rect(b.x + 2, top - 11, b.w - 4, 1, "#c9a24a");
+    rect(b.x + 6, top - 18, b.w - 12, 7, "#97a2b8"); rect(b.x + 5, top - 19, b.w - 10, 1, "#c9a24a");
+    rect(b.x + b.w / 2 - 2, top - 24, 4, 5, "#a8b2c6"); rect(b.x + b.w / 2 - 1, top - 34, 2, 10, "#c9ccd6"); rect(b.x + b.w / 2, top - 40, 1, 6, "#e8e4f0");
+    if (n) { ctx.globalAlpha = .35; rect(b.x + 3, top - 19, b.w - 6, 9, "#ffd27a"); ctx.globalAlpha = 1; }
+    if (n && t % 50 < 25) rect(b.x + b.w / 2, top - 41, 1, 1, "#ff5d6c");
+  } else if (id === "metals") {          // klassieke bank met zuilen en fronton
+    facade(b, top, "#e6d8b0");
+    rect(b.x - 2, b.y - 3, b.w + 4, 1, "#cfc2a0"); rect(b.x - 3, b.y - 2, b.w + 6, 1, "#bfb290"); rect(b.x - 4, b.y - 1, b.w + 8, 1, "#afa280");   // trappen
+    for (let x = b.x + 2; x < b.x + b.w - 1; x += 5) { rect(x, top + 4, 2, b.h - 7, "#fff8e8"); rect(x, top + 4, 1, b.h - 7, "#ffffff"); rect(x - 1, top + 3, 4, 1, "#d8cba8"); }
+    for (let x = b.x + 4; x < b.x + b.w - 3; x += 5) win(x, top + 7, 2, 4, on(x, top), alarm);
+    ctx.fillStyle = "#d8cba8"; ctx.beginPath(); ctx.moveTo(b.x - 2, top + 3); ctx.lineTo(b.x + b.w / 2, top - 7); ctx.lineTo(b.x + b.w + 2, top + 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#f4ecd8"; ctx.beginPath(); ctx.moveTo(b.x + 3, top + 2); ctx.lineTo(b.x + b.w / 2, top - 4); ctx.lineTo(b.x + b.w - 3, top + 2); ctx.closePath(); ctx.fill();
+    blob(b.x + b.w / 2, top - 1, 2, 2, "#ffcc4d", 0);
+    blob(b.x + b.w / 2, b.y - 8, 5, 5, "#8a6a10", 0); blob(b.x + b.w / 2, b.y - 8, 3, 3, "#ffdf70", 0);   // kluisdeur
+    const r = t / 30; rect(b.x + b.w / 2 + Math.cos(r) * 2 - .5, b.y - 8 + Math.sin(r) * 2 - .5, 1, 1, "#7a5a0c");
+    const bars = d ? Math.min(6, d.positions.length * 3) : 0;
+    for (let i = 0; i < bars; i++) rect(b.x + b.w + 3 + (i % 3) * 4, b.y - 3 - Math.floor(i / 3) * 3, 4, 2, i % 2 ? "#e8e8f0" : "#ffcc4d");
+  } else if (id === "fx") {              // havenkantoor met klok en vlaggen
+    facade(b, top, "#2f6fc6");
+    for (let y = top + 3; y < b.y - 7; y += 4) for (let x = b.x + 2; x < b.x + b.w - 2; x += 3) win(x, y, 2, 3, on(x, y), alarm, n ? "#13284a" : "#7fb8ff");
+    lobby(b, "#2f6fc6", lit);
+    blob(b.x + b.w / 2, top - 3, 4, 4, "#f4ecd8", 0); blob(b.x + b.w / 2, top - 3, 3, 3, "#fffaf0", 0);   // klok
+    const hr = (amsHour() % 12) / 12 * Math.PI * 2 - Math.PI / 2, mn = (amsHour() % 1) * Math.PI * 2 - Math.PI / 2;
+    ctx.strokeStyle = "#222"; ctx.lineWidth = .6; ctx.beginPath(); ctx.moveTo(b.x + b.w / 2, top - 3); ctx.lineTo(b.x + b.w / 2 + Math.cos(hr) * 1.6, top - 3 + Math.sin(hr) * 1.6);
+    ctx.moveTo(b.x + b.w / 2, top - 3); ctx.lineTo(b.x + b.w / 2 + Math.cos(mn) * 2.5, top - 3 + Math.sin(mn) * 2.5); ctx.stroke();
+    const flags = [["#ae1c28", "#fff", "#21468b"], ["#b22234", "#fff", "#3c3b6e"], ["#012169", "#c8102e", "#fff"], ["#fff", "#bc002d", "#fff"], ["#d52b1e", "#fff", "#d52b1e"]];
+    flags.forEach((f, i) => { const fx = b.x + 2 + i * 7 + (i > 1 ? 10 : 0), wave = Math.sin(t / 10 + i) > 0 ? 1 : 0;
+      rect(fx, top - 9, 1, 9, "#ccc"); rect(fx + 1, top - 9 + wave * 0, 4, 1, f[0]); rect(fx + 1, top - 8, 4, 1, f[1]); rect(fx + 1, top - 7, 4 - wave, 1, f[2]); });
+    rect(b.x - 22, b.y - 2, 22, 3, "#7a5530"); for (let x = b.x - 22; x < b.x; x += 4) rect(x, b.y + 1, 1, 3, "#5a3a20");   // steiger
+    const bx = b.x - 40 + Math.sin(t / 60) * 6;
+    rect(bx, b.y + 6, 14, 3, "#e8e4f0"); rect(bx + 1, b.y + 9, 12, 1, "#9aa"); rect(bx + 6, b.y - 2, 1, 8, "#ddd"); rect(bx + 7, b.y - 2, 5, 5, "#ff5d6c");
+  } else if (id === "lab") {             // modern lab met sterrenwacht
+    facade(b, top, "#e8e4f0");
+    for (let x = b.x + 2; x < b.x + b.w - 2; x += 4) win(x, top + 4, 3, 6, on(x, top), alarm, n ? "#2a2a4a" : "#9ad0ff");
+    rect(b.x, top + 11, b.w, 1, "#b07cff");
+    lobby(b, "#c8c2dc", lit);
+    blob(b.x + b.w / 2, top - 1, 9, 6, "#cfc8e4", 0); rect(b.x + b.w / 2 - 9, top - 1, 18, 2, "#b8b0d0");
+    const slit = Math.sin(t / 120) * 4; rect(b.x + b.w / 2 + slit - 1, top - 6, 2, 5, "#2a2245");
+    rect(b.x + b.w / 2 + slit, top - 9, 1, 3, "#b07cff");
+    for (let i = 0; i < 3; i++) rect(b.x + 2 + i * 3, top - 2, 2, 1, "#2a3a6a");                          // zonnepanelen
+    rooftop(b.x + b.w - 5, top, "dish");
+  } else if (id === "risk") {            // vuurtoren-wachttoren met rood-witte banden
+    facade(b, top, "#b84a4a");
+    for (let y = top + 6; y < b.y - 6; y += 8) rect(b.x, y, b.w, 3, "#f4ecd8");
+    for (let y = top + 3; y < b.y - 8; y += 8) win(b.x + b.w / 2 - 1, y, 2, 2, n, alarm);
+    rect(b.x - 2, top - 2, b.w + 4, 2, "#3a3550"); for (let x = b.x - 2; x < b.x + b.w + 2; x += 2) rect(x, top - 4, 1, 2, "#3a3550");   // galerij
+    rect(b.x + 2, top - 10, b.w - 4, 6, n ? "#fff4c0" : "#cfe8ff"); rect(b.x + 1, top - 12, b.w - 2, 2, "#5e1f1f");
+    rect(b.x + b.w / 2, top - 15, 1, 3, "#5e1f1f");
+    rect(b.x + b.w / 2 - 1, b.y - 5, 3, 5, "#2a1a10");
+  } else {
+    facade(b, top, b.wall);
+  }
   extras(id, b, top, d);
-  if (alarm && tick % 30 < 15) { ctx.strokeStyle = "#ff5d6c"; ctx.lineWidth = 1; ctx.strokeRect(b.x - 4.5, top - 7.5, b.w + 9, b.h + 11); }
+  if (alarm && t % 30 < 15) { ctx.strokeStyle = "#ff5d6c"; ctx.lineWidth = 1; ctx.strokeRect(b.x - 4.5, top - 7.5, b.w + 9, b.h + 11); }
 }
 
 function extras(id, b, top, d) {
   const t = tick;
-  if (id === "crypto") {               // antenne met draaiende munt
-    rect(b.x + b.w - 6, top - 12, 1, 8, "#ddd");
-    const w = Math.abs(Math.cos(t / 15)) * 5 + 1;
-    rect(b.x + b.w - 5.5 - w / 2, top - 17, w, 5, "#ffcc4d");
+  if (id === "crypto") {               // draaiende munt boven de lichtkroon
+    rect(b.x + b.w / 2, top - 18, 1, 5, "#ddd");
+    const w = Math.abs(Math.cos(t / 15)) * 6 + 1;
+    rect(b.x + b.w / 2 + .5 - w / 2, top - 24, w, 6, "#ffcc4d"); rect(b.x + b.w / 2 + .5 - w / 4, top - 22, Math.max(1, w / 2), 2, "#ffe9a0");
   }
   if (id === "meme") {                 // neonbord + waarschuwing
-    const on = t % 24 < 16;
-    rect(b.x + 3, top + 2, b.w - 6, 4, on ? "#ff4fd8" : "#5a2050");
     rect(b.x - 8, b.y - 10, 6, 6, "#ffcc4d"); rect(b.x - 6, b.y - 9, 2, 3, "#2a1a00"); rect(b.x - 6, b.y - 5, 2, 1, "#2a1a00");
   }
-  if (id === "stocks") {               // vlag + koerslijn op de gevel
-    rect(b.x + b.w / 2, top - 12, 1, 8, "#ddd"); rect(b.x + b.w / 2 + 1, top - 12, 6, 4, d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a");
-  }
-  if (id === "metals") {               // ronde kluisdeur + staven
-    blob(b.x + b.w / 2, top + b.h / 2, 6, 6, "#8a6a10", 0); blob(b.x + b.w / 2, top + b.h / 2, 3, 3, "#ffdf70", 0);
-    const bars = d ? Math.min(6, d.positions.length * 3) : 0;
-    for (let i = 0; i < bars; i++) rect(b.x + b.w + 2 + (i % 3) * 4, b.y - 3 - Math.floor(i / 3) * 3, 4, 2, "#ffcc4d");
-  }
-  if (id === "fx") {                   // steiger + bootje
-    rect(b.x - 22, b.y - 2, 22, 3, "#7a5530");
-    const bx = b.x - 40 + Math.sin(t / 60) * 6;
-    rect(bx, b.y + 6, 14, 3, "#e8e4f0"); rect(bx + 6, b.y - 2, 1, 8, "#ddd"); rect(bx + 7, b.y - 2, 5, 5, "#ff5d6c");
+  if (id === "stocks") {               // vlag aan de spits: groen of rood
+    rect(b.x + b.w / 2 + 1, top - 33, 5, 3, d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a");
   }
   if (id === "risk" && S && S.risk && typeof S.risk.exposure === "number") {
     // kantoortje van de Risicodirecteur tegen de toren, met een meter: hoeveel crypto en memes in de markt
@@ -359,11 +576,8 @@ function extras(id, b, top, d) {
   if (id === "risk") {                 // baken: groen of rood
     const bad = S && (S.kill || S.desks.some(x => x.status === "alarm"));
     const c = bad ? (t % 20 < 10 ? "#ff5d6c" : "#7a1f1f") : (t % 60 < 50 ? "#5fe08a" : "#2f7a4a");
-    rect(b.x + 3, top - 9, 6, 5, c);
+    rect(b.x + 4, top - 9, 4, 4, c);
     if (bad) { ctx.globalAlpha = .25; blob(b.x + 6, top - 7, 14, 10, "#ff5d6c", 0); ctx.globalAlpha = 1; }
-  }
-  if (id === "lab") {                  // koepel
-    blob(b.x + b.w / 2, top - 1, 10, 6, "#cfc8e4", 0); rect(b.x + b.w / 2 - 1, top - 8, 2, 3, "#b07cff");
   }
 }
 
@@ -516,11 +730,11 @@ function bubbles() {
 function frame() {
   tick++;
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();      // niets buiten de wereld tekenen (geen sporen)
-  drawWater(); drawIsland();
+  drawWater(); drawIsland(); traffic();
   for (const sd of shadows()) plot(sd.id, sd);
   const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
   for (const id of order) building(id, desk(id));
-  workers(); drawCoins(); weather();
+  workers(); drawCoins(); skyTraffic(); weather();
   ctx.restore();
   if (tick % 15 === 0) { placeSigns(); bubbles(); }
   requestAnimationFrame(frame);
@@ -536,13 +750,16 @@ function resize() {
   placeSigns();
 }
 
+// borden iets hoger of opzij, zodat kronen, spitsen en vlaggen zichtbaar blijven
+const SIGN_AT = {crypto: [-4, 18], meme: [0, 9], stocks: [-30, -6], fx: [0, 10], lab: [-14, 6], risk: [-8, 14], metals: [0, -33]};
 function placeSigns() {
   const box = document.getElementById("labels");
   if (!S) return;
   const html = [];
   for (const id of [...DESKS, "risk", "lab"]) {
     const b = B[id], d = desk(id);
-    const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 7) * scale;
+    const [dx, dy] = SIGN_AT[id] || [0, 0];
+    const x = offX + (b.x + b.w / 2 + dx) * scale, y = offY + (b.y - b.h - 7 - dy) * scale;
     let inner;
     if (d) inner = `<b>${esc(b.label)}</b><span class="lv">Lv ${d.level}</span> · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
     else if (id === "risk") {

@@ -46,6 +46,10 @@ Op ~2,5 jaar echte koersen verloor actief handelen na kosten van gewoon vasthoud
 
 De toets draait op zoveel geschiedenis als er is (Bitvavo en Yahoo tot ruim tien jaar terug) en test ook rotatie op momentum, een marge rond het 200-dagengemiddelde (minder heen-en-weer, dus minder kosten) en drie manieren om het geld tussen de afdelingen te verdelen.
 
+## Hoofdkantoor-arena: verdelen naar risico
+
+In de backtest gaf het geld tussen de afdelingen verdelen naar risico (rustige afdelingen meer, wilde minder) een hogere Sharpe (1,68 tegen 1,13) en een kleinere diepste daling (11% tegen 24%), maar minder rendement (+57% tegen +65%). Phil koos: eerst als schaduw. Hij staat daarom in de schaduw-arena als "Hoofdkantoor: verdeling", gemeten vanaf de start van de holding. Wint hij 90 dagen op rendement én Sharpe, dan meldt Jarvis het en beslist Phil.
+
 ## De Risicodirecteur
 
 De Risicodirecteur kijkt over de afdelingen heen naar het wildste deel van de holding: crypto en memecoins samen. Hoe wilder die de laatste 60 dagen bewogen, hoe minder ervan in de markt zit. Het doel is 40% beweeglijkheid per jaar, en de stand blijft tussen 25% en 100% (nooit lenen). Hij stuurt pas bij als de stand minstens 10 procentpunt verschuift, en dan verkoopt (of koopt) hij alleen wat nodig is. Aandelen, metalen en valuta laat hij met rust: daar kost elke order minstens €1,25, en bij potjes van een paar honderd euro eten kleine bijstellingen de winst op.

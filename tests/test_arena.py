@@ -37,7 +37,7 @@ def test_arena_runs_once_a_day(tmp_path):
     later = maybe_run_arena(cfg, market, books, NOW + timedelta(hours=1), log=lambda *_: None)
     assert later["computed_at"] == first["computed_at"]
     fresh = run_arena(cfg, market, datetime.fromisoformat(first["start"]).date(), NOW)
-    assert set(fresh["desks"]) == set(first["desks"])
+    assert set(fresh["desks"]) == set(first["desks"]) - {"verdeling"}   # verdeling komt uit de wat-als-machine
 
 
 def test_jarvis_announces_a_promotion_once():
@@ -77,3 +77,13 @@ def test_shadow_desks_are_measured_but_never_traded(tmp_path):
         assert s["stronger"] == (s["mix"]["mix"]["sharpe"] >= s["mix"]["base"]["sharpe"] + 0.02
                                  and s["mix"]["mix"]["max_dd"] <= s["mix"]["base"]["max_dd"] + 0.005)
     assert len(by["vastgoed"]["instruments"]) == 2
+
+
+def test_arena_also_pits_risk_allocation_against_the_fixed_split(tmp_path):
+    home = tmp_path / "h"
+    build_demo(load_config(None), home, hours=6, history_days=12, now=NOW)
+    a = Store(home / "data" / "holding.sqlite3").get_state("arena")
+    v = a["desks"]["verdeling"]
+    assert {r["name"] for r in v["board"]} == {"vaste verdeling (live)", "verdelen naar risico"}
+    assert sum(r["live"] for r in v["board"]) == 1
+    assert all(r["days"] <= 14 for r in v["board"]) and not any(r["promote"] for r in v["board"])

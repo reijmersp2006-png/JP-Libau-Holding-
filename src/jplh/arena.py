@@ -102,6 +102,32 @@ SHADOW_WHY = {
 MIX_SHARE = 0.10        # de test: wat als 10% van de holding naar deze afdeling was gegaan?
 
 
+ALLOC_NAMES = {ALLOCATIONS[1]: "vaste verdeling (live)", ALLOCATIONS[2]: "verdelen naar risico"}
+
+
+def allocation_board(allocs: dict, start: date) -> dict | None:
+    """Arena voor het hoofdkantoor: de vaste verdeling (live) tegen verdelen naar risico,
+    alleen gemeten vanaf ``start``. Zelfde vorm als een afdeling in de arena."""
+    board = []
+    for key, name in ALLOC_NAMES.items():
+        curve = [(d, v) for d, v in (allocs.get(key) or {}).get("curve", []) if d >= start]
+        if not curve:
+            return None
+        vals = [v for _, v in curve]
+        rets = [b / a - 1 for a, b in zip(vals, vals[1:])]
+        m = metrics(rets, 0, 0, 0, 365) if rets else None
+        board.append({"name": name, "variant": key, "live": key == ALLOCATIONS[1],
+                      "return": vals[-1] / vals[0] - 1, "sharpe": m.sharpe if m else 0.0,
+                      "max_dd": m.max_drawdown if m else 0.0, "trades": 0, "days": len(rets)})
+    board.sort(key=lambda r: (-r["return"], -r["sharpe"], not r["live"]))
+    live = next(r for r in board if r["live"])
+    for r in board:
+        r["promote"] = bool(not r["live"] and r["days"] >= PROMOTE_DAYS
+                            and r["return"] >= live["return"] + MIN_EDGE and r["sharpe"] > live["sharpe"])
+    return {"name": "Hoofdkantoor: verdeling", "board": board,
+            "live_rank": next(i + 1 for i, r in enumerate(board) if r["live"])}
+
+
 def _close_at(dates: list, closes: list, d) -> float | None:
     """Laatste slotkoers op of voor dag ``d``."""
     i = bisect.bisect_right(dates, d) - 1
@@ -197,8 +223,13 @@ def run_whatif(config: HoldingConfig, market: Store, now: datetime, start: date 
         live, base = rows.get(LIVE, {}).get("curve"), rows.get(hold[0].name, {}).get("curve")
         if live and base:
             pack(DESK_NAMES.get(cls, cls), live, base)
-    a_live = allocation(res, config.desks).get(ALLOCATIONS[1])
+    allocs = allocation(res, config.desks)
+    a_live = allocs.get(ALLOCATIONS[1]) if allocs else None
     a_hold = allocation(res, config.desks, variant=hold[0].name).get(ALLOCATIONS[1])
+    if start is not None and allocs:
+        board = allocation_board(allocs, start)
+        if board:
+            out["alloc_board"] = board
     if a_live and a_hold:
         pack("Hele holding", a_live["curve"], a_hold["curve"])
     if config.shadow:
@@ -215,7 +246,7 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
     today = now.date().isoformat()
     risk = market.get_state("risk") or {}
     if (old and old.get("computed_at", "")[:10] == today and ("shadow" in old or not config.shadow)
-            and risk.get("computed_at", "")[:10] == today):
+            and risk.get("computed_at", "")[:10] == today and "verdeling" in old.get("desks", {})):
         return old
     start = arena_start(books)
     if start is None:
@@ -229,6 +260,9 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
         w = run_whatif(config, market, now, start)
         if w:
             new["shadow"] = w.pop("shadow", [])
+            board = w.pop("alloc_board", None)
+            if board:
+                new["desks"]["verdeling"] = board
             risk = w.pop("risk", None)
             market.set_state("whatif", w)
             if risk:
