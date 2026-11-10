@@ -24,6 +24,7 @@ from pathlib import Path
 from jplh.backtest import PERIODS_PER_YEAR, metrics, simulate, unit_prices
 from jplh.config import HoldingConfig
 from jplh.holding import Holding
+from jplh.lessons import review_entries, review_refusals
 from jplh.models import AssetClass, Decision, Instrument, Side, Signal
 from jplh.research import REVIEW_AFTER, WEEK, adjustments, review, round_trips, track_record, weekly_report
 from jplh.store import Store
@@ -262,6 +263,8 @@ class Desk:
     def run(self, now: datetime | None = None) -> DeskRound:
         now = now or datetime.now(tz=UTC)
         notes = self.learn(now)
+        for lesson in review_refusals(self, self.market, now) + review_entries(self, self.market, now):
+            notes.append("lessenboek: " + lesson["text"])
         notes += self.maybe_reselect(now)
         if "benchmark_start" not in self.meta:
             prices = self.holding.prices(now)
