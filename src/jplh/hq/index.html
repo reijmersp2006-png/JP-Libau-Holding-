@@ -1174,12 +1174,34 @@ function directorCard() {
       ${b ? `Getest op echte koersen sinds ${wiDate(b.since)}${b.wins ? ": hij won, dus hij mag sturen." : ": hij won niet, dus hij stuurt nu niet bij."}` : ""}</div></div>`;
 }
 
+// Stresstest: wat de holding van vandaag zou doen als het misgaat.
+const DESK_SHORT = {crypto: "Crypto", meme: "Memes", stocks: "Aandelen", metals: "Metalen", fx: "Valuta"};
+function stressCard() {
+  const T = S.stress;
+  if (!T) return "";
+  const mon = d => new Date(d).toLocaleDateString("nl-NL", {month: "short", year: "numeric"});
+  const rows = [
+    ...T.real.map(r => ({name: r.days <= 31 ? "Slechtste maand" : "Slechtste kwartaal", sub: `echt gebeurd, ${mon(r.from)} – ${mon(r.to)}`, r: r.return, real: true})),
+    ...T.scenarios.map(x => ({name: x.name, sub: `zoals ${x.when}`, r: x.return, paused: x.paused})),
+  ];
+  const maxLoss = Math.max(.3, ...rows.map(x => -x.r));
+  return `<h3 class="px">Stresstest</h3><div class="card">
+    ${rows.map(x => `<div style="margin:8px 0"><div class="row" style="padding:0"><span>${esc(x.name)}</span>
+      <span style="white-space:nowrap"><span class="dn">${pct(x.r)}</span> <span class="hint">→ ${eur(T.equity_eur * (1 + x.r), 0)}</span></span></div>
+      <div style="height:6px;background:#0b0816;margin:2px 0"><i style="display:block;height:6px;width:${Math.min(100, -x.r / maxLoss * 100)}%;background:${x.real ? "var(--bad)" : "#b05a6a"}"></i></div>
+      <div class="hint">${esc(x.sub)}${x.paused && x.paused.length ? ` · pauze: ${x.paused.map(c => DESK_SHORT[c] || c).join(", ")}` : ""}</div></div>`).join("")}
+    <div class="hint" style="margin-top:6px">De holding zoals ze nu staat (${pct(T.cash_pct, 0).replace("+", "")} cash). "Echt gebeurd" is teruggespeeld op onze koersen sinds ${mon(T.real.length ? T.real[0].since : T.computed_at)}.
+      De scenario's zijn afgeronde schokken per afdeling zoals in die crisis, geen metingen. Zakt een afdeling ${pct(T.limit, 0).replace("+", "")} of meer, dan gaat ze op pauze en koopt ze niets bij tot jij haar hervat.
+      Gerekend zonder noodrem: in een lange daling stapt Crypto Lab bij slecht marktweer al eerder uit.</div></div>`;
+}
+
 function riskPanel() {
   return `<h2 class="px">Wachttoren</h2><div class="mute">De risico-afdeling mag elke order weigeren</div>
   <div class="card"><div class="row"><span>Noodstop</span><span class="${S.kill ? "dn" : "up"}">${S.kill ? "AAN" : "uit"}</span></div>
   <div class="row"><span>Max daling vanaf de top</span><span>${pct(S.limits.max_drawdown_pct, 0)}</span></div>
   <div class="row"><span>Max verlies per dag</span><span>${pct(S.limits.daily_loss_limit_pct, 0)}</span></div></div>
   ${directorCard()}
+  ${stressCard()}
   <h3 class="px">Autopiloot</h3>
   ${(() => { const a = autopilot(); return `<div class="card"><div class="row"><span>Status</span><span class="${a.cls === "alarm" ? "dn" : a.cls ? "" : "up"}">${a.label}</span></div>
     <div class="row"><span>Laatste ronde</span><span>${when(S.generated_at)} (${Math.round(a.ageMin)} min geleden)</span></div>
