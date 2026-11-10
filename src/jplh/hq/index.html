@@ -1077,6 +1077,23 @@ function labAlerts24h() {
   return S.lab.alerts.filter(a => new Date(a.ts).getTime() >= since && a.level !== "info").length;
 }
 
+// Lessenboek: alles wat de holding leert, ook van weigeringen, instapmomenten en backtests.
+const RULE_NL = {kostenwacht: "kostenwacht", ordergrootte: "ordergrootte", geen_bijkopen_bij_verlies: "niet bijkopen bij verlies",
+  max_drawdown: "dalingsgrens", dagverlies: "dagverlies", trades_per_dag: "trades per dag", koers_vers: "verse koers", niet_gepauzeerd: "pauze", noodstop: "noodstop"};
+function lessonSection() {
+  const B = S.lessons || {items: [], summary: {rules: [], entry: null}, count: 0};
+  const sm = B.summary || {rules: []};
+  const topic = {weigering: "🛡️", instap: "🎯", backtest: "📊"};
+  return `<h3 class="px">Lessenboek · wat we geleerd hebben</h3>
+  ${sm.rules.length || sm.entry ? `<div class="card">
+    ${sm.rules.slice(0, 5).map(r => `<div class="row"><span>${esc(RULE_NL[r.rule] || r.rule)} <span class="hint">${r.n}×</span></span>
+      <span class="${r.avg_move < 0 ? "up" : "dn"}">${r.avg_move < 0 ? "bespaart" : "kost"} gem. ${pct(Math.abs(r.avg_move)).replace("+", "")}</span></div>`).join("")}
+    ${sm.entry ? `<div class="row"><span>Instapmoment <span class="hint">${sm.entry.n}×</span></span><span class="${sm.entry.avg_gap > 0 ? "dn" : "up"}">gem. ${pct(Math.abs(sm.entry.avg_gap)).replace("+", "")} ${sm.entry.avg_gap > 0 ? "te duur" : "goedkoop"}</span></div>` : ""}
+    <div class="hint" style="margin-top:4px">Per regel van de Wachttoren: wat deed de koers een week na een weigering? Daalde hij, dan bespaarde de regel geld.</div></div>` : ""}
+  ${B.items.length ? B.items.slice(0, 8).map(x => `<div class="card hint">${topic[x.topic] || "•"} ${when(x.ts)} · ${esc(x.text)}</div>`).join("")
+    : '<div class="hint">Het boek is nog leeg. Een week na de eerste weigering, twee weken na de eerste aankoop en bij de eerste wekelijkse backtest komen hier de eerste lessen.</div>'}`;
+}
+
 function labPanel() {
   const L = S.lab || {alerts: [], watch: [], reflections: [], records: [], reports: [], adjustments: {}};
   const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven"};
@@ -1090,6 +1107,8 @@ function labPanel() {
     <div class="row"><span>Met winst</span><span>${L.hit_rate == null ? "–" : Math.round(L.hit_rate * 100) + "%"}</span></div>
     <div class="row"><span>Gemiddeld t.o.v. vasthouden</span><span class="${cls(L.avg_edge)}">${L.avg_edge == null ? "–" : pct(L.avg_edge)}</span></div>
     <div class="hint" style="margin-top:4px">Een week na elke verkoop kijkt het lab of de trade slim was: wat had vasthouden gedaan, was de verkoop te vroeg, en welke strategie had het beter gedaan.</div></div>
+
+  ${lessonSection()}
 
   <h3 class="px">Verkenners</h3>
   ${L.alerts.length ? L.alerts.slice(0, 8).map(a => `<div class="card hint"><span class="lvl-${a.level}">●</span> ${when(a.ts)} · ${esc(a.text)}</div>`).join("")

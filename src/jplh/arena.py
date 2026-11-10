@@ -19,6 +19,7 @@ from jplh.backtest import metrics
 from jplh.config import HoldingConfig
 from jplh.deskbacktest import ALLOCATIONS, VARIANTS, allocation, compare, live_variant
 from jplh.desks import ALL_CANDIDATES, DESK_NAMES
+from jplh.lessons import record_backtests
 from jplh.riskdirector import assess
 from jplh.store import Store
 
@@ -272,6 +273,9 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
     except (ValueError, KeyError, ZeroDivisionError) as exc:
         log(f"wat-als mislukt: {type(exc).__name__}: {exc}")
     market.set_state("arena", new)
+    lesson = record_backtests(market, now, new, market.get_state("risk"))
+    if lesson:
+        log("lessenboek: " + lesson["text"])
     for sd in new.get("shadow", []):
         if sd["mix"]:
             log(f"schaduw {sd['name']}: 10% erbij -> Sharpe {sd['mix']['base']['sharpe']:.2f} -> "
