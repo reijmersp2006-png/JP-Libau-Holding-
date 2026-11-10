@@ -105,3 +105,16 @@ def test_paper_costs_applied(holding):
     assert pos.avg_price_eur == pytest.approx(100.0 * 1.001)
     assert holding.portfolio.fees_eur == pytest.approx(0.25)
     assert d.approved
+
+
+def test_cost_guard_skips_small_top_ups_and_trims_but_never_first_buys_or_exits(holding):
+    first = holding.submit(buy("ASML.AS", 60.0), NOW)
+    assert first.approved                                        # eerste aankoop: kosten zitten in de backtest
+    top_up = holding.submit(buy("ASML.AS", 20.0), NOW)
+    assert not top_up.approved and "kostenwacht" in failed(top_up)   # €1,25 op €20 = 6%
+    trim = holding.submit(Signal("ASML.AS", Side.SELL, "koop_en_houd", "herverdeling", 15.0), NOW)
+    assert not trim.approved and "kostenwacht" in failed(trim)
+    exit_ = holding.submit(Signal("ASML.AS", Side.SELL, "test", "uit"), NOW)
+    assert exit_.approved                                         # helemaal uitstappen mag altijd
+    btc = holding.submit(buy("BTC-EUR", 100.0), NOW)
+    assert btc.approved and "kostenwacht" not in failed(holding.submit(buy("BTC-EUR", 20.0), NOW))   # crypto: geen minimumtarief
