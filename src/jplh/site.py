@@ -21,6 +21,7 @@ from jplh.lessons import lessons, summary
 from jplh.prices import PriceError
 from jplh.research import track_record
 from jplh.scouts import recent as recent_alerts
+from jplh.stress import run as stress_test
 from jplh.store import Store
 
 DESK_INFO = {
@@ -271,6 +272,10 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
     state["arena"] = market.get_state("arena")
     state["whatif"] = market.get_state("whatif")
     state["risk"] = market.get_state("risk") if config.risk_director else None
+    try:
+        state["stress"] = stress_test(config, desks, market, now)
+    except (ValueError, KeyError, ZeroDivisionError):     # de stresstest mag het dashboard nooit stoppen
+        state["stress"] = None
     book = lessons(market, 2000)
     state["lessons"] = {"items": book[:30], "summary": summary(book), "count": len(book)}
     h = health(state, problems)
