@@ -58,6 +58,11 @@ def briefing(state: dict, now: datetime, h: dict | None = None) -> dict:
     if weather:
         parts = [f"{w['name'].split(' ')[0].lower()} {'goed' if w['ok'] else 'slecht'}" for w in weather]
         lines.append("Marktweer: " + ", ".join(parts) + ".")
+    risk = state.get("risk") or {}
+    if isinstance(risk.get("exposure"), (int, float)) and risk.get("vol"):
+        e = risk["exposure"]
+        lines.append(f"Risicodirecteur: crypto en memes bewegen {risk['vol']:.0%} per jaar (doel {risk['target']:.0%}), "
+                     + ("alles zit in de markt." if e >= 1 else f"{e:.0%} daarvan zit in de markt, de rest staat als geld klaar."))
     desks = sorted(state.get("desks", []), key=lambda d: d.get("pnl_pct", 0), reverse=True)
     if len(desks) >= 2:
         best, worst = desks[0], desks[-1]

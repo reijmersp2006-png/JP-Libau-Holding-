@@ -54,6 +54,7 @@ class HoldingConfig:
     watch: tuple[Watch, ...] = ()
     desk_modes: dict[str, str] = field(default_factory=dict)
     shadow: tuple[Shadow, ...] = ()
+    risk_director: bool = True   # de Risicodirecteur stuurt hoeveel er in de markt zit
 
     def instrument(self, symbol: str) -> Instrument:
         for inst in self.instruments:
@@ -151,6 +152,7 @@ def load_config(path: Path | None = None) -> HoldingConfig:
         costs=costs,
         desks=desks,
         desk_modes=modes,
+        risk_director=bool(holding.get("risk_director", True)),
         watch=tuple(Watch(w["symbol"], w.get("name", w["symbol"]), w["source"], w.get("kind", "markt"))
                     for w in raw.get("watch", []) if w["symbol"] not in seen),
         shadow=tuple(Shadow(x["symbol"], x.get("name", x["symbol"]), x["desk"], x.get("source", "yahoo"),

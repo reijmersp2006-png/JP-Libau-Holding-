@@ -7,6 +7,7 @@ name = "JP-libau Holding"
 base_currency = "EUR"
 start_capital_eur = 1000.0
 mode = "paper"            # alleen "paper" bestaat; live vereist later jouw expliciete akkoord
+risk_director = true      # Risicodirecteur: minder crypto/memes in de markt als die wild bewegen (won de backtest)
 
 # ---------------------------------------------------------------- universum
 # source: bitvavo | yahoo     currency: munt waarin de koers staat

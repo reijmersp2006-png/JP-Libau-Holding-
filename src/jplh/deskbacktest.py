@@ -312,24 +312,35 @@ ALLOCATIONS = ("vaste potjes, nooit herverdelen", "vaste verdeling, elk kwartaal
 MOVE_COST = 0.005   # verkopen in de ene afdeling en kopen in de andere kost samen ~0,5% van het verschoven bedrag
 
 
+def desk_returns(result: dict[str, dict[str, dict]], variant: str = "gekozen (live)",
+                 skip: tuple[str, ...] = ()) -> tuple[list, dict[str, list[float]]]:
+    """Dagrendement per afdeling vanaf de dag dat ze allemaal bestaan; geen koers die dag = 0."""
+    curves = {c: dict(rows[variant]["curve"]) for c, rows in result.items()
+              if rows.get(variant, {}).get("curve") and c not in skip}
+    if not curves:
+        return [], {}
+    start = max(min(c) for c in curves.values())
+    days = sorted({d for c in curves.values() for d in c if d >= start})
+    last = {c: None for c in curves}
+    rets: dict[str, list[float]] = {c: [] for c in curves}
+    for d in days:
+        for c, cur in curves.items():
+            v = cur.get(d, last[c])
+            rets[c].append(v / last[c] - 1 if last[c] and v else 0.0)
+            last[c] = v if v else last[c]
+    return days, rets
+
+
 def allocation(result: dict[str, dict[str, dict]], shares: dict[str, float], every: int = 91,
                vol_days: int = 90, skip: tuple[str, ...] = (), band: float = 0.10,
                variant: str = "gekozen (live)") -> dict[str, dict]:
     """Slimmer verdelen tussen afdelingen? Speelt de curves (standaard: live) van alle afdelingen
     samen na vanaf de dag dat ze allemaal bestaan, met drie manieren van verdelen."""
-    curves = {c: dict(rows[variant]["curve"]) for c, rows in result.items()
-              if rows.get(variant, {}).get("curve") and c not in skip}
+    days, rets = desk_returns(result, variant, skip)
+    curves = rets
     if len(curves) < 2:
         return {}
-    start = max(min(c) for c in curves.values())
-    days = sorted({d for c in curves.values() for d in c if d >= start})
-    last = {c: None for c in curves}
-    rets: dict[str, list[float]] = {c: [] for c in curves}
-    for d in days:   # dagrendement per afdeling; geen koers die dag (weekend) = 0
-        for c, cur in curves.items():
-            v = cur.get(d, last[c])
-            rets[c].append(v / last[c] - 1 if last[c] and v else 0.0)
-            last[c] = v if v else last[c]
+    start = days[0]
     out = {}
     total_share = sum(shares[c] for c in curves)
     for name in ALLOCATIONS:

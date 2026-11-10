@@ -105,6 +105,8 @@ def cmd_backtest(args) -> int:
         longer = allocation(res, config.desks, skip=("meme",))
         if longer:
             report += "\n".join(allocation_lines(longer, " zonder memecoins")) + "\n"
+        from jplh.riskdirector import risk_lines
+        report += "\n".join(risk_lines(res, config.desks)) + "\n"
         out = args.home / "reports" / f"afdelingen-{now:%Y-%m-%d}{'-demo' if args.demo else ''}.md"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(report, encoding="utf-8")

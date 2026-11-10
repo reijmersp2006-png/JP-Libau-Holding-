@@ -132,6 +132,50 @@ class Desk:
     def meta(self) -> dict:
         return self.holding.meta
 
+    def exposure(self) -> float:
+        """Hoeveel van het potje volgens de Risicodirecteur in de markt hoort (1,0 = alles)."""
+        from jplh.riskdirector import WING
+        if not self.config.risk_director or self.cls not in WING:
+            return 1.0
+        st = self.market.get_state("risk") or {}
+        e = st.get("exposure")
+        return min(1.0, max(0.0, float(e))) if isinstance(e, (int, float)) else 1.0
+
+    def follow_director(self, now: datetime, e: float) -> list[Decision]:
+        """Verschuift de Risicodirecteur zijn stand, dan schuiven de posities mee: bij minder
+        risico alleen verkopen, bij meer risico alleen bijkopen. Elke positie gaat naar
+        stand x (potje / aantal instrumenten), net als een nieuwe aankoop."""
+        prev = float(self.meta.get("risk_exposure", 1.0))
+        if abs(e - prev) < 1e-9:
+            return []
+        held = self.holding.portfolio.positions
+        out: list[Decision] = []
+        if held:
+            prices = self.holding.prices(now)
+            values = {}
+            for sym, pos in held.items():
+                try:
+                    values[sym] = pos.quantity * prices.price_eur(sym)
+                except KeyError:
+                    values = {}
+                    break
+            equity = self.holding.portfolio.equity_eur(prices) if values else 0.0
+            target = e * equity / max(len(self.instruments), 1)
+            for sym, v in sorted(values.items(), key=lambda kv: -kv[1]):   # eerst verkopen, dan kopen
+                drift = v / target - 1 if target > 0 else 1.0
+                if abs(drift) < REBALANCE_BAND or (drift < 0) == (e < prev):
+                    continue
+                side = Side.SELL if drift > 0 else Side.BUY
+                why = (f"Risicodirecteur: crypto en memes bewegen {'wilder' if e < prev else 'rustiger'}, de stand gaat van "
+                       f"{_nl(f'{prev:.0%}')} naar {_nl(f'{e:.0%}')} in de markt. {sym} gaat naar "
+                       f"{_nl(format(target, ',.2f'))} euro")
+                label = self.selection().get(sym, "koop_en_houd")
+                out.append(self.holding.submit(Signal(sym, side, label, why, abs(v - target)), now))
+        if all(d.approved for d in out):    # geweigerd (bijv. oude koers)? dan volgende ronde opnieuw
+            self.meta["risk_exposure"] = e
+        self.holding._save()
+        return out
+
     def selection(self) -> dict[str, str]:
         return self.meta.get("selection", {})
 
@@ -232,6 +276,7 @@ class Desk:
         decisions = []
         per_instrument = self.config.start_capital_eur / max(len(self.instruments), 1)
         bull, weather = self.regime(now) if self.mode != "vasthouden" else (None, "")
+        e = self.exposure()
         for inst in self.instruments:
             label = self.selection().get(inst.symbol)
             if label is None:
@@ -250,8 +295,10 @@ class Desk:
                 want = 0
             if want and not have:
                 equity = self.holding.portfolio.equity_eur(self.holding.prices(now))
-                size = equity / max(len(self.instruments), 1) if equity > 0 else per_instrument
+                size = (equity / max(len(self.instruments), 1) if equity > 0 else per_instrument) * e
                 why = self._why(strat, unit, inst.symbol) + (f". {weather}" if weather else "")
+                if e < 1.0:
+                    why += f". Risicodirecteur: {_nl(f'{e:.0%}')} van het normale bedrag"
                 sig = Signal(inst.symbol, Side.BUY, label, why, size)
             elif not want and have:
                 why = (f"noodrem: {blocked}. Eruit tot het marktweer weer goed is" if blocked
@@ -264,6 +311,7 @@ class Desk:
             else:
                 continue
             decisions.append(self.holding.submit(sig, now))
+        decisions += self.follow_director(now, e)
         decisions += self.maybe_rebalance(now)
         self.holding.mark(now, self.holding.prices(now))
         rep = self.maybe_report(now)

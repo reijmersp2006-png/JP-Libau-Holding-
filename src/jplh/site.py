@@ -245,6 +245,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
     }
     state["arena"] = market.get_state("arena")
     state["whatif"] = market.get_state("whatif")
+    state["risk"] = market.get_state("risk") if config.risk_director else None
     h = health(state, problems)
     state["jarvis"] = {"health": h, "briefing": briefing(state, now, h)}
     return state
