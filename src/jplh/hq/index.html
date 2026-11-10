@@ -41,6 +41,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 .badge{padding:5px 9px;border:2px solid currentColor;font-size:11px}
 .badge.paper{color:var(--blue)} .badge.kill{color:var(--bad);animation:blink 1s steps(2) infinite}
 .badge.demo{color:var(--warn)}
+.badge.fact{color:var(--gold);text-decoration:none}
 .badge.auto{color:var(--good);cursor:pointer} .badge.auto.warn{color:var(--warn)} .badge.auto.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
 #hud .spacer{flex:1}
 .badge.jarvis{color:#5ee7ff;cursor:pointer} .badge.jarvis.warn{color:var(--warn)} .badge.jarvis.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
@@ -156,6 +157,7 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
     <span class="badge px demo" id="b-demo" hidden>Nep-data</span>
     <span class="badge px jarvis" id="b-jarvis" onclick="select('hq')" title="Jarvis bewaakt de holding">JARVIS</span>
     <span class="badge px auto" id="b-auto" onclick="select('risk')" title="Autopiloot: elk uur een ronde, Jarvis kijkt elke 10 minuten">AUTO</span>
+    <a class="badge px fact" href="factsheet.html" title="Maandfactsheet: één pagina met alle cijfers, ook als pdf">Factsheet</a>
     <span class="badge px paper">Paper</span>
     <span class="badge px kill" id="b-kill" hidden>Noodstop</span>
     <div class="stat" style="min-width:110px;text-align:right"><span class="lbl px">Laatste ronde</span><span id="h-time" class="hint"></span></div>

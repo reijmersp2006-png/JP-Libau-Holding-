@@ -100,6 +100,28 @@ class Telegram:
         self.call("sendMessage", {"chat_id": chat, "text": text[:4000], "disable_web_page_preview": "true"})
 
 
+MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
+          "november", "december"]
+
+
+def month_close(state: dict, month: str) -> str | None:
+    """Maandafsluiting voor Jarvis: rendement van de afgelopen maand, uit dezelfde curve als de factsheet."""
+    total = state.get("total") or {}
+    curve = total.get("equity_curve") or []
+    inside = [e for t, e in curve if t[:7] == month]
+    if not inside:
+        return None
+    before = [e for t, e in curve if t[:7] < month]
+    base = before[-1] if before else total.get("capital_eur")
+    if not base:
+        return None
+    r = inside[-1] / base - 1
+    name = f"{MONTHS[int(month[5:7]) - 1]} {month[:4]}"
+    end = f"{inside[-1]:,.0f}".replace(",", ".")
+    return (f"📄 Maandafsluiting {name}: de holding deed {_pct(r)}, eindstand €{end}. "
+            "De factsheet staat op het dashboard (knop Factsheet), klaar om te bewaren als pdf.")
+
+
 def messages(state: dict, memory: dict, now: datetime) -> list[str]:
     """Wat er sinds de vorige ronde het melden waard is. ``memory`` wordt bijgewerkt."""
     out = []
@@ -151,6 +173,13 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
         if b:
             out.insert(0, f"🤖 {b['hello']} Phil. Dagbriefing:\n" + "\n".join(f"• {x}" for x in b["lines"]))
         memory["briefing_day"] = today
+
+    month = local.strftime("%Y-%m")
+    if memory.get("month_report") not in (None, month):
+        line = month_close(state, memory["month_report"])
+        if line:
+            out.append(line)
+    memory["month_report"] = month
 
     told = set(memory.get("promoted", []))
     for cls, d in ((state.get("arena") or {}).get("desks") or {}).items():
