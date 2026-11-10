@@ -123,6 +123,18 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
             out.append(f"{'☀️' if ok else '⛈️'} Marktweer {name} is omgeslagen naar {'goed' if ok else 'slecht'}.")
     memory["weather"] = weather
 
+    risk = state.get("risk") or {}
+    e = risk.get("exposure")
+    if isinstance(e, (int, float)):
+        before = memory.get("risk_exposure")
+        if before is not None and abs(before - e) > 1e-9:
+            more = e > before
+            out.append(f"🛡️ Risicodirecteur: crypto en memes bewegen {'rustiger' if more else 'wilder'} "
+                       f"({_pct(risk.get('vol') or 0).lstrip('+')} per jaar, doel {risk['target']:.0%}). "
+                       f"Stand van {before:.0%} naar {e:.0%} in de markt; "
+                       f"{'er wordt weer bijgekocht' if more else 'de rest staat veilig als geld klaar'}.")
+        memory["risk_exposure"] = e
+
     h = state.get("jarvis", {}).get("health", {"status": "ok", "issues": []})
     if h["status"] != memory.get("health", "ok"):
         if h["status"] == "ok":

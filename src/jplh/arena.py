@@ -19,6 +19,7 @@ from jplh.backtest import metrics
 from jplh.config import HoldingConfig
 from jplh.deskbacktest import ALLOCATIONS, VARIANTS, allocation, compare, live_variant
 from jplh.desks import ALL_CANDIDATES, DESK_NAMES
+from jplh.riskdirector import assess
 from jplh.store import Store
 
 LIVE = "gekozen (live)"
@@ -202,14 +203,19 @@ def run_whatif(config: HoldingConfig, market: Store, now: datetime, start: date 
         pack("Hele holding", a_live["curve"], a_hold["curve"])
     if config.shadow:
         out["shadow"] = shadow_desks(config, market, start, now, a_live["curve"] if a_live else None)
-    return out if out["series"] or out.get("shadow") else None
+    risk = assess(res, config.desks, (market.get_state("risk") or {}).get("exposure"), now)
+    if risk:
+        out["risk"] = risk
+    return out if out["series"] or out.get("shadow") or out.get("risk") else None
 
 
 def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], now: datetime, log=print) -> dict | None:
     """Eén keer per dag de arena bijwerken (de dagkoersen veranderen maar één keer per dag)."""
     old = market.get_state("arena")
     today = now.date().isoformat()
-    if old and old.get("computed_at", "")[:10] == today and ("shadow" in old or not config.shadow):
+    risk = market.get_state("risk") or {}
+    if (old and old.get("computed_at", "")[:10] == today and ("shadow" in old or not config.shadow)
+            and risk.get("computed_at", "")[:10] == today):
         return old
     start = arena_start(books)
     if start is None:
@@ -223,7 +229,12 @@ def maybe_run_arena(config: HoldingConfig, market: Store, books: list[Store], no
         w = run_whatif(config, market, now, start)
         if w:
             new["shadow"] = w.pop("shadow", [])
+            risk = w.pop("risk", None)
             market.set_state("whatif", w)
+            if risk:
+                market.set_state("risk", risk)
+                log(f"risicodirecteur: crypto+memes bewegen {risk['vol'] or 0:.0%} per jaar (doel {risk['target']:.0%}), "
+                    f"stand {risk['exposure']:.0%} in de markt" + (" (verschoven)" if risk["changed"] else ""))
     except (ValueError, KeyError, ZeroDivisionError) as exc:
         log(f"wat-als mislukt: {type(exc).__name__}: {exc}")
     market.set_state("arena", new)

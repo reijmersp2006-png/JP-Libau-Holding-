@@ -57,6 +57,7 @@ jobs:
           for i in 1 2 3; do git push origin paper-data && break; git pull --rebase origin paper-data; done
 
       - name: Wachter - uurronde gemist? Dan zelf starten
+        if: always()   # ook als Telegram even hapert, blijft de wachter waken
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -71,6 +72,7 @@ jobs:
           fi
 
       - name: Wachter - hartslag weg? Dan opnieuw starten
+        if: always()   # ook als Telegram even hapert, blijft de wachter waken
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

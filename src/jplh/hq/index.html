@@ -742,11 +742,33 @@ function autopilot() {
   return {label: "STIL", cls: "alarm", next, ageMin, text: "Er is al lang geen ronde geweest. Jarvis meldt dit via Telegram."};
 }
 
+function directorCard() {
+  const R = S.risk;
+  if (!R || typeof R.exposure !== "number") return "";
+  const e = R.exposure, b = R.backtest;
+  const pc = v => v == null ? "?" : Math.round(v * 100) + "%";
+  const corr = typeof R.crypto_meme_corr === "number" ? R.crypto_meme_corr : null;
+  const calm = !R.vol || R.vol <= R.target;
+  return `<h3 class="px">Risicodirecteur</h3><div class="card">
+    <div class="row"><span>Crypto + memes in de markt</span><span class="${e >= 1 ? "up" : ""}"><b>${pc(e)}</b></span></div>
+    <div class="bar" style="margin:6px 0"><i style="width:${Math.round(e * 100)}%;background-color:${e >= .9 ? "var(--good)" : e >= .6 ? "var(--warn)" : "var(--bad)"}"></i></div>
+    <div class="row"><span>Beweeglijkheid (${R.vol_days} dagen)</span><span class="${calm ? "up" : "dn"}">${R.vol ? pc(R.vol) : "?"} per jaar</span></div>
+    <div class="row"><span>Doel</span><span>${pc(R.target)} per jaar</span></div>
+    ${corr !== null ? `<div class="row"><span>Crypto en memes bewegen samen</span><span>${Math.round(corr * 100)}%</span></div>` : ""}
+    ${b ? `<table style="margin-top:6px"><tr><td></td><td class="r">rendement</td><td class="r">Sharpe</td><td class="r">diepste daling</td></tr>
+      <tr><td>zonder directeur</td><td class="r">${pct(b.base.return)}</td><td class="r">${b.base.sharpe.toFixed(2)}</td><td class="r">${pct(-b.base.max_dd)}</td></tr>
+      <tr><td>met directeur ${b.wins ? "✅" : ""}</td><td class="r">${pct(b.director.return)}</td><td class="r">${b.director.sharpe.toFixed(2)}</td><td class="r">${pct(-b.director.max_dd)}</td></tr></table>` : ""}
+    <div class="hint" style="margin-top:4px">${e >= 1 ? (calm ? "Rustig genoeg: alles zit in de markt." : "Net iets boven het doel, te weinig om kosten voor te maken: alles blijft in de markt.") : `Te wild: ${pc(1 - e)} staat als geld klaar tot het weer rustiger wordt.`}
+      Hoe wilder crypto en memes bewegen, hoe minder erin zit. Aandelen, metalen en valuta blijven zoals ze zijn.
+      ${b ? `Getest op echte koersen sinds ${wiDate(b.since)}${b.wins ? ": hij won, dus hij mag sturen." : ": hij won niet, dus hij stuurt nu niet bij."}` : ""}</div></div>`;
+}
+
 function riskPanel() {
   return `<h2 class="px">Wachttoren</h2><div class="mute">De risico-afdeling mag elke order weigeren</div>
   <div class="card"><div class="row"><span>Noodstop</span><span class="${S.kill ? "dn" : "up"}">${S.kill ? "AAN" : "uit"}</span></div>
   <div class="row"><span>Max daling vanaf de top</span><span>${pct(S.limits.max_drawdown_pct, 0)}</span></div>
   <div class="row"><span>Max verlies per dag</span><span>${pct(S.limits.daily_loss_limit_pct, 0)}</span></div></div>
+  ${directorCard()}
   <h3 class="px">Autopiloot</h3>
   ${(() => { const a = autopilot(); return `<div class="card"><div class="row"><span>Status</span><span class="${a.cls === "alarm" ? "dn" : a.cls ? "" : "up"}">${a.label}</span></div>
     <div class="row"><span>Laatste ronde</span><span>${when(S.generated_at)} (${Math.round(a.ageMin)} min geleden)</span></div>

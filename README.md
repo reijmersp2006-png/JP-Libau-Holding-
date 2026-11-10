@@ -46,6 +46,12 @@ Op ~2,5 jaar echte koersen verloor actief handelen na kosten van gewoon vasthoud
 
 De toets draait op zoveel geschiedenis als er is (Bitvavo en Yahoo tot ruim tien jaar terug) en test ook rotatie op momentum, een marge rond het 200-dagengemiddelde (minder heen-en-weer, dus minder kosten) en drie manieren om het geld tussen de afdelingen te verdelen.
 
+## De Risicodirecteur
+
+De Risicodirecteur kijkt over de afdelingen heen naar het wildste deel van de holding: crypto en memecoins samen. Hoe wilder die de laatste 60 dagen bewogen, hoe minder ervan in de markt zit. Het doel is 40% beweeglijkheid per jaar, en de stand blijft tussen 25% en 100% (nooit lenen). Hij stuurt pas bij als de stand minstens 10 procentpunt verschuift, en dan verkoopt (of koopt) hij alleen wat nodig is. Aandelen, metalen en valuta laat hij met rust: daar kost elke order minstens €1,25, en bij potjes van een paar honderd euro eten kleine bijstellingen de winst op.
+
+Op echte koersen sinds oktober 2024 (hele holding): zonder directeur +65,1%, Sharpe 1,13, diepste daling -23,7%; met directeur +65,8%, Sharpe 1,30, diepste daling -17,0%. In beide helften van die periode was hij minstens zo goed, en hij wint ook als hij over 30 of 90 dagen meet. De toets staat onderaan `jplh backtest --desks`, en wordt elke dag opnieuw gedaan: verliest hij ooit, dan stuurt hij niet meer bij. Uitzetten kan met `risk_director = false` onder `[holding]`. Jarvis meldt elke verschuiving, en de stand staat in de Wachttoren op het dashboard.
+
 ## Het dashboard openen
 
 - **Online**: `https://reijmersp2006-png.github.io/JP-Libau-Holding-/` (eenmalig aanzetten: Settings,
