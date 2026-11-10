@@ -191,7 +191,10 @@ def run_desk(cls: str, series: list[_Series], leader: _Series | None, config: Ho
                     w = 1 / variant.rotate
                 else:
                     w = 1 / len(series)
-                size = min(equity_open * min(w, max_pos), cash)
+                # Zoals live: altijd minstens 10% cash (max_invested_pct). Elk instrument krijgt zijn deel van
+                # die 90%, zodat het laatste niet alleen de restjes krijgt.
+                room = config.risk.max_invested_pct * equity_open - (equity_open - cash)
+                size = min(equity_open * min(w, max_pos) * config.risk.max_invested_pct, cash, max(0.0, room))
                 fee = max(cost.min_fee_eur, size * cost.fee_pct)
                 if size - fee < config.risk.min_order_eur:
                     continue
