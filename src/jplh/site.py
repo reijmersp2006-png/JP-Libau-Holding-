@@ -172,11 +172,14 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
     bench = sum(bench_parts) + sum(d["capital_eur"] for d in states if d["benchmark_eur"] is None) if bench_parts else None
 
     # Totale vermogenscurve: alle afdelingen worden per ronde op hetzelfde moment gewaardeerd.
+    # Draaien er twee rondes in hetzelfde uur, dan telt per afdeling alleen de laatste mee
+    # (anders telt het totaal dubbel en lijkt er een top van duizenden euro's te zijn geweest).
     total_curve: dict[str, float] = {}
     for c in DESK_ORDER:
         if c in desks:
-            for t, e in desks[c].holding.store.equity_curve():
-                key = t.replace(minute=0, second=0, microsecond=0).isoformat()
+            per_hour = {t.replace(minute=0, second=0, microsecond=0).isoformat(): e
+                        for t, e in desks[c].holding.store.equity_curve()}
+            for key, e in per_hour.items():
                 total_curve[key] = total_curve.get(key, 0.0) + e
     curve = sorted(total_curve.items())
     full = [[t, round(e, 2)] for t, e in curve]

@@ -89,3 +89,17 @@ def test_demo_world(tmp_path):
     state = json.loads((site / "state.json").read_text())
     assert state["demo"] is True
     assert (site / "index.html").read_text().count("JP-libau") >= 1
+
+
+def test_two_rounds_in_one_hour_do_not_double_the_total(tmp_path):
+    home = tmp_path / "h"
+    cfg = load_config(None)
+    build_demo(cfg, home, hours=3, history_days=2, now=NOW)
+    market = Store(home / "data" / "holding.sqlite3")
+    desks = open_desks(cfg, home, market, use_kill_file=False)
+    for minute in (20, 40):                       # twee extra rondes in hetzelfde uur
+        for d in desks.values():
+            d.run(NOW.replace(minute=minute))
+    t = build_state(cfg, desks, market, home, NOW.replace(minute=45))["total"]
+    assert t["peak_eur"] < t["capital_eur"] * 1.5
+    assert max(e for _, e in t["equity_curve"]) < t["capital_eur"] * 1.5
