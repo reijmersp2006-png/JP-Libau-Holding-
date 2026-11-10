@@ -31,6 +31,7 @@ class RiskLimits:
     max_trades_per_day: int = 10
     min_order_eur: float = 10.0
     max_data_age_hours: float = 3.0
+    max_fee_pct: float = 0.02      # kostenwacht: een bijstelling mag niet meer dan dit aan kosten opeten
     max_class_pct: dict[str, float] = field(default_factory=dict)
 
 
@@ -66,7 +67,7 @@ class HoldingConfig:
 # Hoger = ruimer. Voor deze velden is een hogere waarde dan de standaard niet toegestaan.
 _LOOSER_IF_HIGHER = (
     "max_drawdown_pct", "daily_loss_limit_pct", "max_position_pct", "max_invested_pct",
-    "max_trades_per_day", "max_data_age_hours",
+    "max_trades_per_day", "max_data_age_hours", "max_fee_pct",
 )
 
 

@@ -87,3 +87,23 @@ def test_jarvis_tells_when_the_director_moves():
     msgs = messages(st, memory, NOW)
     assert any("Risicodirecteur" in m and "60%" in m for m in msgs)
     assert not any("Risicodirecteur" in m for m in messages(st, memory, NOW))
+
+
+def test_jarvis_closes_the_month_once_with_last_months_return():
+    from jplh.notify import month_close
+    st = {"total": {"capital_eur": 1000, "equity_eur": 1100, "pnl_pct": .1, "day_pnl_pct": 0,
+                    "equity_curve": [["2026-10-31T20:00:00+00:00", 1000.0], ["2026-11-30T20:00:00+00:00", 1050.0],
+                                     ["2026-12-01T09:00:00+00:00", 1100.0]]},
+          "desks": [], "feed": []}
+    assert "november 2026" in month_close(st, "2026-11") and "+5,0%" in month_close(st, "2026-11")
+    memory = {"briefing_day": "2026-12-01", "month_report": "2026-11"}
+    dec = datetime(2026, 12, 1, 9, 5, tzinfo=UTC)
+    assert any("Maandafsluiting november" in m for m in messages(st, memory, dec))
+    assert not any("Maandafsluiting" in m for m in messages(st, memory, dec))
+    assert month_close(st, "2025-01") is None
+
+
+def test_site_ships_the_factsheet(tmp_path):
+    from jplh.site import write_site
+    write_site({"total": {}}, tmp_path)
+    assert (tmp_path / "factsheet.html").exists()

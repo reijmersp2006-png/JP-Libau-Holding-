@@ -135,6 +135,7 @@ max_invested_pct = 0.90        # altijd minimaal 10% cash
 max_trades_per_day = 10
 min_order_eur = 10.0
 max_data_age_hours = 3.0       # koers ouder dan dit: niet handelen
+max_fee_pct = 0.02             # kostenwacht: bijkopen of deels verkopen alleen als de kosten max 2% van de order zijn
 
 [risk.max_class_pct]           # max deel van het vermogen per afdeling
 crypto = 0.40

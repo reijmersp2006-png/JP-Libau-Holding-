@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factsheet · JP-libau Holding</title>
+<style>
+/* Maandfactsheet: één nette pagina zoals een fonds die maakt. Leest dezelfde state.json als het dashboard. */
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb; --panel: #ffffff; --line: #e4e2dc; --grid: #eeece6;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a8983;
+  --series: #2a78d6; --series-soft: rgba(42, 120, 214, .10); --bench: #8a8983;
+  --good: #1a7f37; --bad: #c62828; --gold: #b8860b;
+}
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; --surface: #1a1a19; --panel: #232321; --line: #3a3936; --grid: #2e2d2a;
+    --ink: #f0efec; --ink2: #c3c2b7; --ink3: #8f8e86; --series: #3987e5; --series-soft: rgba(57, 135, 229, .14);
+    --good: #4cc26a; --bad: #ef6b6b; --gold: #e0b44a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.page { max-width: 980px; margin: 0 auto; padding: 28px 24px 40px; }
+header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; border-bottom: 3px solid var(--ink); padding-bottom: 12px; flex-wrap: wrap; }
+.brand { display: flex; gap: 12px; align-items: center; }
+.crest { width: 44px; height: 44px; background: var(--ink); color: var(--surface); display: grid; place-items: center; font-weight: 800; letter-spacing: 1px; }
+h1 { margin: 0; font-size: 22px; } .sub { color: var(--ink2); font-size: 13px; }
+.meta { text-align: right; color: var(--ink2); font-size: 13px; }
+.meta select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); padding: 3px 6px; }
+.paper { display: inline-block; margin-top: 4px; padding: 1px 8px; border: 1px solid var(--gold); color: var(--gold); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink2); margin: 26px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 18px; }
+.tile { background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; }
+.tile .l { color: var(--ink2); font-size: 12px; } .tile .v { font-size: 22px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--ink3); font-size: 11px; margin-top: 2px; }
+.up { color: var(--good); } .dn { color: var(--bad); }
+.grid2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 22px; } @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 500; color: var(--ink2); border-bottom: 1px solid var(--line); padding: 5px 4px; font-size: 12px; }
+td { padding: 5px 4px; border-bottom: 1px solid var(--grid); } .r { text-align: right; }
+.share { display: inline-block; height: 8px; background: var(--series); border-radius: 0 4px 4px 0; vertical-align: middle; margin-right: 6px; }
+.chart { position: relative; background: var(--panel); border: 1px solid var(--line); padding: 8px; }
+.chart svg { display: block; width: 100%; height: 220px; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; padding: 4px 7px; white-space: nowrap; display: none; }
+.legend { color: var(--ink2); font-size: 12px; margin-top: 6px; } .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin: 0 4px 2px 0; }
+.note { color: var(--ink2); font-size: 12px; } .muted { color: var(--ink3); }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; } .kv span:nth-child(2n) { text-align: right; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font-size: 11px; padding: 0 6px; border: 1px solid var(--line); color: var(--ink2); }
+.pill.ok { border-color: var(--good); color: var(--good); }
+footer { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 10px; color: var(--ink3); font-size: 11px; }
+.actions { margin-top: 6px; } .actions a, .actions button { font: inherit; font-size: 12px; color: var(--series); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; margin-left: 10px; }
+#err { display: none; border: 1px solid var(--bad); color: var(--bad); padding: 10px; margin-top: 16px; }
+@media print { .actions, .meta select { display: none; } body { background: #fff; } .page { padding: 0; } .tile, .chart { break-inside: avoid; } @page { size: A4; margin: 14mm; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand"><div class="crest">JP</div><div><h1 id="title">JP-libau Holding</h1><div class="sub" id="subtitle">Factsheet</div></div></div>
+    <div class="meta"><div><select id="month" aria-label="Maand"></select></div><div id="asof"></div><div class="paper">PAPIERGELD · GEEN ECHT GELD</div>
+      <div class="actions"><a href="index.html">terug naar het hoofdkwartier</a><button onclick="print()">afdrukken / pdf</button></div></div>
+  </header>
+  <div id="err"></div>
+  <div id="body"></div>
+  <footer>Alle bedragen in euro, na kosten. De holding handelt met papiergeld op echte koersen; er gaat geen echt geld om. Resultaten uit het verleden en backtests zijn geen garantie voor de toekomst. Een strategie gaat alleen live als hij in de backtest op echte koersen wint; nieuwe afdelingen draaien eerst 90 dagen als schaduw.</footer>
+</div>
+<script>
+const NL = new Intl.NumberFormat("nl-NL", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const eur = (v, d = 2) => v == null ? "–" : "€ " + new Intl.NumberFormat("nl-NL", {minimumFractionDigits: d, maximumFractionDigits: d}).format(v);
+const pct = (v, d = 1) => v == null || !isFinite(v) ? "–" : (v > 0 ? "+" : "") + new Intl.NumberFormat("nl-NL", {minimumFractionDigits: d, maximumFractionDigits: d}).format(v * 100) + "%";
+const part = (v, d = 0) => v == null || !isFinite(v) ? "–" : new Intl.NumberFormat("nl-NL", {minimumFractionDigits: d, maximumFractionDigits: d}).format(v * 100) + "%";   // aandeel, zonder plusteken
+const cls = v => v == null ? "" : v > 0 ? "up" : v < 0 ? "dn" : "";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+const monthKey = t => t.slice(0, 7);
+const monthName = k => `${MONTHS[+k.slice(5, 7) - 1]} ${k.slice(0, 4)}`;
+const dayFmt = t => new Date(t).toLocaleDateString("nl-NL", {day: "numeric", month: "short", year: "numeric"});
+
+// Rendement van een curve over een periode: laatste stand in de periode t.o.v. de laatste stand ervoor
+// (of het startkapitaal als de periode de eerste is).
+function periodReturn(curve, key, start) {
+  const before = curve.filter(([t]) => monthKey(t) < key), inside = curve.filter(([t]) => monthKey(t) === key);
+  if (!inside.length) return null;
+  const base = before.length ? before[before.length - 1][1] : start;
+  return base ? inside[inside.length - 1][1] / base - 1 : null;
+}
+function maxDrawdown(curve, start) {
+  let peak = start, dd = 0;
+  for (const [, e] of curve) { peak = Math.max(peak, e); dd = Math.max(dd, 1 - e / peak); }
+  return dd;
+}
+function upTo(curve, key) { return curve.filter(([t]) => monthKey(t) <= key); }
+
+function chart(curve, start) {
+  if (curve.length < 2) return `<div class="chart note">Nog te weinig meetpunten voor een grafiek.</div>`;
+  const W = 900, H = 220, L = 58, R = 12, T = 12, B = 26;
+  const xs = curve.map(([t]) => +new Date(t)), ys = curve.map(([, e]) => e);
+  const x0 = xs[0], x1 = xs[xs.length - 1];
+  let lo = Math.min(start, ...ys), hi = Math.max(start, ...ys); const pad = (hi - lo) * .12 || hi * .01; lo -= pad; hi += pad;
+  const X = x => L + (x - x0) / (x1 - x0 || 1) * (W - L - R), Y = y => T + (hi - y) / (hi - lo) * (H - T - B);
+  const ticks = 4, grid = [];
+  for (let i = 0; i <= ticks; i++) { const v = lo + (hi - lo) * i / ticks;
+    grid.push(`<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--ink3)">${Math.round(v)}</text>`); }
+  const path = curve.map(([t, e], i) => `${i ? "L" : "M"}${X(+new Date(t)).toFixed(1)},${Y(e).toFixed(1)}`).join("");
+  const area = `${path}L${X(x1)},${Y(lo)}L${X(x0)},${Y(lo)}Z`;
+  const last = curve[curve.length - 1];
+  return `<div class="chart" id="ch"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Vermogen van de holding">
+    ${grid.join("")}
+    <line x1="${L}" x2="${W - R}" y1="${Y(start)}" y2="${Y(start)}" stroke="var(--bench)" stroke-dasharray="4 4"/>
+    <path d="${area}" fill="var(--series-soft)"/><path d="${path}" fill="none" stroke="var(--series)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${X(+new Date(last[0]))}" cy="${Y(last[1])}" r="4" fill="var(--series)" stroke="var(--panel)" stroke-width="2"/>
+    <text x="${L}" y="${H - 6}" font-size="11" fill="var(--ink3)">${dayFmt(curve[0][0])}</text>
+    <text x="${W - R}" y="${H - 6}" font-size="11" fill="var(--ink3)" text-anchor="end">${dayFmt(last[0])}</text>
+    <line id="cross" y1="${T}" y2="${H - B}" stroke="var(--ink3)" visibility="hidden"/>
+  </svg><div class="tip" id="tip"></div>
+  <div class="legend"><i style="background:var(--series)"></i>vermogen holding <i style="background:var(--bench);margin-left:12px"></i>startkapitaal ${eur(start, 0)}</div></div>`;
+}
+function hookChart(curve) {
+  const box = document.getElementById("ch"); if (!box || curve.length < 2) return;
+  const svg = box.querySelector("svg"), tip = document.getElementById("tip"), cross = document.getElementById("cross");
+  const xs = curve.map(([t]) => +new Date(t)), x0 = xs[0], x1 = xs[xs.length - 1];
+  svg.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width * 900;
+    const t = x0 + (fx - 58) / (900 - 70) * (x1 - x0);
+    let i = 0; for (let k = 0; k < xs.length; k++) if (Math.abs(xs[k] - t) < Math.abs(xs[i] - t)) i = k;
+    const px = 58 + (xs[i] - x0) / (x1 - x0 || 1) * (900 - 70);
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
+    tip.style.display = "block"; tip.style.left = Math.min(r.width - 150, px / 900 * r.width + 12) + "px"; tip.style.top = "14px";
+    tip.textContent = `${new Date(curve[i][0]).toLocaleString("nl-NL", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"})} · ${eur(curve[i][1])}`;
+  });
+  svg.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+}
+
+function render(S, key) {
+  const T = S.total, start = T.capital_eur, all = T.equity_curve || [];
+  const curve = upTo(all, key), months = [...new Set(all.map(([t]) => monthKey(t)))];
+  const isNow = key === monthKey(S.generated_at);
+  const endEq = isNow ? T.equity_eur : (curve.length ? curve[curve.length - 1][1] : start);
+  const since = endEq / start - 1, mtd = periodReturn(all, key, start), dd = maxDrawdown(curve, start);
+  const bench = isNow && T.benchmark_eur != null ? T.benchmark_eur / start - 1 : null;
+  const fees = S.desks.reduce((a, d) => a + d.fees_eur, 0), trades = S.desks.reduce((a, d) => a + d.trades, 0);
+  const cash = S.desks.reduce((a, d) => a + d.cash_eur, 0);
+  document.getElementById("subtitle").textContent = `Factsheet ${monthName(key)}`;
+  document.getElementById("asof").textContent = isNow ? `Stand ${new Date(S.generated_at).toLocaleString("nl-NL", {day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"})} · maand loopt nog` : `Stand einde ${monthName(key)}`;
+
+  const tiles = [
+    ["Vermogen", eur(endEq), `start ${eur(start, 0)}`, ""],
+    ["Sinds start", pct(since), `${S.days_active} dagen actief`, cls(since)],
+    [isNow ? "Deze maand" : monthName(key), pct(mtd), isNow ? "tot nu toe" : "hele maand", cls(mtd)],
+    ["Tegen vasthouden", bench == null ? "–" : pct(since - bench), bench == null ? "alleen voor de lopende maand" : `koop-en-houd: ${pct(bench)}`, cls(bench == null ? null : since - bench)],
+    ["Diepste daling", pct(-dd), `grens ${pct(-S.limits.max_drawdown_pct, 0)}`, dd > 0 ? "dn" : ""],
+    ["Kosten", eur(fees), `${trades} trades · ${part(fees / start, 2)} van de inleg`, ""],
+  ];
+  const monthRows = months.filter(k => k <= key).map(k => { const r = periodReturn(all, k, start); return `<tr><td>${monthName(k)}</td><td class="r ${cls(r)}">${pct(r, 2)}</td></tr>`; }).join("");
+
+  const desks = [...S.desks].sort((a, b) => b.equity_eur - a.equity_eur);
+  const eqSum = desks.reduce((a, d) => a + d.equity_eur, 0) || 1;
+  const deskRows = desks.map(d => { const sh = d.equity_eur / eqSum, kh = d.benchmark_eur == null ? null : d.benchmark_eur / d.capital_eur - 1;
+    return `<tr><td>${esc(d.name)}<div class="muted" style="font-size:11px">${esc(d.team)}</div></td><td><span class="share" style="width:${Math.round(sh * 90)}px"></span>${part(sh)}</td>
+      <td class="r">${eur(d.equity_eur, 0)}</td><td class="r ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r ${cls(kh)}">${pct(kh)}</td><td class="r">${part(d.cash_eur / (d.equity_eur || 1))}</td><td class="r">${eur(d.fees_eur)}</td></tr>`; }).join("");
+
+  const pos = S.desks.flatMap(d => d.positions.map(p => ({...p, desk: d.name}))).sort((a, b) => b.value_eur - a.value_eur);
+  const posRows = pos.slice(0, 10).map(p => `<tr><td>${esc(p.symbol)}</td><td class="muted">${esc(p.desk)}</td><td class="r">${eur(p.value_eur, 0)}</td><td class="r">${part(p.value_eur / eqSum, 1)}</td><td class="r ${cls(p.pnl_pct)}">${pct(p.pnl_pct)}</td></tr>`).join("");
+
+  const R = S.risk, bt = R && R.backtest;
+  const risk = `<div class="kv">
+    <span>Noodstop</span><span>${S.kill ? '<b class="dn">aan</b>' : "uit"}</span>
+    <span>Afdelingen op alarm</span><span>${S.desks.filter(d => d.status === "alarm").length}</span>
+    <span>Daling-grens per afdeling</span><span>${pct(-S.limits.max_drawdown_pct, 0)}</span>
+    <span>Dagverlies-grens</span><span>${pct(-S.limits.daily_loss_limit_pct, 0)}</span>
+    <span>Cash (klaar om in te zetten)</span><span>${eur(cash, 0)} · ${part(cash / eqSum)}</span>
+    ${R && typeof R.exposure === "number" ? `<span>Risicodirecteur: crypto + memes in de markt</span><span>${part(R.exposure)}</span>
+    <span>Beweeglijkheid crypto + memes (${R.vol_days} d)</span><span>${R.vol ? part(R.vol) : "–"} per jaar · doel ${part(R.target)}</span>` : ""}
+  </div>`;
+  const backtest = bt ? `<table><tr><th>Hele holding, echte koersen sinds ${dayFmt(bt.since)}</th><th class="r">Rendement</th><th class="r">Sharpe</th><th class="r">Diepste daling</th></tr>
+    <tr><td>zoals live</td><td class="r">${pct(bt.base.return)}</td><td class="r">${bt.base.sharpe.toFixed(2)}</td><td class="r">${pct(-bt.base.max_dd)}</td></tr>
+    <tr><td>met Risicodirecteur ${bt.wins ? '<span class="pill ok">wint</span>' : '<span class="pill">wint niet</span>'}</td><td class="r">${pct(bt.director.return)}</td><td class="r">${bt.director.sharpe.toFixed(2)}</td><td class="r">${pct(-bt.director.max_dd)}</td></tr></table>
+    <p class="note">${bt.days} handelsdagen nagespeeld met de regels van vandaag, inclusief kosten. Dit is het profiel dat je op lange termijn mag verwachten, met de schommelingen die erbij horen.</p>` : `<p class="note">Nog geen backtest beschikbaar.</p>`;
+
+  const A = S.arena || {}, sh = A.shadow || [], alloc = A.desks && A.desks.verdeling;
+  const arena = (sh.length || alloc) ? `<table><tr><th>Wat</th><th>Waarom</th><th class="r">Proef</th><th class="r">Sinds start</th></tr>
+    ${sh.map(x => `<tr><td>${esc(x.name)}</td><td class="muted">${esc(x.why || "")}</td><td class="r">${x.days || 0}/${A.promote_days || 90} d</td><td class="r ${cls(x.since_start)}">${pct(x.since_start)}</td></tr>`).join("")}
+    ${alloc ? alloc.board.filter(r => !r.live).map(r => `<tr><td>${esc(r.name)}</td><td class="muted">verdeling van de holding tegen de vaste verdeling</td><td class="r">${r.days}/${A.promote_days || 90} d</td><td class="r ${cls(r.return)}">${pct(r.return)}</td></tr>`).join("") : ""}
+    </table><p class="note">Uitdagers draaien op papier naast de holding. Na de proef beslist Phil of ze echt geld krijgen.</p>` : `<p class="note">Er draait nu niets in de arena.</p>`;
+
+  document.getElementById("title").textContent = S.name || "JP-libau Holding";
+  document.getElementById("body").innerHTML = `
+    <div class="tiles">${tiles.map(([l, v, s, c]) => `<div class="tile"><div class="l">${l}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`).join("")}</div>
+    <h2>Vermogen sinds de start</h2>${chart(curve, start)}
+    <div class="grid2">
+      <div><h2>Afdelingen</h2><table><tr><th>Afdeling</th><th>Aandeel</th><th class="r">Waarde</th><th class="r">Resultaat</th><th class="r">K&amp;H</th><th class="r">Cash</th><th class="r">Kosten</th></tr>${deskRows}</table>
+        <p class="note">Resultaat sinds de start van elke afdeling. K&amp;H = wat gewoon kopen en vasthouden had opgeleverd.</p></div>
+      <div><h2>Maandrendementen</h2><table><tr><th>Maand</th><th class="r">Rendement</th></tr>${monthRows}</table></div>
+    </div>
+    <div class="grid2">
+      <div><h2>Grootste posities</h2>${pos.length ? `<table><tr><th>Positie</th><th>Afdeling</th><th class="r">Waarde</th><th class="r">Gewicht</th><th class="r">Sinds aankoop</th></tr>${posRows}</table>` : '<p class="note">Geen posities.</p>'}</div>
+      <div><h2>Risico</h2>${risk}</div>
+    </div>
+    <h2>Langetermijnprofiel (backtest)</h2>${backtest}
+    <h2>In ontwikkeling (schaduw-arena)</h2>${arena}`;
+  hookChart(curve);
+}
+
+(async () => {
+  try {
+    const r = await fetch("state.json?t=" + Date.now(), {cache: "no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const S = await r.json();
+    const now = monthKey(S.generated_at), months = [...new Set((S.total.equity_curve || []).map(([t]) => monthKey(t)).concat([now]))].sort().reverse();
+    const sel = document.getElementById("month"), want = new URLSearchParams(location.search).get("maand");
+    sel.innerHTML = months.map(k => `<option value="${k}">${monthName(k)}</option>`).join("");
+    sel.value = months.includes(want) ? want : now;
+    sel.onchange = () => { history.replaceState(null, "", "?maand=" + sel.value); render(S, sel.value); };
+    render(S, sel.value);
+  } catch (e) {
+    const el = document.getElementById("err"); el.style.display = "block";
+    el.textContent = `Kan de stand niet laden (${e.message}). Open de factsheet via de link van het dashboard.`;
+  }
+})();
+</script>
+</body>
+</html>

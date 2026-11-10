@@ -5,7 +5,8 @@ Vaste regels, ook niet aan te passen door het zelflerende systeem:
 - geen handel op verouderde koersen;
 - nooit bijkopen in een positie die verlies staat (geen martingale);
 - nooit meer kopen dan de beschikbare cash, nooit met geleend geld;
-- grenzen voor drawdown, dagverlies, positiegrootte, afdeling en totaal belegd.
+- grenzen voor drawdown, dagverlies, positiegrootte, afdeling en totaal belegd;
+- kostenwacht: bijkopen of deels verkopen alleen als de kosten hooguit 2% van de order zijn.
 Verkopen verkleint risico en mag daarom altijd, behalve bij noodstop of verouderde koers.
 """
 
@@ -83,6 +84,8 @@ class RiskEngine:
             qty = pos.quantity
             if signal.size_eur is not None:
                 qty = min(qty, signal.size_eur / price)
+            if qty < pos.quantity * 0.999:      # deels verkopen is bijstellen, geen noodzaak: kostenwacht
+                checks.append(self._fee_check(inst, qty * price))
             return self._finish(signal, checks, size_eur=qty * price, quantity=qty)
 
         equity = ctx.portfolio.equity_eur(ctx.prices)
@@ -115,7 +118,18 @@ class RiskEngine:
             f"€{size:.2f} (gevraagd €{wanted:.2f}; ruimte positie €{room_position:.2f}, "
             f"afdeling {cls} €{room_class:.2f}, totaal €{room_total:.2f}, cash €{room_cash:.2f}; "
             f"minimum €{lim.min_order_eur:.2f})"))
+        if pos is not None:                     # bijkopen is bijstellen; de eerste aankoop zit al in de backtest
+            checks.append(self._fee_check(inst, size))
         return self._finish(signal, checks, size_eur=size, quantity=size / price)
+
+    def _fee_check(self, inst, size_eur: float) -> Check:
+        """Kostenwacht: een bijstelling die meer aan kosten kost dan ze oplevert, laten we liggen.
+        Bij een minimumtarief van €1,25 is een order van €20 al 6% kwijt aan kosten."""
+        cost = self.config.costs[inst.asset_class.value]
+        fee = max(cost.min_fee_eur, size_eur * cost.fee_pct)
+        share = fee / size_eur if size_eur > 0 else 1.0
+        return Check("kostenwacht", share <= self.limits.max_fee_pct,
+                     f"kosten €{fee:.2f} = {share:.1%} van de order (max {self.limits.max_fee_pct:.0%})")
 
     @staticmethod
     def _finish(signal: Signal, checks: list[Check], size_eur: float = 0.0, quantity: float = 0.0) -> Decision:
