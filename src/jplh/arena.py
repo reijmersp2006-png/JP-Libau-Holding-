@@ -5,7 +5,8 @@ zelf, en telt pas mee vanaf de dag dat de holding begon. Er wordt dus alleen voo
 niemand kan winnen door achteraf het verleden te passen.
 
 De arena handelt nooit en verandert nooit iets aan de afdelingen. Wint een uitdager lang genoeg
-op rendement én op Sharpe, dan wordt hij voorgedragen. Alleen Phil beslist of hij promoveert,
+op rendement én op Sharpe, en is de kans dat dat geluk is kleiner dan 10% (de toeval-toets van
+de Academie), dan wordt hij voorgedragen. Alleen Phil beslist of hij promoveert,
 en ook dan moet hij eerst in ``jplh backtest --desks`` winnen (de spelregel)."""
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import math
 from dataclasses import replace
 from datetime import date, datetime
 
+from jplh.academy import MAX_LUCK, luck
 from jplh.backtest import metrics
 from jplh.config import HoldingConfig
 from jplh.deskbacktest import ALLOCATIONS, VARIANTS, allocation, compare, live_variant
@@ -74,8 +76,12 @@ def run_arena(config: HoldingConfig, market: Store, start: date, now: datetime) 
         board.sort(key=lambda r: (-r["return"], -r["sharpe"], not r["live"]))   # gelijk: live eerst
         live = next((r for r in board if r["live"]), None)
         for r in board:
-            r["promote"] = bool(live and not r["live"] and r["days"] >= PROMOTE_DAYS
-                                and r["return"] >= live["return"] + MIN_EDGE and r["sharpe"] > live["sharpe"])
+            # Toeval-toets (Academie): alleen voor wie voor ligt, en alleen als de voorsprong geen geluk is.
+            ahead = bool(live and not r["live"] and r["return"] > live["return"])
+            r["luck"] = luck(rows[r["variant"]]["rets"], rows[LIVE]["rets"]) if ahead else None
+            r["promote"] = bool(ahead and r["days"] >= PROMOTE_DAYS
+                                and r["return"] >= live["return"] + MIN_EDGE and r["sharpe"] > live["sharpe"]
+                                and r["luck"] is not None and r["luck"] < MAX_LUCK)
         desks[cls] = {"name": DESK_NAMES.get(cls, cls), "board": board,
                       "live_rank": next((i + 1 for i, r in enumerate(board) if r["live"]), None)}
     return {"start": start.isoformat(), "computed_at": now.isoformat(), "promote_days": PROMOTE_DAYS,
@@ -119,12 +125,17 @@ def allocation_board(allocs: dict, start: date) -> dict | None:
         m = metrics(rets, 0, 0, 0, 365) if rets else None
         board.append({"name": name, "variant": key, "live": key == ALLOCATIONS[1],
                       "return": vals[-1] / vals[0] - 1, "sharpe": m.sharpe if m else 0.0,
-                      "max_dd": m.max_drawdown if m else 0.0, "trades": 0, "days": len(rets)})
+                      "max_dd": m.max_drawdown if m else 0.0, "trades": 0, "days": len(rets), "rets": rets})
     board.sort(key=lambda r: (-r["return"], -r["sharpe"], not r["live"]))
     live = next(r for r in board if r["live"])
     for r in board:
-        r["promote"] = bool(not r["live"] and r["days"] >= PROMOTE_DAYS
-                            and r["return"] >= live["return"] + MIN_EDGE and r["sharpe"] > live["sharpe"])
+        ahead = not r["live"] and r["return"] > live["return"]
+        r["luck"] = luck(r["rets"], live["rets"]) if ahead else None
+        r["promote"] = bool(ahead and r["days"] >= PROMOTE_DAYS
+                            and r["return"] >= live["return"] + MIN_EDGE and r["sharpe"] > live["sharpe"]
+                            and r["luck"] is not None and r["luck"] < MAX_LUCK)
+    for r in board:
+        r.pop("rets")
     return {"name": "Hoofdkantoor: verdeling", "board": board,
             "live_rank": next(i + 1 for i, r in enumerate(board) if r["live"])}
 

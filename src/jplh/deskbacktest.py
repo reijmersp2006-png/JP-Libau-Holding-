@@ -304,7 +304,8 @@ def compare(config: HoldingConfig, candles_of: dict[str, list[Candle]], candidat
             rets = [b / a - 1 for a, b in zip([capital] + r.equity, r.equity)]
             m = metrics(rets, r.trades, r.fees, 0, ppy)
             out[cls][v.name] = {"return": m.total_return, "sharpe": m.sharpe, "max_dd": m.max_drawdown,
-                                "trades": r.trades, "fees": r.fees, "switches": r.switches, "days": len(r.equity)}
+                                "trades": r.trades, "fees": r.fees, "switches": r.switches, "days": len(r.equity),
+                                "rets": rets}
             if v.name in ("gekozen (live)", "vasthouden (maatlat)"):
                 out[cls][v.name]["curve"] = list(zip(r.dates, r.equity))
     return out

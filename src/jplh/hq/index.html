@@ -210,6 +210,7 @@ const B = {
   fx:     {x: 46, y: 138, w: 38, h: 18, wall: "#3f7fd6", roof: "#1f4a86", label: "Wisselhaven"},
   risk:   {x: 262, y: 74, w: 12, h: 40, wall: "#b84a4a", roof: "#5e1f1f", label: "Wachttoren"},
   lab:    {x: 150, y: 120, w: 30, h: 18, wall: "#e8e4f0", roof: "#9c95b5", label: "Onderzoekslab"},
+  academy: {x: 238, y: 88, w: 20, h: 14, wall: "#efe3c8", roof: "#8a5a2b", label: "Academie"},
   hq:     {x: 146, y: 96, w: 0, h: 0, label: "HQ"},
 };
 const DESKS = ["crypto", "meme", "stocks", "metals", "fx"];
@@ -561,6 +562,17 @@ function building(id, d) {
     rect(b.x + b.w / 2 + slit, top - 9, 1, 3, "#b07cff");
     for (let i = 0; i < 3; i++) rect(b.x + 2 + i * 3, top - 2, 2, 1, "#2a3a6a");                          // zonnepanelen
     rooftop(b.x + b.w - 5, top, "dish");
+  } else if (id === "academy") {         // klassieke academie: zuilen, fronton, koepel met vlag
+    const cream = "#efe3c8";
+    rect(b.x - 1, b.y - 2, b.w + 2, 2, "#cdbf9f"); rect(b.x - 2, b.y - 1, b.w + 4, 1, "#b8a888");      // trappen
+    facade(b, top + 3, cream);
+    for (let x = b.x + 1; x < b.x + b.w - 1; x += 4) { rect(x, top + 4, 2, b.h - 6, "#fffaf0"); rect(x + 2, top + 4, 1, b.h - 6, "#d8ccb0"); }  // zuilen
+    for (let x = b.x + 3; x < b.x + b.w - 3; x += 4) win(x, top + 6, 1, 4, n || on(x, top), false, n ? "#2a2440" : "#7a6a52");
+    for (let k = 0; k < 4; k++) rect(b.x + k * 2, top + 3 - k, b.w - k * 4, 1, k ? "#d8ccb0" : "#8a5a2b");   // fronton
+    blob(b.x + b.w / 2, top - 3, 4, 3, "#6fa58a", 0); rect(b.x + b.w / 2 - 4, top - 1, 8, 1, "#4f7f68");     // koperen koepel
+    rect(b.x + b.w / 2, top - 11, 1, 6, "#ddd");
+    const wave = Math.sin(tick / 9) > 0 ? 1 : 0; rect(b.x + b.w / 2 + 1, top - 11, 4, 3 - wave, "#b07cff");
+    rect(b.x + b.w / 2 + 2, top - 10, 2, 1, "#ffcc4d");                                                 // vlag met boekje
   } else if (id === "risk") {            // vuurtoren-wachttoren met rood-witte banden
     facade(b, top, "#b84a4a");
     for (let y = top + 6; y < b.y - 6; y += 8) rect(b.x, y, b.w, 3, "#f4ecd8");
@@ -805,7 +817,7 @@ function frame() {
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();      // niets buiten de wereld tekenen (geen sporen)
   drawWater(); drawIsland(); traffic();
   for (const sd of shadows()) plot(sd.id, sd);
-  const order = ["meme", "crypto", "stocks", "risk", "lab", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
+  const order = ["meme", "crypto", "stocks", "risk", "lab", "academy", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
   for (const id of order) building(id, desk(id));
   workers(); drawTrucks(); drawCoins(); skyTraffic(); weather();
   ctx.restore();
@@ -824,13 +836,13 @@ function resize() {
 }
 
 // borden iets hoger of opzij, zodat kronen, spitsen en vlaggen zichtbaar blijven
-const SIGN_AT = {crypto: [-4, 18], meme: [0, 9], stocks: [-30, -6], fx: [0, 10], lab: [-14, 6], risk: [-8, 14], metals: [0, -33]};
+const SIGN_AT = {crypto: [-4, 18], meme: [0, 9], stocks: [-30, -6], fx: [0, 10], lab: [-14, 6], risk: [-8, 14], metals: [0, -33], academy: [0, 12]};
 function placeSigns() {
   const box = document.getElementById("labels");
   if (!S) return;
   const html = [];
   const small = window.innerWidth < 600;   // telefoon: korte borden, anders vallen ze over elkaar
-  for (const id of [...DESKS, "risk", "lab"]) {
+  for (const id of [...DESKS, "risk", "lab", "academy"]) {
     const b = geo(id), d = desk(id);
     const [dx, dy] = SIGN_AT[id] || [0, 0];
     const x = offX + (b.x + b.w / 2 + dx) * scale, y = offY + Math.max(17, b.y - b.h - 7 - dy) * scale;   // bord altijd in beeld
@@ -841,12 +853,17 @@ function placeSigns() {
       inner = `<b>Wachttoren</b>${S.kill ? '<span class="dn">noodstop aan</span>' : S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">alles veilig</span>'}`
         + (e !== null && e < 1 ? ` · <span class="dn" title="Risicodirecteur: zoveel crypto en memes in de markt">${Math.round(e * 100)}% in</span>` : "");
     }
+    else if (id === "academy") {
+      const A = S.academy;
+      inner = `<b>Academie</b>${A ? `<span class="mute">${A.forecasts} voorspellingen</span>` : '<span class="mute">opent na de volgende ronde</span>'}`;
+    }
     else {
       const n = labAlerts24h();
       inner = `<b>Onderzoekslab</b>${n ? `<span class="dn">${n} melding${n > 1 ? "en" : ""}</span>` : '<span class="mute">rustig</span>'}`;
     }
     if (small) {
       if (d) inner = `<b>${esc(b.label)}</b><span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
+      else if (id === "academy") inner = `<b>Academie</b><span class="mute">${S.academy ? S.academy.forecasts : 0} voorsp.</span>`;
       else if (id === "risk") inner = `<b>Wachttoren</b>${S.kill || S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">veilig</span>'}`;
       else { const n = labAlerts24h(); inner = `<b>Lab</b>${n ? `<span class="dn">${n} meld.</span>` : '<span class="mute">rustig</span>'}`; }
     }
@@ -1076,7 +1093,7 @@ function arenaSection() {
   const days = Math.max(...Object.values(a.desks).flatMap(d => d.board.map(r => r.days)), 0);
   if (!days) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena is net begonnen (${esc(a.start)}). ${Object.values(a.desks)[0].board.length - 1} uitdagers per afdeling draaien vanaf nu op papier mee. De eerste uitslag staat er morgen.</div>`;
   return `<h3 class="px">Schaduw-arena</h3>
-  <div class="hint">Andere strategieën draaien op papier mee met hetzelfde geld en dezelfde echte koersen, vanaf ${esc(a.start)} (${days} dagen). Alleen wat daarna gebeurt telt. Wint een uitdager ${a.promote_days} dagen lang op rendement én Sharpe, dan krijgt hij een 🏆 en meldt Jarvis het. Promoveren beslist alleen Phil. Sharpe verschijnt na 30 dagen; eerder zegt die niets.</div>
+  <div class="hint">Andere strategieën draaien op papier mee met hetzelfde geld en dezelfde echte koersen, vanaf ${esc(a.start)} (${days} dagen). Alleen wat daarna gebeurt telt. Wint een uitdager ${a.promote_days} dagen lang op rendement én Sharpe, en is de kans dat dat geluk is kleiner dan 10% (de toeval-toets van de Academie), dan krijgt hij een 🏆 en meldt Jarvis het. Promoveren beslist alleen Phil. Sharpe verschijnt na 30 dagen; eerder zegt die niets.</div>
   ${Object.values(a.desks).map(d => `<div class="card"><div class="row"><b>${esc(d.name)}</b><span class="hint">huidige regels op plek ${d.live_rank} van ${d.board.length}</span></div>${arenaBoard(a, d)}</div>`).join("")}`;
 }
 
@@ -1092,7 +1109,7 @@ const RULE_NL = {kostenwacht: "kostenwacht", ordergrootte: "ordergrootte", geen_
 function lessonSection() {
   const B = S.lessons || {items: [], summary: {rules: [], entry: null}, count: 0};
   const sm = B.summary || {rules: []};
-  const topic = {weigering: "🛡️", instap: "🎯", backtest: "📊"};
+  const topic = {weigering: "🛡️", instap: "🎯", backtest: "📊", academie: "🎓"};
   return `<h3 class="px">Lessenboek · wat we geleerd hebben</h3>
   ${sm.rules.length || sm.entry ? `<div class="card">
     ${sm.rules.slice(0, 5).map(r => `<div class="row"><span>${esc(RULE_NL[r.rule] || r.rule)} <span class="hint">${r.n}×</span></span>
@@ -1101,6 +1118,60 @@ function lessonSection() {
     <div class="hint" style="margin-top:4px">Per regel van de Wachttoren: wat deed de koers een week na een weigering? Daalde hij, dan bespaarde de regel geld.</div></div>` : ""}
   ${B.items.length ? B.items.slice(0, 8).map(x => `<div class="card hint">${topic[x.topic] || "•"} ${when(x.ts)} · ${esc(x.text)}</div>`).join("")
     : '<div class="hint">Het boek is nog leeg. Een week na de eerste weigering, twee weken na de eerste aankoop en bij de eerste wekelijkse backtest komen hier de eerste lessen.</div>'}`;
+}
+
+const VERDICT = {"beter dan vasthouden": "up", "slechter dan vasthouden": "dn", "live slechter dan beloofd": "dn", "houdt zich aan de belofte": "up"};
+const verdict = v => `<span class="${VERDICT[v] || "mute"}">${esc(v)}</span>`;
+const band = (lo, hi) => lo == null ? "" : ` <span class="hint">(${pct(lo, 2)} tot ${pct(hi, 2)})</span>`;
+function academyPanel() {
+  const A = S.academy;
+  const head = `<h2 class="px">Academie</h2><div class="mute">Leert elke dag van alle medewerkers. Verandert zelf niets aan de handel.</div>`;
+  if (!A) return head + '<div class="card hint">De Academie opent na de volgende ronde. Dan schrijft ze de eerste voorspellingen op.</div>';
+  const a = A.live.all, h = A.h;
+  const firstScore = A.first ? new Date(new Date(A.first).getTime() + h * 864e5).toLocaleDateString("nl-NL", {day: "numeric", month: "long"}) : "–";
+  const live = a ? `<div class="row"><span>Live strategieën klopten</span><span>${Math.round(a.hit * 100)}% van ${a.n}</span></div>
+      <div class="row"><span>Gewoon vasthouden klopte</span><span>${Math.round(a.base * 100)}%</span></div>
+      <div class="row"><span>Opbrengst t.o.v. vasthouden</span><span class="${cls(a.edge)}">${pct(a.edge, 2)} per ${h} dagen</span></div>
+      <div class="row"><span>Oordeel</span><span>${verdict(a.verdict)}</span></div>`
+    : `<div class="hint">De eerste scores over ${h} dagen komen rond ${firstScore}.</div>`;
+  const use = new Set(A.in_use);
+  const hist = A.history;
+  const pick = hist.filter((r, i) => use.has(r.strategy) || r.strategy === "koop_en_houd" || i < 3 || i >= hist.length - 2);
+  const histRows = pick.map(r => `<tr><td>${use.has(r.strategy) ? "<b>" : ""}${esc(strat(r.strategy))}${use.has(r.strategy) ? "</b> <span class=\"pill\">live</span>" : ""}</td>
+      <td class="r ${cls(r.edge)}">${r.strategy === "koop_en_houd" ? "maatlat" : pct(r.edge, 2) + band(r.edge_lo, r.edge_hi)}</td>
+      <td class="r">${Math.round(r.hit * 100)}%</td><td class="r">${r.strategy === "koop_en_houd" ? "" : verdict(r.verdict)}</td></tr>`).join("");
+  const wRows = Object.entries(A.weather).filter(([k]) => k !== "koop_en_houd").map(([k, w]) =>
+    `<tr><td>${esc(strat(k))}</td>${["goed", "slecht"].map(x => w[x] ? `<td class="r ${cls(w[x].edge)}" title="${esc(w[x].verdict)}">${pct(w[x].edge, 2)}</td>` : '<td class="r mute">–</td>').join("")}</tr>`).join("");
+  const promise = A.promise.filter(p => p.verdict !== "nog toeval");
+  const luckRows = [];
+  for (const d of Object.values((S.arena && S.arena.desks) || {}))
+    for (const r of d.board) if (r.luck != null) luckRows.push(`<div class="row"><span>${esc(d.name)}: ${esc(r.name)}</span><span class="${r.luck < .1 ? "up" : "mute"}">${Math.round(r.luck * 100)}% kans op geluk</span></div>`);
+  return head + `
+  <div class="card">
+    <div class="row"><span>Voorspellingsboek</span><span>${A.forecasts} voorspellingen</span></div>
+    <div class="row"><span>Sinds</span><span>${esc(A.first || "–")}</span></div>
+    ${live}
+    <div class="hint" style="margin-top:4px">Na elke nieuwe dagkoers schrijft elke strategie per instrument op of ze erin wil (verwacht stijging) of eruit. Dat staat vast vóórdat de koers bekend is. Na 1, 7 en 30 dagen wordt het gescoord.</div></div>
+
+  <h3 class="px">Wat het verleden zegt</h3>
+  <table><tr><th>Strategie</th><th class="r">t.o.v. vasthouden per ${h} dagen</th><th class="r">Trefkans</th><th class="r">Oordeel</th></tr>${histRows}</table>
+  <p class="hint">Gemeten op alle koersen vóór de start van het boek, zonder kosten. Tussen haakjes: de onzekerheid (90%). Instrumenten die samen bewegen tellen als één meting, dus de Academie is liever te voorzichtig dan te blij.</p>
+
+  ${A.team && A.team.length ? `<h3 class="px">De live keuzes, in hun eigen afdeling</h3><table><tr><th>Afdeling</th><th>Strategie</th><th class="r">t.o.v. vasthouden</th><th class="r">Oordeel</th></tr>
+    ${A.team.map(r => `<tr><td>${esc(DESK_SHORT[r.desk] || r.desk)}</td><td>${esc(strat(r.strategy))}</td><td class="r ${cls(r.edge)}">${r.strategy === "koop_en_houd" ? "maatlat" : pct(r.edge, 2) + band(r.edge_lo, r.edge_hi)}</td><td class="r">${r.strategy === "koop_en_houd" ? "" : verdict(r.verdict)}</td></tr>`).join("")}</table>` : ""}
+
+    ${wRows ? `<h3 class="px">Per marktweer</h3><table><tr><th>Live strategie</th><th class="r">Weer goed</th><th class="r">Weer slecht</th></tr>${wRows}</table>
+  <p class="hint">Opbrengst t.o.v. vasthouden per ${h} dagen, in het verleden. Zo zie je of een strategie vooral in slecht weer helpt.</p>` : ""}
+
+  <h3 class="px">Belofte tegen praktijk</h3>
+  ${promise.length ? promise.map(p => `<div class="row"><span>${esc(strat(p.strategy))}</span><span>verleden ${Math.round(p.past * 100)}% · live ${Math.round(p.live * 100)}% · ${verdict(p.verdict)}</span></div>`).join("")
+    : '<div class="hint">Nog te weinig live-metingen om te zeggen of de strategieën doen wat de backtest beloofde. Tot die tijd zegt de Academie "nog toeval".</div>'}
+
+  <h3 class="px">Toeval-toets in de arena</h3>
+  ${luckRows.length ? luckRows.join("") + '<p class="hint">Een uitdager wordt alleen voorgedragen als de kans dat zijn voorsprong geluk is kleiner is dan 10%.</p>'
+    : '<div class="hint">Er ligt nu geen uitdager voor op wat live draait, of er zijn nog te weinig dagen om te toetsen.</div>'}
+
+  <p class="hint" style="margin-top:10px">De spelregel blijft: een verandering gaat pas live als ze wint in de backtest, en alleen Phil beslist.</p>`;
 }
 
 function labPanel() {
@@ -1227,7 +1298,7 @@ function select(id) {
   selected = id;
   const side = document.getElementById("side");
   const d = desk(id);
-  side.innerHTML = d ? deskPanel(d) : id === "lab" ? labPanel() : id === "risk" ? riskPanel() : hqPanel();
+  side.innerHTML = d ? deskPanel(d) : id === "lab" ? labPanel() : id === "risk" ? riskPanel() : id === "academy" ? academyPanel() : hqPanel();
   const sp = document.getElementById("sp");
   if (sp) spark(sp, d ? d.equity_curve : S.total.equity_curve, d ? d.capital_eur : S.total.capital_eur);
   whatifUpdate();

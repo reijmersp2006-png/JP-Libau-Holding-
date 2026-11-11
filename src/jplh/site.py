@@ -17,6 +17,7 @@ from pathlib import Path
 from jplh.config import HoldingConfig
 from jplh.jarvis import briefing, health
 from jplh.desks import DESK_ORDER, Desk, benchmark_equity
+from jplh.academy import for_dashboard as academy_view
 from jplh.lessons import lessons, summary
 from jplh.prices import PriceError
 from jplh.research import track_record
@@ -276,6 +277,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
         state["stress"] = stress_test(config, desks, market, now)
     except (ValueError, KeyError, ZeroDivisionError):     # de stresstest mag het dashboard nooit stoppen
         state["stress"] = None
+    state["academy"] = academy_view(market.get_state("academy"), desks)
     book = lessons(market, 2000)
     state["lessons"] = {"items": book[:30], "summary": summary(book), "count": len(book)}
     h = health(state, problems)

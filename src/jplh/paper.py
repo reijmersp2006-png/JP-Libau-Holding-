@@ -6,11 +6,12 @@ import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from jplh.academy import maybe_study
 from jplh.arena import maybe_run_arena
 from jplh.collect import collect_candles, collect_fx_reference, collect_radar, collect_shadow, collect_watch
 from jplh.config import HoldingConfig
 from jplh.data import Bitvavo, Demo, Yahoo
-from jplh.desks import open_desks, rebalance_desks
+from jplh.desks import ALL_CANDIDATES, open_desks, rebalance_desks
 from jplh.models import Candle
 from jplh.notify import notify
 from jplh.scouts import scan
@@ -66,6 +67,7 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
         log(f"holding  herverdeling  {note}")
     for a in scan(market, watch_list(config), now):
         log(f"verkenner {a.level:<6} {a.text}")
+    maybe_study(desks, market, config, ALL_CANDIDATES, now, log)
     maybe_run_arena(config, market, [d.holding.store for d in desks.values()], now, log)
     if site_dir is not None:
         state = build_state(config, desks, market, home, now, problems=problems)
@@ -124,6 +126,7 @@ def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime
         rebalance_desks(desks, market, t)
         scan(market, watch_list(config), t)
     maybe_run_arena(config, market, [d.holding.store for d in desks.values()], now, log=lambda *_: None)
+    maybe_study(desks, market, config, ALL_CANDIDATES, now, log=lambda *_: None)
     site = home / "site"
     write_site(build_state(config, desks, market, home, now, demo=True), site)
     return site
