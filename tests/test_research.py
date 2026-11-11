@@ -116,7 +116,8 @@ def test_scouts_spot_a_spike_once(tmp_path):
     market.save_observed("BTC-EUR", "1h", hourly, "test", timedelta(hours=1))
     found = scan(market, [("BTC-EUR", "Bitcoin")], NOW)
     kinds = {a.kind for a in found}
-    assert "sprong" in kinds and "volume" in kinds
+    assert "sprong" in kinds and "volume" not in kinds          # het volume staat bij de sprong zelf
+    assert "50x het normale volume" in next(a.text for a in found if a.kind == "sprong")
     assert scan(market, [("BTC-EUR", "Bitcoin")], NOW + timedelta(hours=1)) == []
     assert recent(market)[0]["symbol"] == "BTC-EUR"
 
@@ -128,6 +129,35 @@ def test_scouts_ignore_calm_markets(tmp_path):
               for i in range(400)]
     market.save_observed("BTC-EUR", "1h", hourly, "test", timedelta(hours=1))
     assert scan(market, [("BTC-EUR", "Bitcoin")], NOW) == []
+
+
+def _hours(volume_last: float, move_last: float, seed: int = 1):
+    import random
+    rng = random.Random(seed)
+    p, hourly = 100.0, []
+    end = NOW.replace(minute=0)
+    for i in range(24 * 20):
+        p *= math.exp(rng.gauss(0, 0.002))
+        hourly.append(Candle(end - timedelta(hours=24 * 20 - i), p, p, p, p, 100.0))
+    q = p * (1 + move_last)
+    hourly[-1] = Candle(hourly[-1].ts, p, max(p, q), min(p, q), q, volume_last)
+    return hourly
+
+
+def test_scouts_skip_volume_without_price_move(tmp_path):
+    market = Store(tmp_path / "m.sqlite3")
+    market.save_observed("BTC-EUR", "1h", _hours(2000.0, 0.0), "test", timedelta(hours=1))
+    assert scan(market, [("BTC-EUR", "Bitcoin")], NOW) == []
+
+
+def test_scouts_bundle_market_wide_moves(tmp_path):
+    market = Store(tmp_path / "m.sqlite3")
+    syms = ["BTC-EUR", "ETH-EUR", "SOL-EUR", "ADA-EUR"]
+    for k, s in enumerate(syms):
+        market.save_observed(s, "1h", _hours(2000.0, 0.012, seed=k + 1), "test", timedelta(hours=1))
+    found = scan(market, [(s, s) for s in syms], NOW)
+    assert [a.kind for a in found] == ["markt"]
+    assert "4 instrumenten" in found[0].text
 
 
 def test_watchlist_is_loaded_and_never_traded():
