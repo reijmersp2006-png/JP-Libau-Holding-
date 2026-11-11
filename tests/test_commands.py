@@ -103,3 +103,18 @@ def test_alarm_remove_and_small_coin_prices(tmp_path):
     assert "0,0000090" in reply
     assert "1 alarm" in answer("/alarm weg PEPE", cfg, home, market, NOW, memo, src)
     assert memo["alarms"] == []
+
+
+def test_afdeling_stress_lessen_and_maand(tmp_path):
+    home = _home(tmp_path)
+    cfg, market = load_config(None), Store(home / "data" / "holding.sqlite3")
+    desk = answer("/afdeling goud", cfg, home, market, NOW)
+    assert desk.startswith("🏢 De Kluis") and "cash" in desk
+    assert "Welke afdeling" in answer("/afdeling", cfg, home, market, NOW)
+    assert "Welke afdeling" in answer("/afdeling raket", cfg, home, market, NOW)
+    stress = answer("/stress", cfg, home, market, NOW)
+    assert "Coronacrash" in stress or "nog niet gedraaid" in stress
+    assert "📚" in answer("/lessen", cfg, home, market, NOW) or "leeg" in answer("/lessen", cfg, home, market, NOW)
+    assert "november 2026" in answer("/maand", cfg, home, market, NOW)
+    assert "Welke maand" in answer("/maand blah", cfg, home, market, NOW)
+    assert "/stress" in answer("/help", cfg, home, market, NOW)

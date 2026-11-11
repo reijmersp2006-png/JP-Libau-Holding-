@@ -104,7 +104,7 @@ jplh jarvis          # Telegram-berichten van Phil beantwoorden en alarmen nalop
 pytest               # alle tests
 ```
 
-Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`,
+Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/maand`,
 `/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
 `/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
 

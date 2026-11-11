@@ -22,6 +22,10 @@ HELP = ("Commando's:\n"
         "/stand - de stand van de holding nu\n"
         "/briefing - de volledige briefing\n"
         "/waarom BTC - waarom de laatste trade in dat instrument\n"
+        "/afdeling crypto - één afdeling: posities, cash en waarom\n"
+        "/stress - wat als het misgaat (slechtste maand, crashscenario's)\n"
+        "/lessen - wat de holding de laatste tijd leerde\n"
+        "/maand - de maandafsluiting (of /maand oktober)\n"
         "/alarm BTC 80000 - seintje zodra BTC die koers raakt\n"
         "/alarmen - je alarmen bekijken\n"
         "/alarm weg BTC - alarmen voor BTC weghalen (/alarm weg alles: allemaal)\n"
@@ -151,6 +155,92 @@ def check_alarms(memo: dict, config: HoldingConfig, sources, log=print) -> list[
     return out
 
 
+DESK_ALIASES = {"crypto": "crypto", "meme": "meme", "memes": "meme", "memecoins": "meme", "stocks": "stocks",
+                "aandelen": "stocks", "beurs": "stocks", "beurstoren": "stocks", "metals": "metals",
+                "metalen": "metals", "goud": "metals", "kluis": "metals", "fx": "fx", "valuta": "fx",
+                "wisselhaven": "fx"}
+MODE_NL = {"vasthouden": "vasthouden", "vasthouden_marktweer": "vasthouden, met marktweer",
+           "actief": "actief handelen"}
+
+
+def desk_text(state: dict, want: str) -> str:
+    cls = DESK_ALIASES.get(want.lower())
+    d = next((x for x in state.get("desks", []) if x["id"] == cls), None)
+    if d is None:
+        return "Welke afdeling? Kies uit: crypto, meme, aandelen, metalen, fx."
+    lines = [f"🏢 {d['name']}: {_eur(d['equity_eur'])} ({_pct(d['pnl_pct'])} sinds start)",
+             f"Werkwijze: {MODE_NL.get(d.get('mode'), d.get('mode') or '?')}. Status: {d['status']}."]
+    if d.get("weather"):
+        lines.append(f"🌤 {d['weather'][:1].upper()}{d['weather'][1:]}.")
+    if d.get("paused_reason"):
+        lines.append(f"⏸ Op pauze: {d['paused_reason']}")
+    for p in sorted(d.get("positions", []), key=lambda p: -p["value_eur"]):
+        lines.append(f"• {p['symbol']}: {_eur(p['value_eur'])} ({_pct(p['pnl_pct'])})")
+    eq = d["equity_eur"] or 1
+    lines.append(f"• cash: {_eur(d['cash_eur'])} ({d['cash_eur'] / eq:.0%})")
+    lines.append(f"Kosten tot nu: {_eur(d.get('fees_eur', 0))}, {d.get('trades', 0)} {'trade' if d.get('trades') == 1 else 'trades'}.")
+    return "\n".join(lines)
+
+
+def stress_text(state: dict) -> str:
+    st = state.get("stress")
+    if not st:
+        return "De stresstest is nog niet gedraaid. Probeer het na de volgende ronde."
+    short = {k: DESK_NAMES[k] for k in DESK_NAMES}
+    lines = [f"🧯 Stresstest op de holding van nu ({_eur(st['equity_eur'])}, {st['cash_pct']:.0%} cash)"]
+    for r in st.get("real", []):
+        what = "maand" if r["days"] <= 31 else "kwartaal"
+        lines.append(f"• Slechtste echte {what}: {_pct(r['return'])} ({r['from']} tot {r['to']})")
+    for sc in st.get("scenarios", []):
+        paused = ", ".join(short.get(c, c) for c in sc["paused"])
+        lines.append(f"• {sc['name']} ({sc['when']}): {_pct(sc['return'])}, over {_eur(sc['after_eur'])}"
+                     + (f". Op pauze: {paused}" if paused else ""))
+    lines.append(f"Een afdeling die meer dan {st['limit']:.0%} zakt, gaat op pauze tot jij haar hervat. "
+                 "De scenario's zijn afgeronde aannames, geen metingen.")
+    return "\n".join(lines)
+
+
+def lessons_text(state: dict, n: int = 6) -> str:
+    book = state.get("lessons") or {}
+    items = book.get("items") or []
+    if not items:
+        return "Het lessenboek is nog leeg. De eerste lessen komen een week na de eerste weigeringen en aankopen."
+    n_all = book.get("count", len(items))
+    lines = [f"📚 Lessenboek ({n_all} {'les' if n_all == 1 else 'lessen'}). De nieuwste:"]
+    lines += [f"• {x['ts'][8:10]}-{x['ts'][5:7]}: {x['text']}" for x in items[:n]]
+    summ = book.get("summary") or {}
+    for r in (summ.get("rules") or [])[:3]:
+        lines.append(f"Regel {r['rule']}: {r['n']}x geweigerd, {r['saved']}x bespaarde dat geld "
+                     f"(koers gemiddeld {_pct(r['avg_move'])} een week later).")
+    if summ.get("entry"):
+        e = summ["entry"]
+        lines.append(f"Instappen: gemiddeld {_pct(abs(e['avg_gap'])).lstrip('+')} "
+                     f"{'duurder' if e['avg_gap'] > 0 else 'goedkoper'} dan de twee weken erna ({e['n']} aankopen).")
+    lines.append("Lessen veranderen zelf niets: een wijziging moet eerst winnen in de backtest.")
+    return "\n".join(lines)
+
+
+def month_text(state: dict, now: datetime, want: str | None = None) -> str:
+    from jplh.notify import MONTHS, month_close
+    if want:
+        w = want.lower()
+        if len(w) == 7 and w[4] == "-":
+            month = w
+        elif w in MONTHS:
+            m = MONTHS.index(w) + 1
+            month = f"{now.year if m <= now.month else now.year - 1}-{m:02d}"
+        else:
+            return "Welke maand? Bijvoorbeeld /maand oktober of /maand 2026-10."
+    else:
+        month = f"{now.year}-{now.month:02d}"
+    text = month_close(state, month)
+    if text is None:
+        return f"Over {month} heb ik nog geen cijfers."
+    if month == f"{now.year}-{now.month:02d}":
+        text = text.replace("Maandafsluiting", "Lopende maand").replace(", eindstand", ", stand nu")
+    return text
+
+
 def _state(config: HoldingConfig, home: Path, market: Store, now: datetime) -> dict:
     desks = open_desks(config, home, market)
     return build_state(config, desks, market, home, now)
@@ -189,6 +279,17 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
             lines.append(f"• {d['name']}: {_eur(d['equity_eur'])} ({_pct(d['pnl_pct'])})")
         lines.append("🛑 Noodstop staat AAN" if kill.exists() else f"Status: {h['status']}")
         return "\n".join(lines)
+    if cmd in ("/afdeling", "/stress", "/lessen", "/maand"):
+        if cmd == "/afdeling" and len(parts) < 2:
+            return "Welke afdeling? Bijvoorbeeld /afdeling crypto (of meme, aandelen, metalen, fx)."
+        st = _state(config, home, market, now)
+        if cmd == "/afdeling":
+            return desk_text(st, parts[1])
+        if cmd == "/stress":
+            return stress_text(st)
+        if cmd == "/lessen":
+            return lessons_text(st)
+        return month_text(st, now, parts[1] if len(parts) > 1 else None)
     if cmd in ("/alarm", "/alarmen"):
         if sources is None:
             from jplh.data import live_sources
