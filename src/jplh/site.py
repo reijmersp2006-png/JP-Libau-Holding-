@@ -290,7 +290,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
 def write_site(state: dict, out: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     src = resources.files("jplh").joinpath("hq")
-    for name in ("index.html", "factsheet.html"):
+    for name in ("index.html", "factsheet.html", "jarvis.html"):
         with resources.as_file(src.joinpath(name)) as p:
             shutil.copyfile(p, out / name)
     (out / "state.json").write_text(json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")
