@@ -979,6 +979,31 @@ function whatifUpdate(reset) {
   }
 }
 
+// Coach per afdeling: vuistregels uit de vakkennis, getoetst op onze eigen koersen.
+const COACH_V = {"klopt": ["up", "✓ klopt"], "klopt niet": ["dn", "✗ klopt niet"], "deels": ["mute", "± deels"], "niet aangetoond": ["mute", "? niet aangetoond"], "te weinig data": ["mute", "… te weinig data"]};
+function coachCard(id) {
+  const C = S.coach;
+  if (!C || !C.desks[id]) return "";
+  const rules = C.desks[id];
+  const row = r => { const [c, label] = COACH_V[r.verdict] || ["mute", r.verdict];
+    return `<div class="card hint"><div class="row"><b>${r.from ? "🤝 " : ""}${esc(r.title)}</b><span class="${c}" style="white-space:nowrap">${label}</span></div>
+      ${r.from ? `<div class="mute">Tip van ${esc(C.coaches[r.from] || r.from)}</div>` : ""}<div>${esc(r.text || "")}</div><div class="mute" style="margin-top:2px">${esc(r.why)}</div></div>`; };
+  return `<h3 class="px">${esc(C.coaches[id] || "Coach")}</h3>
+  <div class="hint">De coach kent de vuistregels van deze markt, maar gelooft ze pas als onze eigen koersen ze steunen.</div>
+  ${rules.map(row).join("")}`;
+}
+function teamCard() {
+  const items = ((S.lessons && S.lessons.items) || []).filter(x => x.topic === "teamoverleg" || x.topic === "samenwerking").slice(0, 3);
+  if (!S.coach) return "";
+  const confirmed = Object.values(S.coach.desks).flat().filter(r => !r.from && r.verdict === "klopt").length;
+  const total = Object.values(S.coach.desks).flat().filter(r => !r.from).length;
+  return `<h3 class="px">Teamoverleg</h3><div class="card hint">
+    <div class="row"><span>Vuistregels getoetst</span><span>${total}</span></div>
+    <div class="row"><span>Bevestigd door onze koersen</span><span class="up">${confirmed}</span></div>
+    ${items.map(x => `<div style="margin-top:6px">${x.topic === "samenwerking" ? "🤝" : "🗣️"} ${when(x.ts)} · ${esc(x.text)}</div>`).join("") || '<div style="margin-top:6px">Het eerste teamoverleg is na de volgende ronde.</div>'}
+    <div class="mute" style="margin-top:6px">Elke week deelt elke coach zijn sterkste les. Gebeurt er iets dat een andere afdeling raakt, dan waarschuwt de coach die afdeling meteen.</div></div>`;
+}
+
 function hqPanel() {
   const t = S.total;
   const ranked = [...S.desks].sort((a, b) => b.pnl_pct - a.pnl_pct);
@@ -996,6 +1021,7 @@ function hqPanel() {
   </table>
   <p class="hint">Tik op een gebouw voor het dossier van dat team. K&H = wat koop-en-houd sinds de start had opgeleverd.</p>
   ${orgChart()}
+  ${teamCard()}
   ${whatifCard()}
   ${S.radar && S.radar.length ? `<h3 class="px">Memecoin-radar (alleen kijken)</h3><table><tr><th>Munt</th><th class="r">24u</th><th>Waarschuwing</th></tr>
     ${S.radar.slice(0, 6).map(r => `<tr><td>${esc(r.symbol)} <span class="pill">${esc(r.chain)}</span></td><td class="r ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100, 0)}</td><td class="hint">${esc(r.flags.join(", ") || "geen")}</td></tr>`).join("")}</table>` : ""}`;
@@ -1012,7 +1038,7 @@ function orgChart() {
     <div class="lvl">${who("", "Risicodirecteur", e === null ? "nog geen stand" : `${Math.round(e * 100)}% crypto + memes in`, "select('risk')")}
       ${who("", "Wachttoren", S.kill ? "noodstop aan" : "risicogrenzen", "select('risk')")}
       ${who("", "Onderzoekslab", lab ? `${lab} melding${lab > 1 ? "en" : ""}` : "backtests · verkenners", "select('lab')")}</div>
-    <div class="lvl">${S.desks.map(d => who("", esc(d.name), `Lv ${d.level} · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span><br>${d.instruments.length} handelaars`, `select('${d.id}')`)).join("")}</div>
+    <div class="lvl">${S.desks.map(d => who("", esc(d.name), `Lv ${d.level} · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span><br>${d.instruments.length} handelaars + coach`, `select('${d.id}')`)).join("")}</div>
     ${sh.length ? `<div class="lvl">${sh.map(x => who("ghost", esc(x.name), "in aanbouw · schaduw")).join("")}</div>` : ""}
     <div class="hint" style="margin-top:8px">Elke afdeling heeft één handelaar per instrument. Nieuwe afdelingen proefdraaien eerst als schaduw; alleen Phil bepaalt of ze echt geld krijgen.</div></div>`;
 }
@@ -1041,6 +1067,7 @@ function deskPanel(d) {
     <p class="hint">Uitdagers op papier sinds ${esc(S.arena.start)}. Meer in het Onderzoekslab.</p>` : ""}
   <div class="card"><div class="row"><span>Gebouw</span><span>${floors(d) ? `+${floors(d)} verdieping${floors(d) > 1 ? "en" : ""}` : d.pnl_pct < -.03 ? "in de steigers" : "basis"}</span></div>
     <div class="hint">Elke 2,5% winst een verdieping erbij. Meer dan 3% onder de start: steigers tot het herstelt.</div></div>
+  ${coachCard(d.id)}
   <h3 class="px">Het team · één handelaar per instrument</h3>
   <table><tr><th>Handelaar</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
   ${d.instruments.map(i => `<tr><td>${esc(i.symbol)} ${i.in_market ? '<span class="pill in">in</span>' : ""}</td>
@@ -1109,7 +1136,7 @@ const RULE_NL = {kostenwacht: "kostenwacht", ordergrootte: "ordergrootte", geen_
 function lessonSection() {
   const B = S.lessons || {items: [], summary: {rules: [], entry: null}, count: 0};
   const sm = B.summary || {rules: []};
-  const topic = {weigering: "🛡️", instap: "🎯", backtest: "📊", academie: "🎓"};
+  const topic = {weigering: "🛡️", instap: "🎯", backtest: "📊", academie: "🎓", samenwerking: "🤝", teamoverleg: "🗣️"};
   return `<h3 class="px">Lessenboek · wat we geleerd hebben</h3>
   ${sm.rules.length || sm.entry ? `<div class="card">
     ${sm.rules.slice(0, 5).map(r => `<div class="row"><span>${esc(RULE_NL[r.rule] || r.rule)} <span class="hint">${r.n}×</span></span>

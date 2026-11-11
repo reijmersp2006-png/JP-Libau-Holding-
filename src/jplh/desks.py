@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from jplh.academy import signal_note
+from jplh.coach import trade_tip
 from jplh.backtest import PERIODS_PER_YEAR, metrics, simulate, unit_prices
 from jplh.config import HoldingConfig
 from jplh.holding import Holding
@@ -281,6 +282,7 @@ class Desk:
         per_instrument = self.config.start_capital_eur / max(len(self.instruments), 1)
         bull, weather = self.regime(now) if self.mode != "vasthouden" else (None, "")
         academy = self.market.get_state("academy")
+        coach = self.market.get_state("coach")
         e = self.exposure()
         for inst in self.instruments:
             label = self.selection().get(inst.symbol)
@@ -310,6 +312,9 @@ class Desk:
                 note = signal_note(academy, inst.symbol, label, 1)
                 if note:
                     why += ". " + note
+                tip = trade_tip(coach, self.market, self.cls, inst.symbol, now)
+                if tip:
+                    why += ". " + tip
                 sig = Signal(inst.symbol, Side.BUY, label, why, size)
             elif not want and have:
                 why = (f"noodrem: {blocked}. Eruit tot het marktweer weer goed is" if blocked

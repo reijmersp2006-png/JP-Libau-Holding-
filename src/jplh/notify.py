@@ -139,6 +139,10 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
               and (a.get("symbol") in held or a.get("kind") == "markt")]
     for a in alerts[:3]:
         out.append(f"🔭 Verkenners: {a['text']}")
+    # Samenwerking: een coach waarschuwt een andere afdeling (alleen bij een getoetste vuistregel).
+    team = [x for x in (state.get("lessons") or {}).get("items", []) if x.get("topic") == "samenwerking" and x["ts"] > seen]
+    for x in team[:2]:
+        out.append(f"🤝 {x['text']}")
     memory["seen_ts"] = state.get("generated_at", now.isoformat())
 
     weather = {w["name"]: w["ok"] for w in state.get("market_weather", [])}

@@ -62,6 +62,12 @@ De Academie leert elke dag van alle medewerkers, niet alleen na een verkoop. Na 
 
 Eerlijk blijven: voorspellingen die elkaar overlappen en instrumenten die samen bewegen tellen als één meting. Zolang de onzekerheid te groot is, zegt de Academie "nog toeval". In de arena geldt de toeval-toets: een uitdager wordt alleen voorgedragen als de kans dat zijn voorsprong geluk is kleiner is dan 10% (blok-bootstrap op het dagelijkse verschil). Bij elke trade staat hoe vaak dat signaal in het verleden klopte, naast hoe vaak gewoon vasthouden klopte. De Academie verandert zelf niets aan de handel: de spelregel blijft. Te zien in het Academie-gebouw op het dashboard en met `/leren` in Jarvis.
 
+## Coaches en samenwerking
+
+Elke afdeling heeft een coach (Satoshi, Pepe, Warren, Goudhaan en Forex) die de vuistregels van zijn markt kent, zoals "na een pomp volgt een dump" of "goud is een schuilplaats". De coach neemt ze niet blind over: elke vuistregel wordt elke dag getoetst op onze eigen koersen, en heet pas "klopt" als de data hem steunt (90% zekerheid, momenten die vlak na elkaar komen tellen als één). Spreekt de data hem tegen, dan zegt de coach dat ook.
+
+Samenwerking: een deel van de regels gaat over twee afdelingen tegelijk (bitcoin en memes, de beurs en crypto, crypto en goud). Gebeurt zoiets vandaag en is de regel bevestigd, dan waarschuwt de ene coach de andere afdeling, in het lessenboek en via Jarvis. Elke week is er teamoverleg: elke coach deelt zijn sterkste les, en de Academie laat zien welke strategie bij welke afdeling het best werkt. Coaches handelen nooit; een tip staat alleen bij de uitleg van een trade. Te zien in elk afdelingspaneel, het teamoverleg op het hoofdkantoor, en met `/coach meme` in Jarvis.
+
 ## Het dashboard openen
 
 - **Online**: `https://reijmersp2006-png.github.io/JP-Libau-Holding-/` (eenmalig aanzetten: Settings,
@@ -110,7 +116,7 @@ jplh jarvis          # Telegram-berichten van Phil beantwoorden en alarmen nalop
 pytest               # alle tests
 ```
 
-Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/leren`, `/maand`,
+Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/leren`, `/coach meme`, `/maand`,
 `/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
 `/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
 
