@@ -49,6 +49,14 @@ td { padding: 5px 4px; border-bottom: 1px solid var(--grid); } .r { text-align: 
 .pill.ok { border-color: var(--good); color: var(--good); }
 footer { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 10px; color: var(--ink3); font-size: 11px; }
 .actions { margin-top: 6px; } .actions a, .actions button { font: inherit; font-size: 12px; color: var(--series); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; margin-left: 10px; }
+.grid2 > div { min-width: 0; } .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (max-width: 560px) {
+  .page { padding: 18px 14px 32px; } header { align-items: flex-start; } .meta { text-align: left; }
+  .actions a, .actions button { margin: 0 12px 0 0; }
+  table { font-size: 12px; } th, td { padding: 5px 3px; } td.r, th.r { white-space: nowrap; }
+  .scroll > table, .page table { display: block; overflow-x: auto; }
+  .tile .v { font-size: 20px; }
+}
 #err { display: none; border: 1px solid var(--bad); color: var(--bad); padding: 10px; margin-top: 16px; }
 @media print { .actions, .meta select { display: none; } body { background: #fff; } .page { padding: 0; } .tile, .chart { break-inside: avoid; } @page { size: A4; margin: 14mm; } }
 </style>
@@ -145,7 +153,7 @@ function render(S, key) {
 
   const tiles = [
     ["Vermogen", eur(endEq), `start ${eur(start, 0)}`, ""],
-    ["Sinds start", pct(since), `${S.days_active} dagen actief`, cls(since)],
+    ["Sinds start", pct(since), `${S.days_active} ${S.days_active === 1 ? "dag" : "dagen"} actief`, cls(since)],
     [isNow ? "Deze maand" : monthName(key), pct(mtd), isNow ? "tot nu toe" : "hele maand", cls(mtd)],
     ["Tegen vasthouden", bench == null ? "–" : pct(since - bench), bench == null ? "alleen voor de lopende maand" : `koop-en-houd: ${pct(bench)}`, cls(bench == null ? null : since - bench)],
     ["Diepste daling", pct(-dd), `grens ${pct(-S.limits.max_drawdown_pct, 0)}`, dd > 0 ? "dn" : ""],
@@ -188,12 +196,12 @@ function render(S, key) {
     <div class="tiles">${tiles.map(([l, v, s, c]) => `<div class="tile"><div class="l">${l}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`).join("")}</div>
     <h2>Vermogen sinds de start</h2>${chart(curve, start)}
     <div class="grid2">
-      <div><h2>Afdelingen</h2><table><tr><th>Afdeling</th><th>Aandeel</th><th class="r">Waarde</th><th class="r">Resultaat</th><th class="r">K&amp;H</th><th class="r">Cash</th><th class="r">Kosten</th></tr>${deskRows}</table>
+      <div><h2>Afdelingen</h2><div class="scroll"><table><tr><th>Afdeling</th><th>Aandeel</th><th class="r">Waarde</th><th class="r">Resultaat</th><th class="r">K&amp;H</th><th class="r">Cash</th><th class="r">Kosten</th></tr>${deskRows}</table></div>
         <p class="note">Resultaat sinds de start van elke afdeling. K&amp;H = wat gewoon kopen en vasthouden had opgeleverd.</p></div>
       <div><h2>Maandrendementen</h2><table><tr><th>Maand</th><th class="r">Rendement</th></tr>${monthRows}</table></div>
     </div>
     <div class="grid2">
-      <div><h2>Grootste posities</h2>${pos.length ? `<table><tr><th>Positie</th><th>Afdeling</th><th class="r">Waarde</th><th class="r">Gewicht</th><th class="r">Sinds aankoop</th></tr>${posRows}</table>` : '<p class="note">Geen posities.</p>'}</div>
+      <div><h2>Grootste posities</h2>${pos.length ? `<div class="scroll"><table><tr><th>Positie</th><th>Afdeling</th><th class="r">Waarde</th><th class="r">Gewicht</th><th class="r">Sinds aankoop</th></tr>${posRows}</table></div>` : '<p class="note">Geen posities.</p>'}</div>
       <div><h2>Risico</h2>${risk}</div>
     </div>
     <h2>Langetermijnprofiel (backtest)</h2>${backtest}

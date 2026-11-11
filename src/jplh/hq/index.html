@@ -140,6 +140,9 @@ canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
   .sign{font-size:9px;padding:2px 4px} .sign b{font-size:9px} .sign .lv,.sign .up,.sign .dn{font-size:8px}
   .bubble{font-size:9px;max-width:140px}
 }
+@media (max-width: 600px){
+  .sign{padding:1px 3px;line-height:1.15} .sign b{font-size:8px} .sign .up,.sign .dn,.sign .mute{font-size:8px}
+}
 #err{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:#0b0816;padding:16px;
   border:2px solid var(--bad);display:none;max-width:420px}
 </style>
@@ -826,6 +829,7 @@ function placeSigns() {
   const box = document.getElementById("labels");
   if (!S) return;
   const html = [];
+  const small = window.innerWidth < 600;   // telefoon: korte borden, anders vallen ze over elkaar
   for (const id of [...DESKS, "risk", "lab"]) {
     const b = geo(id), d = desk(id);
     const [dx, dy] = SIGN_AT[id] || [0, 0];
@@ -841,10 +845,15 @@ function placeSigns() {
       const n = labAlerts24h();
       inner = `<b>Onderzoekslab</b>${n ? `<span class="dn">${n} melding${n > 1 ? "en" : ""}</span>` : '<span class="mute">rustig</span>'}`;
     }
+    if (small) {
+      if (d) inner = `<b>${esc(b.label)}</b><span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
+      else if (id === "risk") inner = `<b>Wachttoren</b>${S.kill || S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">veilig</span>'}`;
+      else { const n = labAlerts24h(); inner = `<b>Lab</b>${n ? `<span class="dn">${n} meld.</span>` : '<span class="mute">rustig</span>'}`; }
+    }
     const alarm = d && d.status === "alarm";
     html.push(`<div class="sign ${selected === id ? "sel" : ""} ${alarm ? "alarm" : ""}" data-id="${id}" style="left:${x}px;top:${y}px">${inner}</div>`);
   }
-  for (const sd of shadows()) {
+  for (const sd of small ? [] : shadows()) {   // op de telefoon laten de steigers zien dat er gebouwd wordt
     const b = P[sd.id];
     if (!b) continue;
     const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 13) * scale;
