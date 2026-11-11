@@ -119,3 +119,4 @@ def test_afdeling_stress_lessen_and_maand(tmp_path):
     assert "Welke maand" in answer("/maand blah", cfg, home, market, NOW)
     assert "/stress" in answer("/help", cfg, home, market, NOW) and "/leren" in answer("/help", cfg, home, market, NOW)
     assert "Academie" in answer("/leren", cfg, home, market, NOW)
+    assert "Coach Pepe" in answer("/coach meme", cfg, home, market, NOW)

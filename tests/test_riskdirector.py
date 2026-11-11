@@ -107,6 +107,7 @@ def test_site_ships_the_factsheet(tmp_path):
     from jplh.site import write_site
     write_site({"total": {}}, tmp_path)
     assert (tmp_path / "factsheet.html").exists()
+    assert (tmp_path / "jarvis.html").exists()
 
 
 def test_desks_buy_equal_shares_within_the_cash_floor(tmp_path):

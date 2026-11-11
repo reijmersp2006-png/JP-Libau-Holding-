@@ -18,6 +18,7 @@ from jplh.config import HoldingConfig
 from jplh.jarvis import briefing, health
 from jplh.desks import DESK_ORDER, Desk, benchmark_equity
 from jplh.academy import for_dashboard as academy_view
+from jplh.coach import for_dashboard as coach_view
 from jplh.lessons import lessons, summary
 from jplh.prices import PriceError
 from jplh.research import track_record
@@ -278,6 +279,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
     except (ValueError, KeyError, ZeroDivisionError):     # de stresstest mag het dashboard nooit stoppen
         state["stress"] = None
     state["academy"] = academy_view(market.get_state("academy"), desks)
+    state["coach"] = coach_view(market.get_state("coach"))
     book = lessons(market, 2000)
     state["lessons"] = {"items": book[:30], "summary": summary(book), "count": len(book)}
     h = health(state, problems)
@@ -288,7 +290,7 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
 def write_site(state: dict, out: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     src = resources.files("jplh").joinpath("hq")
-    for name in ("index.html", "factsheet.html"):
+    for name in ("index.html", "factsheet.html", "jarvis.html"):
         with resources.as_file(src.joinpath(name)) as p:
             shutil.copyfile(p, out / name)
     (out / "state.json").write_text(json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")

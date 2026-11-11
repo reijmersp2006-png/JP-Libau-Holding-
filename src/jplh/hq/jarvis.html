@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis · JP-libau Holding</title>
+<style>
+:root{--bg:#04070c;--panel:#070c14;--line:#13202f;--ink:#c9d6e3;--ink2:#7f93a8;--ink3:#4d5f72;--cyan:#53d8ff;--pink:#ff4f7b;--gold:#ffd24d;--good:#5fe08a;--bad:#ff5d6c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+a{color:var(--cyan)}
+#app{display:grid;grid-template-rows:auto auto 1fr auto;height:100vh}
+#top{display:flex;gap:18px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;font-size:11px;color:var(--ink3)}
+#top b{color:var(--ink);font-weight:600}#top .up{color:var(--good)}#top .dn{color:var(--bad)}
+#top .brand{color:var(--pink);margin-left:auto}
+#tabs{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;padding:4px 12px;border-bottom:1px solid var(--line)}
+#tabs button{background:#0b131d;border:0;color:var(--ink2);font:inherit;font-size:11px;padding:3px 0;cursor:pointer}
+#tabs button.on{background:var(--cyan);color:#001018}
+#stage{position:relative;overflow:hidden;min-height:340px}
+#cv{position:absolute;inset:0;width:100%;height:100%}
+#head{position:absolute;left:14px;top:12px;pointer-events:none}
+#head h1{margin:0;font-size:20px;letter-spacing:1px;border-left:3px solid var(--cyan);padding-left:10px;color:#e8f6ff}
+#head div{color:var(--cyan);padding-left:13px;font-size:11px}
+#labels{position:absolute;inset:0;pointer-events:none}
+.tag{position:absolute;transform:translate(-50%,-50%);font-size:10px;padding:1px 5px;border:1px solid #2a4258;background:#05101a;color:#bfe9ff;white-space:nowrap}
+.tag.flag{border-color:var(--pink);color:var(--pink);background:#1a0610}
+.node{position:absolute;transform:translate(-50%,-50%);text-align:center;white-space:nowrap;pointer-events:auto;cursor:pointer}
+.node b{display:block;font-size:13px;color:#cfe3f3;font-weight:500}
+.node span{font-size:10px;color:var(--ink3)}
+.node.focus b{color:var(--cyan)}
+#panels{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 1.2fr;gap:6px;padding:6px;border-top:1px solid var(--line);height:250px}
+.p{background:var(--panel);border:1px solid var(--line);padding:7px 8px;overflow:hidden;position:relative}
+.p h3{margin:0 0 6px;font-size:10px;letter-spacing:1px;color:#dfeaf5;font-weight:600;display:flex;justify-content:space-between}
+.p h3 i{font-style:normal;color:var(--cyan);font-weight:400}
+.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink2)}
+.log .t{color:var(--ink3);margin-right:6px}.log .k{display:inline-block;width:62px;color:var(--gold)}
+.log .k.alert{color:var(--pink)}.log .k.trade{color:var(--good)}.log .k.les{color:var(--cyan)}
+.bar{height:3px;background:#122030;margin:2px 0 6px}.bar i{display:block;height:100%;background:var(--cyan)}
+.row{display:flex;justify-content:space-between;color:var(--ink2)}.row b{color:var(--ink);font-weight:500}
+.up{color:var(--good)}.dn{color:var(--bad)}.mute{color:var(--ink3)}
+.heat{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;margin-bottom:6px}
+.heat i{display:block;height:13px;font-style:normal;font-size:8px;text-align:center;line-height:13px;color:#001018;overflow:hidden}
+.code{color:var(--ink2);white-space:pre;font-size:11px}.code .kw{color:var(--pink)}.code .fn{color:var(--cyan)}.code .s{color:var(--gold)}.code .c{color:var(--ink3)}
+.cur{display:inline-block;width:6px;height:11px;background:var(--pink);vertical-align:middle;animation:b 1s steps(2) infinite}
+@keyframes b{50%{opacity:0}}
+svg{display:block}
+#err{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);border:1px solid var(--pink);padding:12px;display:none;background:#100508}
+@media (max-width: 900px){
+  #app{height:auto}
+  #stage{height:62vh}
+  #tabs{grid-template-columns:repeat(4,1fr)}
+  #panels{grid-template-columns:1fr 1fr;height:auto}
+  .p{min-height:190px}
+  .node b{font-size:11px} .node span{display:none}
+  #head h1{font-size:15px} #head div{font-size:10px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top"></div>
+  <div id="tabs"></div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="labels"></div>
+    <div id="head"><h1 id="h1">00 JARVIS · HET BREIN</h1><div id="h2">stuurt de hele holding aan</div></div>
+    <div id="err"></div>
+  </div>
+  <div id="panels">
+    <div class="p log"><h3>JARVIS-LOG <i id="lograte"></i></h3><div id="log"></div></div>
+    <div class="p"><h3>AFDELINGEN <i id="ndesk"></i></h3><div id="desks"></div></div>
+    <div class="p"><h3>RISICORADAR <i>live</i></h3><div id="radar"></div></div>
+    <div class="p"><h3>KOERSHITTE <i id="nheat"></i></h3><div id="heat"></div></div>
+    <div class="p"><h3>GEZONDHEID <i>live</i></h3><div id="health"></div></div>
+    <div class="p"><h3>JARVIS.PY <i id="rate"></i></h3><div class="code" id="code"></div></div>
+  </div>
+</div>
+<script>
+// Concept: Jarvis in het midden stuurt alles aan. Alleen kijken; deze pagina verandert niets.
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const pct = (v, d = 1) => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d).replace(".", ",") + "%";
+const eur = (v, d = 2) => v == null ? "–" : "€" + Number(v).toLocaleString("nl-NL", {minimumFractionDigits: d, maximumFractionDigits: d});
+const cls = v => v == null ? "mute" : v >= 0 ? "up" : "dn";
+const hhmm = iso => new Date(iso).toLocaleTimeString("nl-NL", {hour: "2-digit", minute: "2-digit"});
+let S = null, focus = "jarvis", t0 = performance.now();
+
+// ---------------------------------------------------------------- het netwerk
+// Elke knoop is een deel van de holding. Jarvis zit in het midden en praat met iedereen.
+const NODES = [];
+const TABS = [["jarvis", "jarvis"], ["afdelingen", "desks"], ["academie", "academy"], ["coaches", "coach"],
+              ["wachttoren", "risk"], ["onderzoekslab", "lab"], ["arena", "arena"], ["verkenners", "scouts"]];
+function build() {
+  NODES.length = 0;
+  const desks = S.desks;
+  const ring = [...desks.map(d => ({id: d.id, kind: "desk", d})),
+    {id: "risk", kind: "staff", name: "Wachttoren"}, {id: "academy", kind: "staff", name: "Academie"},
+    {id: "lab", kind: "staff", name: "Onderzoekslab"}, {id: "arena", kind: "staff", name: "Schaduw-arena"},
+    {id: "coach", kind: "staff", name: "Coaches"}, {id: "scouts", kind: "staff", name: "Verkenners"}];
+  ring.forEach((n, i) => {
+    const a = -Math.PI / 2 + i / ring.length * Math.PI * 2;
+    NODES.push({...n, a, r: n.kind === "desk" ? .36 : .30, seed: i * 97 + 13});
+  });
+}
+function nodeInfo(n) {
+  if (n.kind === "desk") {
+    const d = n.d;
+    return {name: d.name, sub: `${d.instruments.length} handelaars · ${pct(d.pnl_pct)}`, flag: d.status === "alarm" ? "alarm" : d.paused_reason ? "pauze" : null,
+            heat: d.pnl_pct, words: d.instruments.map(i => i.symbol.split(/[-=.]/)[0])};
+  }
+  if (n.id === "risk") {
+    const e = S.risk && typeof S.risk.exposure === "number" ? S.risk.exposure : null;
+    return {name: "Wachttoren", sub: e == null ? "risicogrenzen" : `${Math.round(e * 100)}% crypto in`, flag: S.kill ? "noodstop" : null, words: ["grenzen", "daling", "dagverlies"]};
+  }
+  if (n.id === "academy") {
+    const A = S.academy;
+    return {name: "Academie", sub: A ? `${A.forecasts} voorspellingen` : "start na volgende ronde", words: ["voorspel", "scoor", "toeval"]};
+  }
+  if (n.id === "coach") {
+    const C = S.coach, all = C ? Object.values(C.desks).flat().filter(r => !r.from) : [];
+    return {name: "Coaches", sub: C ? `${all.filter(r => r.verdict === "klopt").length}/${all.length} regels bevestigd` : "start na volgende ronde",
+            words: C ? Object.values(C.coaches).map(c => c.replace("Coach ", "")) : []};
+  }
+  if (n.id === "lab") return {name: "Onderzoekslab", sub: `${(S.lab && S.lab.reviewed) || 0} terugblikken`, words: ["terugblik", "les", "weekrapport"]};
+  if (n.id === "arena") {
+    const lead = Object.values((S.arena && S.arena.desks) || {}).filter(d => d.board && d.board[0] && !d.board[0].live).length;
+    return {name: "Schaduw-arena", sub: `${lead} uitdager${lead === 1 ? "" : "s"} voor`, words: ["schaduw", "uitdager"]};
+  }
+  const al = (S.lab && S.lab.alerts) || [];
+  const fresh = al.filter(a => Date.now() - new Date(a.ts) < 864e5).length;
+  return {name: "Verkenners", sub: `${fresh} meldingen 24u`, flag: fresh ? `${fresh} melding${fresh > 1 ? "en" : ""}` : null, words: ["volume", "sprong", "markt"]};
+}
+
+const cv = $("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, FIB = [];
+function resize() {
+  const r = cv.getBoundingClientRect();
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height; cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  makeFibers();
+}
+const mid = () => H / 2 + (W < 600 ? 22 : 0);     // op de telefoon iets omlaag, onder de titel
+const clampX = x => Math.max(46, Math.min(W - 46, x));
+function pos(n) {
+  const small = W < 600, R = Math.min(W, H) * (small ? .78 : 1);
+  const wob = Math.sin((performance.now() - t0) / 4000 + n.seed) * 4;
+  return [W / 2 + Math.cos(n.a) * R * n.r * (W / Math.max(H, 1) > 1.3 ? 1.35 : 1) + wob, mid() + Math.sin(n.a) * R * n.r + wob * .5];
+}
+// vezels: duizenden dunne lijntjes die van elke knoop naar buiten waaieren
+function rnd(s) { s = Math.sin(s) * 43758.5453; return s - Math.floor(s); }
+function makeFibers() {
+  FIB = [];
+  if (!S) return;
+  NODES.forEach(n => {
+    const count = n.kind === "desk" ? 260 : 150;
+    for (let i = 0; i < count; i++) {
+      const s = n.seed * 1000 + i;
+      const ang = n.a + (rnd(s) - .5) * 1.6, len = 30 + rnd(s + 1) ** 2 * Math.min(W, H) * .45;
+      FIB.push({n, ang, len, off: rnd(s + 2) * 20, w: rnd(s + 3)});
+    }
+  });
+  for (let i = 0; i < 500; i++) FIB.push({n: null, ang: rnd(i + 7) * Math.PI * 2, len: 40 + rnd(i + 8) * 120, off: 0, w: rnd(i + 9)});
+}
+const PACKETS = [];
+function spawn(from, to, color) { PACKETS.push({from, to, t: 0, color, speed: .006 + Math.random() * .008}); }
+
+function draw() {
+  const now = performance.now(), tt = (now - t0) / 1000;
+  ctx.clearRect(0, 0, W, H);
+  if (!S) return requestAnimationFrame(draw);
+  const cx = W / 2, cy = mid();
+  // vezels
+  ctx.lineWidth = .5;
+  for (const f of FIB) {
+    const [x, y] = f.n ? pos(f.n) : [cx, cy];
+    const hot = f.n && (focus === f.n.id || (focus === "desks" && f.n.kind === "desk"));
+    ctx.strokeStyle = hot ? `rgba(83,216,255,${.08 + f.w * .18})` : `rgba(150,170,190,${.025 + f.w * .06})`;
+    const sway = Math.sin(tt * .3 + f.w * 6) * .05;
+    ctx.beginPath(); ctx.moveTo(x + Math.cos(f.ang) * f.off, y + Math.sin(f.ang) * f.off);
+    ctx.lineTo(x + Math.cos(f.ang + sway) * f.len, y + Math.sin(f.ang + sway) * f.len); ctx.stroke();
+  }
+  // verbindingen Jarvis -> knopen
+  for (const n of NODES) {
+    const [x, y] = pos(n), hot = focus === n.id || (focus === "desks" && n.kind === "desk");
+    const g = ctx.createLinearGradient(cx, cy, x, y);
+    g.addColorStop(0, "rgba(83,216,255,.55)"); g.addColorStop(1, hot ? "rgba(83,216,255,.5)" : "rgba(83,216,255,.08)");
+    ctx.strokeStyle = g; ctx.lineWidth = hot ? 1.6 : .8;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    const mx = (cx + x) / 2 + Math.sin(n.a) * 30, my = (cy + y) / 2 - Math.cos(n.a) * 30;
+    ctx.quadraticCurveTo(mx, my, x, y); ctx.stroke();
+    // knoop
+    const info = n.info;
+    ctx.fillStyle = info && info.flag ? "#ff4f7b" : hot ? "#53d8ff" : "#8fb4cc";
+    ctx.beginPath(); ctx.arc(x, y, n.kind === "desk" ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+    if (n.kind === "desk") {          // handelaars als satellieten
+      n.d.instruments.forEach((ins, i) => {
+        const k = i / n.d.instruments.length * Math.PI * 2 + tt * .15;
+        const sx = x + Math.cos(k) * 22, sy = y + Math.sin(k) * 14;
+        ctx.fillStyle = ins.in_market ? "rgba(95,224,138,.9)" : "rgba(143,180,204,.5)";
+        ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+      });
+    }
+  }
+  // datapakketjes onderweg
+  for (let i = PACKETS.length - 1; i >= 0; i--) {
+    const p = PACKETS[i]; p.t += p.speed;
+    if (p.t >= 1) { PACKETS.splice(i, 1); continue; }
+    const [x0, y0] = p.from ? pos(p.from) : [cx, cy], [x1, y1] = p.to ? pos(p.to) : [cx, cy];
+    const n = p.from || p.to, mx = (x0 + x1) / 2 + Math.sin(n.a) * 30, my = (y0 + y1) / 2 - Math.cos(n.a) * 30, u = p.t;
+    const x = (1 - u) ** 2 * x0 + 2 * (1 - u) * u * mx + u * u * x1, y = (1 - u) ** 2 * y0 + 2 * (1 - u) * u * my + u * u * y1;
+    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+  }
+  if (Math.random() < .08 && NODES.length) {
+    const n = NODES[Math.floor(Math.random() * NODES.length)];
+    Math.random() < .5 ? spawn(null, n, "#53d8ff") : spawn(n, null, n.kind === "desk" ? "#5fe08a" : "#ffd24d");
+  }
+  // Jarvis: kern met draaiende ringen
+  const R = Math.min(W, H) * .085;
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 3);
+  glow.addColorStop(0, "rgba(83,216,255,.35)"); glow.addColorStop(1, "rgba(83,216,255,0)");
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#53d8ff"; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(cx, cy, R * 1.25, R * .8, 0, 0, Math.PI * 2); ctx.stroke();
+  for (let k = 0; k < 3; k++) {
+    ctx.strokeStyle = `rgba(83,216,255,${.5 - k * .12})`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, R * (.55 + k * .14), tt * (k % 2 ? -1 : 1) * (.6 + k * .3), tt * (k % 2 ? -1 : 1) * (.6 + k * .3) + Math.PI * 1.3); ctx.stroke();
+  }
+  const ok = S.jarvis && S.jarvis.health && S.jarvis.health.status === "ok";
+  const beat = 1 + Math.sin(tt * 3) * .12;
+  ctx.fillStyle = S.kill ? "#ff4f7b" : ok ? "#53d8ff" : "#ff4f7b";
+  ctx.beginPath(); ctx.arc(cx, cy, R * .22 * beat, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#e8f6ff"; ctx.font = `600 ${Math.round(R * .32)}px ui-monospace,monospace`; ctx.textAlign = "center";
+  ctx.fillText("J", cx, cy - R * .45);
+  requestAnimationFrame(draw);
+}
+
+function labels() {
+  const box = $("labels"), out = [];
+  for (const n of NODES) {
+    const [x, y] = pos(n), info = n.info = nodeInfo(n);
+    const hot = focus === n.id || (focus === "desks" && n.kind === "desk");
+    const lx = x + Math.cos(n.a) * 34, ly = y + Math.sin(n.a) * 26;
+    out.push(`<div class="node ${hot ? "focus" : ""}" data-id="${n.id}" style="left:${clampX(lx)}px;top:${ly}px"><b>${esc(info.name)}</b><span>${esc(info.sub)}</span></div>`);
+    if (info.flag) out.push(`<div class="tag flag" style="left:${x - Math.cos(n.a) * 26}px;top:${y - Math.sin(n.a) * 22}px">${esc(info.flag)}</div>`);
+    if (hot) (info.words || []).slice(0, 5).forEach((w, i) => {
+      const k = n.a + Math.PI + (i - 2) * .55;          // waaier aan woorden richting Jarvis
+      out.push(`<div class="tag" style="left:${clampX(x + Math.cos(k) * 78)}px;top:${y + Math.sin(k) * 58}px">${esc(w)}</div>`);
+    });
+  }
+  const cx = W / 2, cy = mid(), R = Math.min(W, H) * .085;
+  const ok = S.jarvis && S.jarvis.health ? S.jarvis.health.status : "?";
+  out.push(`<div class="tag" style="left:${cx - R * 1.9}px;top:${cy - R * .9}px">ronde · ${esc(hhmm(S.generated_at))}</div>`);
+  out.push(`<div class="tag ${ok === "ok" ? "" : "flag"}" style="left:${cx + R * 1.9}px;top:${cy + R * .9}px">status · ${esc(ok)}</div>`);
+  if (S.kill) out.push(`<div class="tag flag" style="left:${cx}px;top:${cy + R * 1.5}px">NOODSTOP AAN</div>`);
+  box.innerHTML = out.join("");
+  box.querySelectorAll(".node").forEach(el => el.onclick = () => setFocus(el.dataset.id));
+}
+
+// ---------------------------------------------------------------- bovenbalk en tabs
+const TITLES = {jarvis: ["00 JARVIS · HET BREIN", "stuurt de hele holding aan · alleen papiergeld"], desks: ["01 AFDELINGEN", "vijf teams · één handelaar per instrument"],
+  academy: ["02 ACADEMIE", "voorspellen · scoren · toeval-toets"], coach: ["03 COACHES", "vakkennis, getoetst op onze koersen"],
+  risk: ["04 WACHTTOREN", "vaste grenzen · alleen strenger"], lab: ["05 ONDERZOEKSLAB", "terugblikken op elke trade"],
+  arena: ["06 ARENA", "uitdagers in de schaduw · Phil beslist"], scouts: ["07 VERKENNERS", "elk uur alle markten"]};
+function setFocus(id) {
+  const desk = S.desks.find(d => d.id === id);
+  focus = desk ? id : id;
+  const tkey = desk ? "desks" : id;
+  const [a, b] = TITLES[tkey] || TITLES.jarvis;
+  $("h1").textContent = desk ? `01 ${desk.name.toUpperCase()}` : a;
+  $("h2").textContent = desk ? `${desk.instruments.length} handelaars · ${desk.status} · ${pct(desk.pnl_pct)}` : b;
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x.dataset.id === tkey));
+  labels();
+}
+function topBar() {
+  const t = S.total, al = ((S.lab && S.lab.alerts) || []).filter(a => Date.now() - new Date(a.ts) < 864e5).length;
+  const pos = S.desks.reduce((n, d) => n + d.positions.length, 0);
+  $("top").innerHTML = `<span>HOLDING <b>${esc(S.name)}</b></span><span>SCHATKIST <b>${eur(t.equity_eur)}</b></span>
+    <span>SINDS START <b class="${cls(t.pnl_pct)}">${pct(t.pnl_pct)}</b></span><span>24U <b class="${cls(t.day_pnl_pct)}">${pct(t.day_pnl_pct)}</b></span>
+    <span>POSITIES <b>${pos}</b></span><span>MELDINGEN <b>${al}</b></span><span>RONDE <b>${esc(hhmm(S.generated_at))}</b></span>
+    <span class="brand">jarvis · concept · <a href="index.html">dashboard</a></span>`;
+  $("tabs").innerHTML = TABS.map(([l, id]) => `<button data-id="${id}">${l}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setFocus(b.dataset.id));
+}
+
+// ---------------------------------------------------------------- de panelen
+const KIND = {trade: ["trade", "trade"], refused: ["geweigerd", "alert"], alert: ["melding", "alert"], reflection: ["terugblik", "les"],
+  weekreport: ["rapport", "les"], selection: ["keuze", ""], pause: ["pauze", "alert"], resume: ["hervat", ""]};
+function logPanel() {
+  const feed = (S.feed || []).slice(0, 40);
+  const lessons = ((S.lessons && S.lessons.items) || []).slice(0, 10).map(x => ({ts: x.ts, kind: "les", text: x.text}));
+  const all = [...feed, ...lessons].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 14);
+  $("log").innerHTML = all.map(f => { const [w, c] = KIND[f.kind] || [f.kind === "les" ? "les" : f.kind, f.kind === "les" ? "les" : ""];
+    return `<div><span class="t">${esc(hhmm(f.ts))}</span><span class="k ${c}">${esc(w)}</span>${esc(f.text)}</div>`; }).join("");
+  $("lograte").textContent = `${all.length} items`;
+}
+function deskPanel() {
+  $("ndesk").textContent = S.desks.length;
+  $("desks").innerHTML = S.desks.map(d => {
+    const fill = Math.max(2, Math.min(100, 50 + d.pnl_pct * 500));
+    return `<div class="row"><span>${esc(d.name)}</span><b class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</b></div><div class="bar"><i style="width:${fill}%;background:${d.pnl_pct >= 0 ? "var(--good)" : "var(--bad)"}"></i></div>`;
+  }).join("") + '<div class="mute">balk: 50% = start, elke 1% = 5 streepjes</div>';
+}
+const SHORT = {crypto: "Crypto", meme: "Memes", stocks: "Aandelen", metals: "Metalen", fx: "Valuta"};
+function radarPanel() {
+  // per afdeling: hoeveel van de dalinggrens is al gebruikt (0 = niets, 1 = op de grens)
+  const lim = (S.limits && S.limits.max_drawdown_pct) || .15, ds = S.desks, n = ds.length, R = 62, c = 80;
+  const pt = (i, v) => [c + Math.cos(-Math.PI / 2 + i / n * Math.PI * 2) * R * v, c + Math.sin(-Math.PI / 2 + i / n * Math.PI * 2) * R * v];
+  const rings = [.33, .66, 1].map(v => `<polygon points="${ds.map((_, i) => pt(i, v).join(",")).join(" ")}" fill="none" stroke="#1b2b3c"/>`).join("");
+  const vals = ds.map(d => Math.max(.04, Math.min(1, (d.drawdown || 0) / lim)));
+  const shape = `<polygon points="${vals.map((v, i) => pt(i, v).join(",")).join(" ")}" fill="rgba(95,224,138,.25)" stroke="#5fe08a"/>`;
+  const names = ds.map((d, i) => { const [x, y] = pt(i, 1.22); return `<text x="${x}" y="${y}" fill="#7f93a8" font-size="9" text-anchor="middle" dominant-baseline="middle">${esc(SHORT[d.id] || d.id)}</text>`; }).join("");
+  const e = S.risk && typeof S.risk.exposure === "number" ? S.risk.exposure : null;
+  $("radar").innerHTML = `<svg viewBox="-20 0 200 160" width="100%" height="160">${rings}${shape}${names}</svg>
+    <div class="row"><span>grens daling</span><b>${pct(-lim, 0)}</b></div><div class="row"><span>risicodirecteur</span><b>${e == null ? "–" : Math.round(e * 100) + "% in"}</b></div>`;
+}
+function heatPanel() {
+  const ins = S.desks.flatMap(d => d.instruments);
+  $("nheat").textContent = ins.length;
+  const col = v => v == null ? "#1b2b3c" : v >= 0 ? `rgba(95,224,138,${.25 + Math.min(.75, v * 25)})` : `rgba(255,93,108,${.25 + Math.min(.75, -v * 25)})`;
+  $("heat").innerHTML = `<div class="heat">${ins.map(i => `<i title="${esc(i.symbol)} ${pct(i.change_24h)}" style="background:${col(i.change_24h)}">${esc(i.symbol.split(/[-=.]/)[0].slice(0, 4))}</i>`).join("")}</div>
+    <div class="row"><span>omhoog 24u</span><b class="up">${ins.filter(i => i.change_24h > 0).length}</b></div>
+    <div class="row"><span>omlaag 24u</span><b class="dn">${ins.filter(i => i.change_24h < 0).length}</b></div>
+    <div class="row"><span>in de markt</span><b>${ins.filter(i => i.in_market).length}/${ins.length}</b></div>`;
+}
+function healthPanel() {
+  const h = (S.jarvis && S.jarvis.health) || {status: "?", issues: []};
+  const lim = (S.limits && S.limits.max_drawdown_pct) || .15, room = Math.max(0, 1 - (S.total.drawdown || 0) / lim);
+  const score = Math.round(room * 100), a = room * Math.PI * 1.5;
+  const arc = (r, f) => { const s = Math.PI * .75, e = s + Math.PI * 1.5 * f; return `M ${60 + r * Math.cos(s)} ${60 + r * Math.sin(s)} A ${r} ${r} 0 ${f > .66 ? 1 : 0} 1 ${60 + r * Math.cos(e)} ${60 + r * Math.sin(e)}`; };
+  const curve = (S.total.equity_curve || []).slice(-60).map(p => p[1]);
+  const lo = Math.min(...curve), hi = Math.max(...curve);
+  const wave = curve.length > 1 ? curve.map((v, i) => `${(i / (curve.length - 1) * 150).toFixed(1)},${(26 - (v - lo) / ((hi - lo) || 1) * 22).toFixed(1)}`).join(" ") : "";
+  $("health").innerHTML = `<svg viewBox="0 0 150 30" width="100%" height="30"><polyline points="${wave}" fill="none" stroke="#ffd24d" stroke-width="1.5"/></svg>
+    <svg viewBox="0 0 120 105" width="100%" height="105"><path d="${arc(44, 1)}" stroke="#13202f" stroke-width="7" fill="none"/>
+    <path d="${arc(44, Math.max(.01, room))}" stroke="${room > .6 ? "#5fe08a" : room > .3 ? "#ffd24d" : "#ff4f7b"}" stroke-width="7" fill="none"/>
+    <text x="60" y="62" fill="#e8f6ff" font-size="22" text-anchor="middle">${score}</text><text x="60" y="78" fill="#7f93a8" font-size="8" text-anchor="middle">risicoruimte</text></svg>
+    <div class="${h.status === "ok" ? "up" : "dn"}">status: ${esc(h.status)}</div>
+    ${(h.issues || []).slice(0, 2).map(i => `<div class="mute" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.text)}</div>`).join("")}`;
+}
+// Wat Jarvis elke ronde doet, als leesbare 'code' met de echte getallen erin.
+function codeLines() {
+  const t = S.total, A = S.academy, C = S.coach;
+  const e = S.risk && typeof S.risk.exposure === "number" ? Math.round(S.risk.exposure * 100) : "–";
+  return [
+    ["c", "# jarvis.py · elke ronde"],
+    ["", `<span class="kw">for</span> afdeling <span class="kw">in</span> holding:`],
+    ["", `    afdeling.<span class="fn">koersen</span>()      <span class="c"># ${S.desks.reduce((n, d) => n + d.instruments.length, 0)} handelaars</span>`],
+    ["", `    signaal = coach.<span class="fn">toets</span>(analist.<span class="fn">kijk</span>())`],
+    ["", `    <span class="kw">if</span> wachttoren.<span class="fn">ok</span>(signaal):`],
+    ["", `        trader.<span class="fn">voer_uit</span>(signaal)`],
+    ["", `risico.<span class="fn">stand</span> = <span class="s">${e}%</span>`],
+    ["", `academie.<span class="fn">voorspel</span>(<span class="s">${A ? A.forecasts : 0}</span>)`],
+    ["", `coaches.<span class="fn">bevestigd</span> = <span class="s">${C ? Object.values(C.desks).flat().filter(r => !r.from && r.verdict === "klopt").length : 0}</span>`],
+    ["", `schatkist = <span class="s">${eur(t.equity_eur)}</span>`],
+    ["", `<span class="kw">assert</span> geld == <span class="s">"papier"</span>`],
+  ];
+}
+let typed = 0;
+function codePanel() {
+  const lines = codeLines(), total = lines.length;
+  typed = (typed + 1) % (total + 6);
+  $("code").innerHTML = lines.slice(0, Math.min(typed, total)).map(([c, l]) => c ? `<span class="${c}">${l}</span>` : l).join("\n") + ' <span class="cur"></span>';
+  $("rate").textContent = `${total} regels`;
+}
+
+async function load() {
+  try {
+    const r = await fetch("state.json?t=" + Date.now());
+    S = await r.json();
+  } catch (e) { $("err").style.display = "block"; $("err").textContent = "Kon state.json niet laden."; return; }
+  build(); topBar(); resize(); setFocus(focus);
+  logPanel(); deskPanel(); radarPanel(); heatPanel(); healthPanel();
+}
+window.addEventListener("resize", () => { resize(); if (S) labels(); });
+setInterval(() => S && labels(), 120);
+setInterval(() => S && codePanel(), 450);
+setInterval(load, 5 * 60 * 1000);
+load(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>

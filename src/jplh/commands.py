@@ -26,6 +26,7 @@ HELP = ("Commando's:\n"
         "/stress - wat als het misgaat (slechtste maand, crashscenario's)\n"
         "/lessen - wat de holding de laatste tijd leerde\n"
         "/leren - wat de Academie weet: voorspellingen, scores en de toeval-toets\n"
+        "/coach meme - wat de coach van een afdeling weet, getoetst op onze koersen\n"
         "/maand - de maandafsluiting (of /maand oktober)\n"
         "/alarm BTC 80000 - seintje zodra BTC die koers raakt\n"
         "/alarmen - je alarmen bekijken\n"
@@ -231,6 +232,25 @@ def short(label: str) -> str:
     return out.replace("koop_en_houd", "koop-en-houd")
 
 
+VERDICT_ICON = {"klopt": "✅", "klopt niet": "❌", "deels": "➖", "niet aangetoond": "❔", "te weinig data": "⏳"}
+
+
+def coach_text(state: dict, want: str) -> str:
+    cls = DESK_ALIASES.get(want.lower())
+    C = state.get("coach")
+    if not C:
+        return "De coaches beginnen na de volgende ronde."
+    if cls is None:
+        return "Welke afdeling? Kies uit: crypto, meme, aandelen, metalen, fx."
+    rules = C["desks"].get(cls, [])
+    lines = [f"🧑‍🏫 {C['coaches'].get(cls, 'Coach')} ({DESK_NAMES.get(cls, cls)}): elke vuistregel getoetst op onze koersen."]
+    for r in rules:
+        tip = f" (tip van {C['coaches'].get(r['from'], r['from'])})" if r.get("from") else ""
+        lines.append(f"{VERDICT_ICON.get(r['verdict'], '•')} {r['title']}{tip}: {r.get('text') or r['verdict']}")
+    lines.append("Een coach handelt nooit. Wat hij leert, gaat alleen live als het wint in de backtest en jij ja zegt.")
+    return "\n".join(lines)
+
+
 def academy_text(state: dict) -> str:
     A = state.get("academy")
     if not A:
@@ -315,9 +335,9 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
             lines.append(f"• {d['name']}: {_eur(d['equity_eur'])} ({_pct(d['pnl_pct'])})")
         lines.append("🛑 Noodstop staat AAN" if kill.exists() else f"Status: {h['status']}")
         return "\n".join(lines)
-    if cmd in ("/afdeling", "/stress", "/lessen", "/leren", "/maand"):
-        if cmd == "/afdeling" and len(parts) < 2:
-            return "Welke afdeling? Bijvoorbeeld /afdeling crypto (of meme, aandelen, metalen, fx)."
+    if cmd in ("/afdeling", "/stress", "/lessen", "/leren", "/maand", "/coach"):
+        if cmd in ("/afdeling", "/coach") and len(parts) < 2:
+            return f"Welke afdeling? Bijvoorbeeld {cmd} crypto (of meme, aandelen, metalen, fx)."
         st = _state(config, home, market, now)
         if cmd == "/afdeling":
             return desk_text(st, parts[1])
@@ -327,6 +347,8 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
             return lessons_text(st)
         if cmd == "/leren":
             return academy_text(st)
+        if cmd == "/coach":
+            return coach_text(st, parts[1])
         return month_text(st, now, parts[1] if len(parts) > 1 else None)
     if cmd in ("/alarm", "/alarmen"):
         if sources is None:
