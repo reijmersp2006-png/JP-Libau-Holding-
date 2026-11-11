@@ -100,3 +100,16 @@ def test_week_report_on_sunday_evening_once():
     assert "+1,0%" in report and "Winnaar van de week: Crypto Lab" in report and "terugblik BTC-EUR" in report
     assert not any("Weekrapport" in m for m in messages(st, memory, sunday + timedelta(hours=1)))
     assert not any("Weekrapport" in m for m in messages(_state(), {"briefing_day": "2026-11-09"}, NOW))
+
+
+def test_telegram_only_gets_alerts_about_what_we_own_or_the_whole_market():
+    st = _state()
+    st["desks"][0]["positions"] = [{"symbol": "BTC-EUR"}]
+    ts = NOW.isoformat()
+    st["lab"]["alerts"] = [
+        {"ts": ts, "symbol": "BTC-EUR", "kind": "val", "level": "groot", "text": "BTC-EUR: val"},
+        {"ts": ts, "symbol": "PEPE-EUR", "kind": "volume", "level": "groot", "text": "PEPE-EUR: drukte"},
+        {"ts": ts, "symbol": "markt:uur", "kind": "markt", "level": "groot", "text": "Hele markt in beweging"},
+    ]
+    text = "\n".join(messages(st, {"seen_ts": (NOW - timedelta(hours=1)).isoformat()}, NOW))
+    assert "BTC-EUR: val" in text and "Hele markt" in text and "PEPE" not in text

@@ -133,7 +133,10 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
         out.append(f"💱 {names.get(f['desk'], f['desk'])}: {f['text']}.{why}")
     if len(trades) > 8:
         out.append(f"…en nog {len(trades) - 8} trades, zie het dashboard.")
-    alerts = [a for a in state.get("lab", {}).get("alerts", []) if a.get("level") == "groot" and a["ts"] > seen]
+    # Alleen wat ons raakt: grote meldingen over iets dat we bezitten, of over de hele markt.
+    held = {p["symbol"] for d in state.get("desks", []) for p in d.get("positions", [])}
+    alerts = [a for a in state.get("lab", {}).get("alerts", []) if a.get("level") == "groot" and a["ts"] > seen
+              and (a.get("symbol") in held or a.get("kind") == "markt")]
     for a in alerts[:3]:
         out.append(f"🔭 Verkenners: {a['text']}")
     memory["seen_ts"] = state.get("generated_at", now.isoformat())
