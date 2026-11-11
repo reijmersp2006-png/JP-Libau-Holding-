@@ -117,4 +117,5 @@ def test_afdeling_stress_lessen_and_maand(tmp_path):
     assert "📚" in answer("/lessen", cfg, home, market, NOW) or "leeg" in answer("/lessen", cfg, home, market, NOW)
     assert "november 2026" in answer("/maand", cfg, home, market, NOW)
     assert "Welke maand" in answer("/maand blah", cfg, home, market, NOW)
-    assert "/stress" in answer("/help", cfg, home, market, NOW)
+    assert "/stress" in answer("/help", cfg, home, market, NOW) and "/leren" in answer("/help", cfg, home, market, NOW)
+    assert "Academie" in answer("/leren", cfg, home, market, NOW)

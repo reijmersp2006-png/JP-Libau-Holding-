@@ -25,6 +25,7 @@ HELP = ("Commando's:\n"
         "/afdeling crypto - één afdeling: posities, cash en waarom\n"
         "/stress - wat als het misgaat (slechtste maand, crashscenario's)\n"
         "/lessen - wat de holding de laatste tijd leerde\n"
+        "/leren - wat de Academie weet: voorspellingen, scores en de toeval-toets\n"
         "/maand - de maandafsluiting (of /maand oktober)\n"
         "/alarm BTC 80000 - seintje zodra BTC die koers raakt\n"
         "/alarmen - je alarmen bekijken\n"
@@ -220,6 +221,41 @@ def lessons_text(state: dict, n: int = 6) -> str:
     return "\n".join(lines)
 
 
+def short(label: str) -> str:
+    """'trend(fast=20, slow=200, band=0.01)' -> 'trend 20/200', zoals op het dashboard."""
+    import re
+    out = re.sub(r"trend\(fast=(\d+), slow=(\d+)[^)]*\)", r"trend \1/\2", label)
+    out = re.sub(r"momentum\(lookback=(\d+)[^)]*\)", r"momentum \1d", out)
+    out = re.sub(r"uitbraak\(entry=(\d+), exit=(\d+)\)", r"uitbraak \1/\2", out)
+    out = re.sub(r"terugkeer\(period=\d+, low=(\d+), high=(\d+)\)", r"terugkeer \1/\2", out)
+    return out.replace("koop_en_houd", "koop-en-houd")
+
+
+def academy_text(state: dict) -> str:
+    A = state.get("academy")
+    if not A:
+        return "De Academie opent na de volgende ronde. Dan schrijft ze de eerste voorspellingen op."
+    h = A["h"]
+    lines = [f"🎓 Academie: {A['forecasts']} voorspellingen in het boek sinds {A.get('first') or '–'}."]
+    a = (A.get("live") or {}).get("all")
+    if a:
+        lines.append(f"Live klopten de strategieën in {a['hit']:.0%} van {a['n']} voorspellingen over {h} dagen "
+                     f"(gewoon vasthouden: {a['base']:.0%}). Oordeel: {a['verdict']}.")
+    else:
+        lines.append(f"De eerste live-scores over {h} dagen komen een week na de eerste voorspelling.")
+    for r in A.get("team", []):
+        if r["strategy"] == "koop_en_houd":
+            continue
+        lines.append(f"• {DESK_NAMES.get(r['desk'], r['desk'])}, {short(r['strategy'])}: in het verleden "
+                     f"{_pct(r['edge'])} per {h} dagen t.o.v. vasthouden ({r['verdict']})")
+    lucky = [(d["name"], r) for d in ((state.get("arena") or {}).get("desks") or {}).values()
+             for r in d.get("board", []) if r.get("luck") is not None]
+    for name, r in lucky[:4]:
+        lines.append(f"• Arena {name}: {r['name']} ligt voor, kans op geluk {r['luck']:.0%}")
+    lines.append("De Academie verandert zelf niets: een verandering moet eerst winnen in de backtest, en jij beslist.")
+    return "\n".join(lines)
+
+
 def month_text(state: dict, now: datetime, want: str | None = None) -> str:
     from jplh.notify import MONTHS, month_close
     if want:
@@ -279,7 +315,7 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
             lines.append(f"• {d['name']}: {_eur(d['equity_eur'])} ({_pct(d['pnl_pct'])})")
         lines.append("🛑 Noodstop staat AAN" if kill.exists() else f"Status: {h['status']}")
         return "\n".join(lines)
-    if cmd in ("/afdeling", "/stress", "/lessen", "/maand"):
+    if cmd in ("/afdeling", "/stress", "/lessen", "/leren", "/maand"):
         if cmd == "/afdeling" and len(parts) < 2:
             return "Welke afdeling? Bijvoorbeeld /afdeling crypto (of meme, aandelen, metalen, fx)."
         st = _state(config, home, market, now)
@@ -289,6 +325,8 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
             return stress_text(st)
         if cmd == "/lessen":
             return lessons_text(st)
+        if cmd == "/leren":
+            return academy_text(st)
         return month_text(st, now, parts[1] if len(parts) > 1 else None)
     if cmd in ("/alarm", "/alarmen"):
         if sources is None:

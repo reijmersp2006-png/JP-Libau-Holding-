@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from jplh.academy import signal_note
 from jplh.backtest import PERIODS_PER_YEAR, metrics, simulate, unit_prices
 from jplh.config import HoldingConfig
 from jplh.holding import Holding
@@ -279,6 +280,7 @@ class Desk:
         decisions = []
         per_instrument = self.config.start_capital_eur / max(len(self.instruments), 1)
         bull, weather = self.regime(now) if self.mode != "vasthouden" else (None, "")
+        academy = self.market.get_state("academy")
         e = self.exposure()
         for inst in self.instruments:
             label = self.selection().get(inst.symbol)
@@ -305,6 +307,9 @@ class Desk:
                 why = self._why(strat, unit, inst.symbol) + (f". {weather}" if weather else "")
                 if e < 1.0:
                     why += f". Risicodirecteur: {_nl(f'{e:.0%}')} van het normale bedrag"
+                note = signal_note(academy, inst.symbol, label, 1)
+                if note:
+                    why += ". " + note
                 sig = Signal(inst.symbol, Side.BUY, label, why, size)
             elif not want and have:
                 why = (f"noodrem: {blocked}. Eruit tot het marktweer weer goed is" if blocked
@@ -313,6 +318,9 @@ class Desk:
                 if opened_by and opened_by != label and not blocked:
                     why = (f"de weekkeuze verving {opened_by} door {label}, en die wil hier nu niet in zitten: "
                            + why)
+                note = "" if blocked else signal_note(academy, inst.symbol, label, 0)
+                if note:
+                    why += ". " + note
                 sig = Signal(inst.symbol, Side.SELL, label, why)
             else:
                 continue

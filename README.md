@@ -56,6 +56,12 @@ De Risicodirecteur kijkt over de afdelingen heen naar het wildste deel van de ho
 
 Op echte koersen sinds oktober 2024 (hele holding): zonder directeur +65,1%, Sharpe 1,13, diepste daling -23,7%; met directeur +65,8%, Sharpe 1,30, diepste daling -17,0%. In beide helften van die periode was hij minstens zo goed, en hij wint ook als hij over 30 of 90 dagen meet. De toets staat onderaan `jplh backtest --desks`, en wordt elke dag opnieuw gedaan: verliest hij ooit, dan stuurt hij niet meer bij. Uitzetten kan met `risk_director = false` onder `[holding]`. Jarvis meldt elke verschuiving, en de stand staat in de Wachttoren op het dashboard.
 
+## De Academie (de leerafdeling)
+
+De Academie leert elke dag van alle medewerkers, niet alleen na een verkoop. Na elke nieuwe dagkoers schrijft ze per instrument op wat élke strategie wil: erin of eruit. Dat staat vast vóórdat bekend is wat de koers doet. Na 1, 7 en 30 dagen wordt het gescoord: klopte het, en wat leverde het op t.o.v. gewoon vasthouden? Dat gebeurt per strategie, per afdeling en per marktweer. Hetzelfde wordt op het verleden uitgerekend, zodat te zien is of een strategie live doet wat de backtest beloofde.
+
+Eerlijk blijven: voorspellingen die elkaar overlappen en instrumenten die samen bewegen tellen als één meting. Zolang de onzekerheid te groot is, zegt de Academie "nog toeval". In de arena geldt de toeval-toets: een uitdager wordt alleen voorgedragen als de kans dat zijn voorsprong geluk is kleiner is dan 10% (blok-bootstrap op het dagelijkse verschil). Bij elke trade staat hoe vaak dat signaal in het verleden klopte, naast hoe vaak gewoon vasthouden klopte. De Academie verandert zelf niets aan de handel: de spelregel blijft. Te zien in het Academie-gebouw op het dashboard en met `/leren` in Jarvis.
+
 ## Het dashboard openen
 
 - **Online**: `https://reijmersp2006-png.github.io/JP-Libau-Holding-/` (eenmalig aanzetten: Settings,
@@ -104,7 +110,7 @@ jplh jarvis          # Telegram-berichten van Phil beantwoorden en alarmen nalop
 pytest               # alle tests
 ```
 
-Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/maand`,
+Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/leren`, `/maand`,
 `/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
 `/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
 
