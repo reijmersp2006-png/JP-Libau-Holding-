@@ -1,0 +1,911 @@
+{
+ "strategy": {
+  "key": "volatility_filter",
+  "version": 1,
+  "name": "Trend met volatiliteitsfilter",
+  "family": "volfilter",
+  "params": {
+   "fast": 50,
+   "slow": 200,
+   "vol_window": 20,
+   "lookback": 252
+  },
+  "required_data": "dagkoersen, minstens ~270 dagen",
+  "entry": "trend omhoog \u00e9n 20-daagse beweeglijkheid niet boven de mediaan van het afgelopen jaar",
+  "exit": "trend omlaag of beweeglijkheid boven die mediaan",
+  "sizing": "100% van het toegewezen kapitaal per instrument; in het portfolio begrensd door de Risk Guardian",
+  "risk": "geen hefboom; minder in de markt bij onrust",
+  "status": "research"
+ },
+ "symbol": "IWDA.AS",
+ "interval": "1d",
+ "assumptions": {
+  "fee_pct": 0.0005,
+  "min_fee_eur": 1.25,
+  "slippage_pct": 0.0005,
+  "spread_pct": 0.001,
+  "max_volume_share": 0.01,
+  "capital_eur": 1000.0,
+  "execution": "besluit op slotkoers, uitvoering op de volgende opening",
+  "price_basis": "accumulerende ETF: dividend zit in de koers (totaalrendement), in euro genoteerd",
+  "not_modeled": [
+   "feestdagen (gaten in de reeks, geen handel)",
+   "survivorship: universum is de huidige instrumentenlijst",
+   "belasting"
+  ]
+ },
+ "data": {
+  "first": "2020-12-30T08:00:00+00:00",
+  "last": "2026-11-11T08:00:00+00:00",
+  "bars": 1503,
+  "warmup": 273,
+  "oos_start": "2025-06-04T07:00:00+00:00"
+ },
+ "data_quality": {
+  "bars": 1503,
+  "first": "2020-12-30T08:00:00+00:00",
+  "last": "2026-11-11T08:00:00+00:00",
+  "fingerprint": "8a0c442447c354d4",
+  "invalid_bars": [],
+  "zero_volume_bars": 0,
+  "flat_bars": 0,
+  "duplicates": 0,
+  "unordered": 0,
+  "gaps": [
+   [
+    "2021-04-01",
+    "2021-04-06"
+   ],
+   [
+    "2022-04-14",
+    "2022-04-19"
+   ],
+   [
+    "2023-04-06",
+    "2023-04-11"
+   ],
+   [
+    "2023-12-22",
+    "2023-12-27"
+   ],
+   [
+    "2025-04-17",
+    "2025-04-22"
+   ],
+   [
+    "2025-12-24",
+    "2025-12-29"
+   ],
+   [
+    "2026-04-02",
+    "2026-04-07"
+   ]
+  ],
+  "jumps": [],
+  "mean_abs_overnight_gap": 0.004403439248199384,
+  "ok": true,
+  "issues": []
+ },
+ "causality": {
+  "checked": 40,
+  "mismatches": [],
+  "ok": true,
+  "execution": "besluit op slotkoers i, uitvoering op opening i+1 (simulate gebruikt targets[i-1])"
+ },
+ "original_result": {
+  "out_of_sample": {
+   "periods": 369,
+   "years": 1.4642857142857142,
+   "net_return": 0.07237848450977369,
+   "annual_return": 0.04887932826366925,
+   "max_drawdown": 0.05076805061879519,
+   "sharpe": 0.6528046090255819,
+   "sharpe_ci95": [
+    -0.9676120093640894,
+    2.2732212274152532
+   ],
+   "sortino": 0.9557344037426705,
+   "trades": 12,
+   "open_trade": false,
+   "win_rate": 0.6666666666666666,
+   "profit_factor": 2.4844063620862507,
+   "expectancy_eur": 6.0315403758147,
+   "avg_win_eur": 15.142212064283228,
+   "avg_loss_eur": -12.189803001122357,
+   "exposure": 0.5501355013550135,
+   "exposure_adjusted_return": 0.08884961640046284,
+   "costs_eur": 55.246242337316396,
+   "costs_pct_capital": 0.0552462423373164,
+   "turnover": 17.2514929744533,
+   "liquidity_capped_orders": 0
+  },
+  "benchmark_oos": {
+   "periods": 369,
+   "years": 1.4642857142857142,
+   "net_return": 0.30336326219227305,
+   "annual_return": 0.1983434330479512,
+   "max_drawdown": 0.06451754020567468,
+   "sharpe": 1.7155429662892914,
+   "sharpe_ci95": [
+    0.09108868410972915,
+    3.339997248468854
+   ],
+   "sortino": 2.5723652011825,
+   "trades": 0,
+   "open_trade": true,
+   "win_rate": null,
+   "profit_factor": null,
+   "expectancy_eur": null,
+   "avg_win_eur": null,
+   "avg_loss_eur": null,
+   "exposure": 1.0,
+   "exposure_adjusted_return": 0.1983434330479512,
+   "costs_eur": 2.2477522477521834,
+   "costs_pct_capital": 0.0022477522477521833,
+   "turnover": 0.6829268292682927,
+   "liquidity_capped_orders": 0
+  },
+  "full": {
+   "periods": 1230,
+   "years": 4.880952380952381,
+   "net_return": 0.05242007266299997,
+   "annual_return": 0.010522677619242415,
+   "max_drawdown": 0.10486021958829417,
+   "sharpe": 0.1972382689543805,
+   "sharpe_ci95": [
+    -0.6899597157311808,
+    1.0844362536399417
+   ],
+   "sortino": 0.2718961362402976,
+   "trades": 27,
+   "open_trade": false,
+   "win_rate": 0.5185185185185185,
+   "profit_factor": 1.2173833812665384,
+   "expectancy_eur": 1.9414841727036167,
+   "avg_win_eur": 20.968656827435204,
+   "avg_loss_eur": -18.549317147776552,
+   "exposure": 0.3796747967479675,
+   "exposure_adjusted_return": 0.027714975314064604,
+   "costs_eur": 122.51032182098373,
+   "costs_pct_capital": 0.12251032182098373,
+   "turnover": 11.277286192219538,
+   "liquidity_capped_orders": 0
+  },
+  "benchmark_full": {
+   "periods": 1230,
+   "years": 4.880952380952381,
+   "net_return": 0.7235756648277194,
+   "annual_return": 0.11799378562604645,
+   "max_drawdown": 0.2159070282344393,
+   "sharpe": 0.8680322967341064,
+   "sharpe_ci95": [
+    -0.019794356544739045,
+    1.7558589500129518
+   ],
+   "sortino": 1.2113713945456428,
+   "trades": 0,
+   "open_trade": true,
+   "win_rate": null,
+   "profit_factor": null,
+   "expectancy_eur": null,
+   "avg_win_eur": null,
+   "avg_loss_eur": null,
+   "exposure": 1.0,
+   "exposure_adjusted_return": 0.11799378562604645,
+   "costs_eur": 2.2477522477521252,
+   "costs_pct_capital": 0.0022477522477521252,
+   "turnover": 0.2048780487804878,
+   "liquidity_capped_orders": 0
+  },
+  "verdict": [
+   "out-of-sample niet beter voor risico dan koop-en-houd",
+   "95%-interval van de out-of-sample Sharpe bevat nul"
+  ]
+ },
+ "attribution_oos": {
+  "strategy_return": 0.07237848450977455,
+  "benchmark_return": 0.30336326219227083,
+  "log_excess_total": -0.1950689841398029,
+  "components_log": {
+   "buiten de markt": -0.1495883055397931,
+   "kosten": -0.05252076555992017,
+   "wisseldagen (instap/uitstap op de opening)": 0.007040086959910787,
+   "in de markt (zelfde als maatlat)": -4.499981116901086e-16
+  },
+  "check_sum": -5.551115123125783e-17,
+  "out_of_market_by_regime_log": {
+   "bear": -0.06518769971306498,
+   "bull": -0.08440060582672809
+  },
+  "out_of_market_days": {
+   "bull": 131,
+   "bear": 23,
+   "onbekend": 0
+  },
+  "out_of_market_by_cause_log": {
+   "trend omlaag": -0.04247250866680394,
+   "beweeglijkheid boven mediaan": -0.10711579687298914
+  },
+  "costs_eur": 55.246242337316396,
+  "trades": 12
+ },
+ "attribution_full": {
+  "strategy_return": 0.05242007266299951,
+  "benchmark_return": 0.723575664827721,
+  "log_excess_total": -0.49330866462681744,
+  "components_log": {
+   "buiten de markt": -0.3837413322095817,
+   "kosten": -0.12019516926648206,
+   "wisseldagen (instap/uitstap op de opening)": 0.010627836849246645,
+   "in de markt (zelfde als maatlat)": -5.555790744994626e-16
+  },
+  "check_sum": -2.220446049250313e-16,
+  "out_of_market_by_regime_log": {
+   "bull": -0.10999941834316368,
+   "bear": -0.27374191386641766
+  },
+  "out_of_market_days": {
+   "bull": 457,
+   "bear": 279,
+   "onbekend": 0
+  },
+  "out_of_market_by_cause_log": {
+   "beweeglijkheid boven mediaan": -0.23930986239570667,
+   "trend omlaag": -0.14443146981387509
+  },
+  "costs_eur": 122.51032182098373,
+  "trades": 27
+ },
+ "behaviour_oos": {
+  "closed_trades": 12,
+  "quick_round_trips": 5,
+  "quick_threshold_bars": 3,
+  "quick_pnl_eur": -13.880121148939224,
+  "quick_costs_eur": 23.01432472349617,
+  "exits_before_strong_rise": [],
+  "strong_rise_threshold": 0.03,
+  "horizon_bars": 20,
+  "reentries": [
+   {
+    "exit": "2025-10-21",
+    "reentry": "2025-11-06",
+    "bars_out": 12,
+    "price_change": 0.015939019427150036
+   },
+   {
+    "exit": "2025-11-07",
+    "reentry": "2025-11-10",
+    "bars_out": 1,
+    "price_change": 0.004223993226146527
+   },
+   {
+    "exit": "2025-11-11",
+    "reentry": "2025-12-09",
+    "bars_out": 20,
+    "price_change": 0.0027654410005120145
+   },
+   {
+    "exit": "2026-03-11",
+    "reentry": "2026-05-05",
+    "bars_out": 36,
+    "price_change": 0.04900839208615526
+   },
+   {
+    "exit": "2026-06-10",
+    "reentry": "2026-06-12",
+    "bars_out": 2,
+    "price_change": 0.005717376431515486
+   },
+   {
+    "exit": "2026-06-15",
+    "reentry": "2026-06-22",
+    "bars_out": 5,
+    "price_change": 0.009840885636444696
+   },
+   {
+    "exit": "2026-06-26",
+    "reentry": "2026-07-08",
+    "bars_out": 8,
+    "price_change": 0.016526129720608074
+   },
+   {
+    "exit": "2026-07-10",
+    "reentry": "2026-07-13",
+    "bars_out": 1,
+    "price_change": 0.0045518257384145056
+   },
+   {
+    "exit": "2026-08-04",
+    "reentry": "2026-08-17",
+    "bars_out": 9,
+    "price_change": 0.01930243478373006
+   },
+   {
+    "exit": "2026-08-19",
+    "reentry": "2026-08-21",
+    "bars_out": 2,
+    "price_change": -0.008318961775156342
+   },
+   {
+    "exit": "2026-09-25",
+    "reentry": "2026-09-28",
+    "bars_out": 1,
+    "price_change": 0.0013035548614783732
+   }
+  ],
+  "avg_reentry_premium": 0.010987281012454426,
+  "avg_bars_out": 8.818181818181818,
+  "expected_value": {
+   "trades": 12,
+   "win_rate": 0.6666666666666666,
+   "avg_win": 15.142212064283228,
+   "avg_loss": 12.189803001122357,
+   "avg_cost": 0.0,
+   "expected_value": 6.031540375814699,
+   "payoff_ratio": 1.2422031810431253,
+   "largest_loss": 19.817144869169397
+  }
+ },
+ "behaviour_full": {
+  "closed_trades": 27,
+  "quick_round_trips": 12,
+  "quick_threshold_bars": 3,
+  "quick_pnl_eur": -118.51466165216618,
+  "quick_costs_eur": 54.44534337731454,
+  "exits_before_strong_rise": [
+   {
+    "exit": "2023-10-23",
+    "next_20_bars": 0.04016455949580244
+   },
+   {
+    "exit": "2024-02-23",
+    "next_20_bars": 0.031053412419289828
+   },
+   {
+    "exit": "2024-04-17",
+    "next_20_bars": 0.036151355470255275
+   },
+   {
+    "exit": "2024-09-04",
+    "next_20_bars": 0.037742937551040745
+   },
+   {
+    "exit": "2024-11-01",
+    "next_20_bars": 0.0756207963863631
+   },
+   {
+    "exit": "2025-01-13",
+    "next_20_bars": 0.043413455669696566
+   }
+  ],
+  "strong_rise_threshold": 0.03,
+  "horizon_bars": 20,
+  "reentries": [
+   {
+    "exit": "2022-04-07",
+    "reentry": "2022-04-20",
+    "bars_out": 7,
+    "price_change": 0.0021328396094020263
+   },
+   {
+    "exit": "2022-04-25",
+    "reentry": "2023-06-02",
+    "bars_out": 285,
+    "price_change": 0.021114295236790204
+   },
+   {
+    "exit": "2023-10-12",
+    "reentry": "2023-10-13",
+    "bars_out": 1,
+    "price_change": 0.00040095068056977823
+   },
+   {
+    "exit": "2023-10-23",
+    "reentry": "2023-11-20",
+    "bars_out": 20,
+    "price_change": 0.0397192517694096
+   },
+   {
+    "exit": "2024-02-23",
+    "reentry": "2024-03-04",
+    "bars_out": 6,
+    "price_change": 0.009326622879958668
+   },
+   {
+    "exit": "2024-03-05",
+    "reentry": "2024-03-20",
+    "bars_out": 11,
+    "price_change": 0.012336587889827388
+   },
+   {
+    "exit": "2024-04-10",
+    "reentry": "2024-04-11",
+    "bars_out": 1,
+    "price_change": 0.0014484371275680363
+   },
+   {
+    "exit": "2024-04-17",
+    "reentry": "2024-04-23",
+    "bars_out": 4,
+    "price_change": -0.0005854441067246752
+   },
+   {
+    "exit": "2024-04-24",
+    "reentry": "2024-05-27",
+    "bars_out": 22,
+    "price_change": 0.028189752994490114
+   },
+   {
+    "exit": "2024-07-25",
+    "reentry": "2024-09-03",
+    "bars_out": 28,
+    "price_change": 0.02653646299647594
+   },
+   {
+    "exit": "2024-09-04",
+    "reentry": "2024-10-11",
+    "bars_out": 27,
+    "price_change": 0.05457239137208414
+   },
+   {
+    "exit": "2024-11-01",
+    "reentry": "2024-12-11",
+    "bars_out": 28,
+    "price_change": 0.0856906513077893
+   },
+   {
+    "exit": "2024-12-12",
+    "reentry": "2024-12-16",
+    "bars_out": 2,
+    "price_change": -0.003992095055296518
+   },
+   {
+    "exit": "2025-01-08",
+    "reentry": "2025-01-10",
+    "bars_out": 2,
+    "price_change": 0.001620423583390318
+   },
+   {
+    "exit": "2025-01-13",
+    "reentry": "2025-09-02",
+    "bars_out": 163,
+    "price_change": 0.008794437060962057
+   },
+   {
+    "exit": "2025-10-21",
+    "reentry": "2025-11-06",
+    "bars_out": 12,
+    "price_change": 0.015939019427150036
+   },
+   {
+    "exit": "2025-11-07",
+    "reentry": "2025-11-10",
+    "bars_out": 1,
+    "price_change": 0.004223993226146527
+   },
+   {
+    "exit": "2025-11-11",
+    "reentry": "2025-12-09",
+    "bars_out": 20,
+    "price_change": 0.0027654410005120145
+   },
+   {
+    "exit": "2026-03-11",
+    "reentry": "2026-05-05",
+    "bars_out": 36,
+    "price_change": 0.04900839208615526
+   },
+   {
+    "exit": "2026-06-10",
+    "reentry": "2026-06-12",
+    "bars_out": 2,
+    "price_change": 0.005717376431515486
+   },
+   {
+    "exit": "2026-06-15",
+    "reentry": "2026-06-22",
+    "bars_out": 5,
+    "price_change": 0.009840885636444696
+   },
+   {
+    "exit": "2026-06-26",
+    "reentry": "2026-07-08",
+    "bars_out": 8,
+    "price_change": 0.016526129720608074
+   },
+   {
+    "exit": "2026-07-10",
+    "reentry": "2026-07-13",
+    "bars_out": 1,
+    "price_change": 0.0045518257384145056
+   },
+   {
+    "exit": "2026-08-04",
+    "reentry": "2026-08-17",
+    "bars_out": 9,
+    "price_change": 0.01930243478373006
+   },
+   {
+    "exit": "2026-08-19",
+    "reentry": "2026-08-21",
+    "bars_out": 2,
+    "price_change": -0.008318961775156342
+   },
+   {
+    "exit": "2026-09-25",
+    "reentry": "2026-09-28",
+    "bars_out": 1,
+    "price_change": 0.0013035548614783732
+   }
+  ],
+  "avg_reentry_premium": 0.015698679095526732,
+  "avg_bars_out": 27.076923076923077,
+  "expected_value": {
+   "trades": 27,
+   "win_rate": 0.5185185185185185,
+   "avg_win": 20.968656827435204,
+   "avg_loss": 18.549317147776552,
+   "avg_cost": 0.0,
+   "expected_value": 1.9414841727036158,
+   "payoff_ratio": 1.1304274254617859,
+   "largest_loss": 42.17361936555301
+  }
+ },
+ "costs": {
+  "oos_costs_eur": 55.246242337316396,
+  "oos_gross_return": 0.1302142498742207,
+  "oos_net_return": 0.07237848450977369,
+  "cost_drag": 0.05783576536444701,
+  "oos_net_return_at_10k": 0.09024692513913002,
+  "per_round_trip_eur_at_capital": 4.5
+ },
+ "drawdown_tradeoff": {
+  "strategy_mdd": 0.05076805061879519,
+  "benchmark_mdd": 0.06451754020567468,
+  "mdd_reduction": 0.013749489586879493,
+  "return_given_up": 0.23098477768249936,
+  "strategy_calmar": 0.9627970282076046,
+  "benchmark_calmar": 3.0742559684646156
+ },
+ "context": {
+  "in_sample": {
+   "start": "2022-01-20",
+   "end": "2025-06-03",
+   "annual_return": 0.0840151430837277,
+   "annual_volatility": 0.1511559311840352,
+   "sharpe": 0.6095502319809942
+  },
+  "out_of_sample": {
+   "start": "2025-06-04",
+   "end": "2026-11-11",
+   "annual_return": 0.20170145931410266,
+   "annual_volatility": 0.10888912572831547,
+   "sharpe": 1.7423198090996874
+  },
+  "all_history": {
+   "start": "2020-12-30",
+   "end": "2026-11-11",
+   "annual_return": 0.14097585128379264,
+   "annual_volatility": 0.13774541462377393,
+   "sharpe": 1.0267077986201918
+  },
+  "oos_bull_share": 0.9376693766937669
+ },
+ "uncertainty": {
+  "available": true,
+  "samples": 1000,
+  "block": 10,
+  "seed": 7,
+  "excess_annual": -0.14946410478428196,
+  "excess_annual_ci90": [
+   -0.2568015629204406,
+   -0.05593219242806106
+  ],
+  "p_excess_annual_positive": 0.008,
+  "sharpe_diff": -1.0627383572637095,
+  "sharpe_diff_ci90": [
+   -1.9056147528779452,
+   -0.23049120002064177
+  ],
+  "p_sharpe_better": 0.016
+ },
+ "probabilistic_sharpe": 0.7844636516349166,
+ "deflated_sharpe": 0.6107777664671321,
+ "sensitivity": {
+  "grid": {
+   "vol_window": [
+    10,
+    20,
+    40
+   ],
+   "lookback": [
+    126,
+    252,
+    504
+   ]
+  },
+  "rows": [
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 20,
+     "lookback": 504
+    },
+    "is_sharpe": 1.22219777548834,
+    "is_return": 0.23272699258529084,
+    "oos_sharpe": 0.5627622986004622,
+    "oos_return": 0.06465287389394692,
+    "oos_trades": 8,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 40,
+     "lookback": 504
+    },
+    "is_sharpe": 1.1105066774226404,
+    "is_return": 0.22370115580735073,
+    "oos_sharpe": 0.29506299041649375,
+    "oos_return": 0.030821915808511458,
+    "oos_trades": 5,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 10,
+     "lookback": 504
+    },
+    "is_sharpe": 0.7465899089507216,
+    "is_return": 0.12724537983260986,
+    "oos_sharpe": 0.09985776824783542,
+    "oos_return": 0.006779251672117903,
+    "oos_trades": 16,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 40,
+     "lookback": 252
+    },
+    "is_sharpe": 0.32217291378127366,
+    "is_return": 0.060762027578464606,
+    "oos_sharpe": 0.10844138286493549,
+    "oos_return": 0.00832211027372498,
+    "oos_trades": 4,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 10,
+     "lookback": 252
+    },
+    "is_sharpe": 0.26244589973452614,
+    "is_return": 0.04372592013644683,
+    "oos_sharpe": 0.45426983988441777,
+    "oos_return": 0.0470317440657646,
+    "oos_trades": 14,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 20,
+     "lookback": 252
+    },
+    "is_sharpe": -0.06767588208288015,
+    "is_return": -0.018087905174570595,
+    "oos_sharpe": 0.6528046090255819,
+    "oos_return": 0.07237848450977369,
+    "oos_trades": 12,
+    "original": true
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 20,
+     "lookback": 126
+    },
+    "is_sharpe": -0.16985597431320984,
+    "is_return": -0.04066575562768637,
+    "oos_sharpe": 0.7285278396165175,
+    "oos_return": 0.07622373148162587,
+    "oos_trades": 14,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 10,
+     "lookback": 126
+    },
+    "is_sharpe": -0.19104735709136456,
+    "is_return": -0.04284156234399339,
+    "oos_sharpe": 0.17369271678048198,
+    "oos_return": 0.014428227809897276,
+    "oos_trades": 18,
+    "original": false
+   },
+   {
+    "params": {
+     "fast": 50,
+     "slow": 200,
+     "vol_window": 40,
+     "lookback": 126
+    },
+    "is_sharpe": -0.3858540495330498,
+    "is_return": -0.10033040535641113,
+    "oos_sharpe": -0.0556887168830354,
+    "oos_return": -0.01166868101422358,
+    "oos_trades": 8,
+    "original": false
+   }
+  ],
+  "trials": 9,
+  "is_best": {
+   "params": {
+    "fast": 50,
+    "slow": 200,
+    "vol_window": 20,
+    "lookback": 504
+   },
+   "is_sharpe": 1.22219777548834,
+   "is_return": 0.23272699258529084,
+   "oos_sharpe": 0.5627622986004622,
+   "oos_return": 0.06465287389394692,
+   "oos_trades": 8,
+   "original": false
+  },
+  "original": {
+   "params": {
+    "fast": 50,
+    "slow": 200,
+    "vol_window": 20,
+    "lookback": 252
+   },
+   "is_sharpe": -0.06767588208288015,
+   "is_return": -0.018087905174570595,
+   "oos_sharpe": 0.6528046090255819,
+   "oos_return": 0.07237848450977369,
+   "oos_trades": 12,
+   "original": true
+  },
+  "oos_sharpe_spread": [
+   -0.0556887168830354,
+   0.7285278396165175
+  ]
+ },
+ "trades_oos": [
+  {
+   "entry_ts": "2025-09-02T07:00:00+00:00",
+   "exit_ts": "2025-10-21T07:00:00+00:00",
+   "entry_price": 104.80970683288574,
+   "exit_price": 109.5303593902588,
+   "pnl_eur": 42.483922616955624,
+   "ret": 0.042483922616955626,
+   "costs_eur": 4.5425309490704215,
+   "bars": 35
+  },
+  {
+   "entry_ts": "2025-11-06T08:00:00+00:00",
+   "exit_ts": "2025-11-07T08:00:00+00:00",
+   "entry_price": 111.27616591644286,
+   "exit_price": 110.36952335357667,
+   "pnl_eur": -10.983640538563577,
+   "ret": -0.010536028710151479,
+   "costs_eur": 4.573977795032465,
+   "bars": 1
+  },
+  {
+   "entry_ts": "2025-11-10T08:00:00+00:00",
+   "exit_ts": "2025-11-11T08:00:00+00:00",
+   "entry_price": 110.8357234725952,
+   "exit_price": 111.44843756103516,
+   "pnl_eur": 3.1953556368921454,
+   "ret": 0.0030977748551398888,
+   "costs_eur": 4.566203681352841,
+   "bars": 1
+  },
+  {
+   "entry_ts": "2025-12-09T08:00:00+00:00",
+   "exit_ts": "2026-03-11T08:00:00+00:00",
+   "entry_price": 111.75664163970946,
+   "exit_price": 112.43745304870606,
+   "pnl_eur": 3.795657872420634,
+   "ret": 0.0036683810524241137,
+   "costs_eur": 4.573195302155961,
+   "bars": 62
+  },
+  {
+   "entry_ts": "2026-05-05T07:00:00+00:00",
+   "exit_ts": "2026-06-10T07:00:00+00:00",
+   "entry_price": 117.94783183288573,
+   "exit_price": 121.23864060974122,
+   "pnl_eur": 26.439597330396055,
+   "ret": 0.02545962343905185,
+   "costs_eur": 4.6034532315561,
+   "bars": 26
+  },
+  {
+   "entry_ts": "2026-06-12T07:00:00+00:00",
+   "exit_ts": "2026-06-15T07:00:00+00:00",
+   "entry_price": 121.93180755615234,
+   "exit_price": 123.86600786590577,
+   "pnl_eur": 14.373135515632839,
+   "ret": 0.013496777688783053,
+   "costs_eur": 4.644253938741132,
+   "bars": 1
+  },
+  {
+   "entry_ts": "2026-06-22T07:00:00+00:00",
+   "exit_ts": "2026-06-26T07:00:00+00:00",
+   "entry_price": 125.08495908355711,
+   "exit_price": 123.36650786590577,
+   "pnl_eur": -17.31059970302522,
+   "ret": -0.016038668667016878,
+   "costs_eur": 4.641284787849251,
+   "bars": 4
+  },
+  {
+   "entry_ts": "2026-07-08T07:00:00+00:00",
+   "exit_ts": "2026-07-10T07:00:00+00:00",
+   "entry_price": 125.40527877807615,
+   "exit_price": 125.62425000000002,
+   "pnl_eur": -0.647826893731235,
+   "ret": -0.0006100102657937497,
+   "costs_eur": 4.62334300608348,
+   "bars": 2
+  },
+  {
+   "entry_ts": "2026-07-13T07:00:00+00:00",
+   "exit_ts": "2026-08-04T07:00:00+00:00",
+   "entry_price": 126.19606969451903,
+   "exit_price": 126.71315634155275,
+   "pnl_eur": 1.843727040120939,
+   "ret": 0.001737159919379527,
+   "costs_eur": 4.62454139898226,
+   "bars": 16
+  },
+  {
+   "entry_ts": "2026-08-17T07:00:00+00:00",
+   "exit_ts": "2026-08-19T07:00:00+00:00",
+   "entry_price": 129.15902877807616,
+   "exit_price": 127.05282030487062,
+   "pnl_eur": -19.817144869169397,
+   "ret": -0.01863933763340114,
+   "costs_eur": 4.606546302286252,
+   "bars": 2
+  },
+  {
+   "entry_ts": "2026-08-21T07:00:00+00:00",
+   "exit_ts": "2026-09-25T07:00:00+00:00",
+   "entry_price": 125.9958727493286,
+   "exit_price": 128.98089060974124,
+   "pnl_eur": 22.189327230462595,
+   "ret": 0.021266933861727306,
+   "costs_eur": 4.608960493533695,
+   "bars": 25
+  },
+  {
+   "entry_ts": "2026-09-28T07:00:00+00:00",
+   "exit_ts": "2026-11-05T08:00:00+00:00",
+   "entry_price": 129.14902427673337,
+   "exit_price": 130.27959365844728,
+   "pnl_eur": 6.816973271384995,
+   "ret": 0.006397540826584789,
+   "costs_eur": 4.637951450672524,
+   "bars": 28
+  }
+ ]
+}

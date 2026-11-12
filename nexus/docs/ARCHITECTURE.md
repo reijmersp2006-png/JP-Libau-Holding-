@@ -41,7 +41,7 @@ voor alle bots.
 | Datakwaliteit | `jplh.risk` koers_vers (max 3 uur), `nexus.provenance` | draait |
 | Marktregime | `Desk.regime` (200-dagen), Risicodirecteur | draait |
 | Kansen | strategieën per afdeling, verkenners | draait |
-| Agent-analyse | `nexus.agents` (LLM) | fase 3 |
+| Agent-analyse | `nexus.council` (13 agents, Claude; quant/risk/auditor deterministisch) | draait op verzoek en dagelijks, binnen dagbudget; zonder sleutel `unavailable` |
 | Strategie-toets | `jplh backtest --desks`, arena, Academie | draait (CLI) |
 | Portefeuille-impact | Risicodirecteur, `nexus.guardian` | draait |
 | Risk Guardian | `jplh.risk` (paper-bot) + `nexus.guardian` (voorstellen) | draait |
@@ -56,6 +56,30 @@ Regels die nergens omheen kunnen:
 4. Geen hefboom, geen short, geen derivaten: het voorstel-formaat kent alleen `buy` en `sell` van bezit.
 5. Ontbrekende data levert `UNAVAILABLE` op en geen getal. Er wordt nooit een koers ingevuld.
 6. Een zekerheidsscore heet alleen "gekalibreerd" met een statistische methode; een LLM-score nooit.
+
+## Evolution Lab (Master Prompt 3.1)
+
+```
+stats.py      bootstrap (blok), probabilistische en gedefleerde Sharpe, Monte Carlo-daling, verwachtingswaarde
+audit.py      attributie in log-rendement (buiten de markt, kosten, wisseldagen, in de markt), oorzaak, regime
+datasets.py   1d/4h/1h/15m/5m, omrekening naar euro met de koers die op dat moment bekend was
+alpha.py      strategiefamilies (trend, mean reversion, portefeuille, crypto; event/funding = niet beschikbaar)
+              fractionele gewichten 0-1, uitvoering op de volgende open, kosten + spread + slippage
+              walk-forward per vak, laatste 20% = holdout, holdout-register (jsonl, alleen toevoegen)
+champion.py   kampioen tegen uitdagers op dezelfde vakken; poorten 1-8; holdout pas open na 1,2,4,5,6
+evolution.py  besluitgeheugen (uitgevoerd/afgewezen/gemist), uitkomst na 1/5/20 dagen, fout-tags,
+              hypothesen, toets, kandidaat in het modelregister (nooit zelf kampioen)
+council.py    onafhankelijk oordeel → debat → CIO-besluit; gewichten uit Brier; Risk Guardian-veto bindend
+news.py       officiële feeds (Fed, ECB, BLS, SEC), feit/speculatie, koersreactie in σ, event-study
+external.py   import van een ander systeem (CSV/JSON), vergelijking op gelijk kapitaal en periode
+jobs.py       uur/dag/week/maand-taken in een eigen achtergrondtaak, met AI-kosten per run
+evolution_api.py  alle /api/evolution, /api/council, /api/news, /api/external, /api/jobs routes
+```
+
+Leerlus: observeren → besluiten → uitvoeren of afwijzen → meten → analyseren → leren → valideren → verbeteren.
+Wat leren mag: hypothesen maken, toetsen, een kandidaat registreren. Wat leren niet mag: een kampioen vervangen,
+live aanzetten of een risicogrens wijzigen. Promoveren is een admin-actie die de arena-poorten opnieuw toetst;
+kampioen worden vraagt ook 30 paperdagen. Het auditlog is een hash-keten (`/api/audit/verify`).
 
 ## Waarom bovenop jplh en niet een nieuw systeem
 

@@ -11,6 +11,8 @@ geheugen gebruiken ``create_all``.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -327,6 +329,196 @@ class AuditLog(Base):
     actor: Mapped[str] = mapped_column(String(64))
     action: Mapped[str] = mapped_column(String(64), index=True)
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+# ── Onderzoek en leren (NEXUS Evolution) ───────────────────────────────────────────────────
+class ResearchRun(Base):
+    """Eén onderzoeksrun (ontdekking, audit, geplande taak) met samenvatting en kosten."""
+
+    __tablename__ = "research_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    kind: Mapped[str] = mapped_column(String(32))                   # discovery, audit, job:<naam>
+    interval: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="done")
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    report: Mapped[dict] = mapped_column(JSON, default=dict)
+    ai_requests: Mapped[int] = mapped_column(Integer, default=0)
+    ai_cost_usd: Mapped[float] = mapped_column(Money(), default=0)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+class ModelVersion(Base):
+    """Modelregister: elke strategieversie met status, poorten en herkomst. Promotie gaat alleen
+    via een mens; live blijft dicht (zie ``controls.live_gate``)."""
+
+    __tablename__ = "model_registry"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    key: Mapped[str] = mapped_column(String(64), index=True)       # familie of lab-strategie
+    version: Mapped[int] = mapped_column(Integer)
+    symbols: Mapped[list] = mapped_column(JSON)
+    interval: Mapped[str] = mapped_column(String(8))
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="research")
+    role: Mapped[str | None] = mapped_column(String(16), nullable=True)   # champion, challenger
+    gates: Mapped[dict] = mapped_column(JSON, default=dict)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    source_run_id: Mapped[int | None] = mapped_column(ForeignKey("research_runs.id"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("model_registry.id"), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (
+        UniqueConstraint("org_id", "key", "version", "interval", "symbols", name="uq_model_version"),
+        CheckConstraint("status IN ('research','candidate','challenger','paper','champion','retired','rejected')",
+                        name="ck_model_status"),
+    )
+
+
+class Hypothesis(Base):
+    __tablename__ = "hypotheses"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    source: Mapped[str] = mapped_column(String(32))                # audit, evolution, agent, human
+    error_tag: Mapped[str | None] = mapped_column(String(48), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    statement: Mapped[str] = mapped_column(Text)
+    test: Mapped[dict] = mapped_column(JSON, default=dict)          # familie, instrumenten, rooster
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    __table_args__ = (CheckConstraint("status IN ('open','testing','supported','rejected','inconclusive')",
+                                      name="ck_hypothesis_status"),)
+
+
+class DecisionRecord(Base):
+    """Trade memory: elk besluit (uitgevoerd, afgewezen of gemist) met context en uitkomst."""
+
+    __tablename__ = "decision_records"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    ts: Mapped[datetime] = mapped_column(TS, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(16))                   # executed, rejected, missed
+    source: Mapped[str] = mapped_column(String(32))                 # paper, strategy, council, manual, holding
+    side: Mapped[str] = mapped_column(String(4))
+    strategy_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    strategy_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    regime: Mapped[dict] = mapped_column(JSON, default=dict)
+    indicators: Mapped[dict] = mapped_column(JSON, default=dict)
+    news_context: Mapped[list] = mapped_column(JSON, default=list)
+    agent_recommendations: Mapped[list] = mapped_column(JSON, default=list)
+    entry_conditions: Mapped[dict] = mapped_column(JSON, default=dict)
+    exit_conditions: Mapped[dict] = mapped_column(JSON, default=dict)
+    size_eur: Mapped[float] = mapped_column(Money(), default=0)
+    price: Mapped[float] = mapped_column(Money(), default=0)
+    est_costs_eur: Mapped[float] = mapped_column(Money(), default=0)
+    actual: Mapped[dict] = mapped_column(JSON, default=dict)
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("trade_proposals.id"), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[dict] = mapped_column(JSON, default=dict)       # termijnrendementen, resultaat
+    outcome_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    error_tags: Mapped[list] = mapped_column(JSON, default=list)
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(128), unique=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (CheckConstraint("kind IN ('executed','rejected','missed')", name="ck_decision_kind"),
+                      CheckConstraint("side IN ('buy','sell')", name="ck_decision_side"))
+
+
+class NewsEvent(Base):
+    __tablename__ = "news_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(48), index=True)
+    source_kind: Mapped[str] = mapped_column(String(16))            # official, exchange, media
+    url: Mapped[str] = mapped_column(String(1000))
+    title: Mapped[str] = mapped_column(String(500))
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    published_at: Mapped[datetime] = mapped_column(TS, index=True)
+    fetched_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    category: Mapped[str] = mapped_column(String(32), index=True)
+    assets: Mapped[list] = mapped_column(JSON, default=list)
+    factuality: Mapped[str] = mapped_column(String(16))             # fact, speculation, mixed
+    expectation: Mapped[dict] = mapped_column(JSON, default=dict)
+    analysis: Mapped[dict] = mapped_column(JSON, default=dict)
+    reaction: Mapped[dict] = mapped_column(JSON, default=dict)
+    content_hash: Mapped[str] = mapped_column(String(64), unique=True)
+
+
+class CouncilRun(Base):
+    __tablename__ = "council_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(16))                 # done, failed, unavailable, budget
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    inputs: Mapped[dict] = mapped_column(JSON, default=dict)
+    independent: Mapped[list] = mapped_column(JSON, default=list)
+    debate: Mapped[list] = mapped_column(JSON, default=list)
+    decision: Mapped[dict] = mapped_column(JSON, default=dict)
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("trade_proposals.id"), nullable=True)
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Money(), default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+class AgentForecast(Base):
+    """Een toetsbare voorspelling van één agent; wordt later afgerekend op de echte koers."""
+
+    __tablename__ = "agent_forecasts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("council_runs.id"), index=True)
+    agent: Mapped[str] = mapped_column(String(48), index=True)
+    phase: Mapped[str] = mapped_column(String(16))                  # independent, debate
+    symbol: Mapped[str] = mapped_column(String(32))
+    ts: Mapped[datetime] = mapped_column(TS, index=True)
+    price: Mapped[float] = mapped_column(Money())
+    stance: Mapped[str] = mapped_column(String(24))
+    prob_up: Mapped[float | None] = mapped_column(Numeric(6, 4, asdecimal=False), nullable=True)
+    horizon_days: Mapped[int] = mapped_column(Integer)
+    regime: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    resolved_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    realized_return: Mapped[float | None] = mapped_column(Numeric(12, 6, asdecimal=False), nullable=True)
+    brier: Mapped[float | None] = mapped_column(Numeric(6, 4, asdecimal=False), nullable=True)
+    hit: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+
+class ExternalBatch(Base):
+    """Geïmporteerde resultaten van een ander systeem (bijv. de Grok-bot)."""
+
+    __tablename__ = "external_batches"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    system: Mapped[str] = mapped_column(String(48))
+    fmt: Mapped[str] = mapped_column(String(8))
+    completeness: Mapped[str] = mapped_column(String(16))           # trades, aggregate
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    trades: Mapped[list] = mapped_column(JSON, default=list)
+    issues: Mapped[list] = mapped_column(JSON, default=list)
+    uploaded_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class JobRun(Base):
+    __tablename__ = "job_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job: Mapped[str] = mapped_column(String(48), index=True)
+    started_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    status: Mapped[str] = mapped_column(String(16))                 # ok, failed, skipped
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    ai_requests: Mapped[int] = mapped_column(Integer, default=0)
+    ai_cost_usd: Mapped[float] = mapped_column(Money(), default=0)
+
 
 
 Index("ix_orders_account_status", Order.account_id, Order.status)
@@ -381,12 +573,37 @@ class Database:
 
     def audit(self, actor: str, action: str, detail: dict | None = None, s: Session | None = None,
               org_id: int = DEFAULT_ORG) -> None:
-        entry = AuditLog(org_id=org_id, actor=actor, action=action, detail=detail or {})
+        def add(sess: Session) -> None:
+            # Hash-keten: elke regel bevat de hash van de vorige, zodat wijzigen of weghalen opvalt.
+            prev = sess.scalars(select(AuditLog.hash).order_by(AuditLog.id.desc()).limit(1)).first()
+            ts = utcnow()
+            body = json.dumps({"org": org_id, "ts": ts.isoformat(), "actor": actor, "action": action,
+                               "detail": detail or {}, "prev": prev}, sort_keys=True, default=str)
+            sess.add(AuditLog(org_id=org_id, ts=ts, actor=actor, action=action, detail=detail or {}, prev_hash=prev,
+                              hash=hashlib.sha256(body.encode()).hexdigest()))
+            sess.flush()
         if s is not None:
-            s.add(entry)
+            add(s)
             return
         with self.session.begin() as s2:
-            s2.add(entry)
+            add(s2)
+
+    def verify_audit_chain(self) -> dict:
+        """Controleert de hele keten. Geeft het eerste gebroken id terug als er iets gewijzigd is."""
+        with self.session() as s:
+            prev = None
+            n = 0
+            for r in s.scalars(select(AuditLog).order_by(AuditLog.id)):
+                if r.hash is None:          # regels van vóór de hash-keten
+                    prev = None
+                    continue
+                body = json.dumps({"org": r.org_id, "ts": iso(r.ts), "actor": r.actor, "action": r.action,
+                                   "detail": r.detail, "prev": r.prev_hash}, sort_keys=True, default=str)
+                if r.prev_hash != prev or hashlib.sha256(body.encode()).hexdigest() != r.hash:
+                    return {"ok": False, "broken_at": r.id, "checked": n}
+                prev = r.hash
+                n += 1
+            return {"ok": True, "checked": n}
 
     def audit_entries(self, limit: int = 100, org_id: int = DEFAULT_ORG) -> list[dict]:
         with self.session() as s:

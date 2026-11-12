@@ -31,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 
 from nexus import __version__
 from nexus import agents as agents_mod
-from nexus import lab
+from nexus import evolution_api, jobs, lab
 from nexus.bridge import HoldingBridge
 from nexus.controls import Controls, LiveTradingDisabled, Mode
 from nexus.db import (DEFAULT_ORG, Backtest, BillingRecord, Database, Organization, RiskEvaluation, StrategyRow,
@@ -106,14 +106,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         controls.kill_engaged)
     bus = EventBus()
     errors = {"5xx": 0, "requests": 0}
+    evo: dict = {}
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         bus.loop = asyncio.get_running_loop()
-        task = asyncio.create_task(worker()) if settings.worker else None
+        tasks = [asyncio.create_task(worker())] if settings.worker else []
+        if settings.worker and settings.jobs:
+            tasks.append(asyncio.create_task(job_worker()))
         yield
-        if task:
-            task.cancel()
+        for t in tasks:
+            t.cancel()
 
     async def worker():
         """Achtergrondronde: open paper-orders aanvullen en de waardering vastleggen."""
@@ -126,6 +129,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except Exception:
                 log.exception("worker-ronde mislukt")
             await asyncio.sleep(settings.worker_seconds)
+
+    async def job_worker():
+        """Geplande onderzoekstaken, los van de paper-ronde zodat zware runs geen vullingen ophouden.
+        Nooit live handelen; AI-taken blijven binnen het dagbudget."""
+        await asyncio.sleep(30)
+        while True:
+            try:
+                if "ctx" in evo:
+                    for r in await run_in_threadpool(jobs.run_due, db, jobs.JOBS, evo["ctx"]):
+                        bus.publish("job", {"job": r["job"], "status": r["status"]})
+            except Exception:
+                log.exception("takenronde mislukt")
+            await asyncio.sleep(300)
 
     app = FastAPI(title="NEXUS AI", version=__version__, lifespan=lifespan,
                   description="Intelligence Behind Every Trade. Paper trading; live handelen staat uit.")
@@ -460,4 +476,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             bus.unsubscribe(q)
 
+    evo["ctx"] = (evolution_api.mount(app, db=db, bridge=bridge, settings=settings, paper=paper, controls=controls,
+                                   bus=bus, require_admin=require_admin, limiter=limiter, market_db=market_db))
     return app
