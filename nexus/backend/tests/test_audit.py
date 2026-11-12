@@ -7,7 +7,7 @@ from jplh.models import Candle
 from jplh.strategies import Strategy
 
 from nexus import audit, datasets, lab, stats
-from tests.test_lab import series
+from test_lab import series
 
 
 def test_attribution_components_sum_exactly():

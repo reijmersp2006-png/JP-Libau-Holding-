@@ -7,7 +7,7 @@ from jplh.config import CostModel, load_config
 from jplh.models import Candle
 
 from nexus import alpha, datasets
-from tests.test_lab import series
+from test_lab import series
 
 ZERO = (CostModel(0, 0, 0), 0.0)
 

@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from nexus import champion, council, datasets, evolution, external, jobs, news
 from nexus.db import AgentForecast, AuditLog, Database, Hypothesis, JobRun, ModelVersion, NewsEvent
-from tests.test_lab import series
+from test_lab import series
 
 AUTH = {"Authorization": "Bearer geheim-token-123"}
 
