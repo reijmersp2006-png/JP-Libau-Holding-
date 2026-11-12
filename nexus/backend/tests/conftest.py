@@ -23,7 +23,7 @@ def demo_home(tmp_path_factory):
 @pytest.fixture
 def demo_settings(demo_home):
     return Settings(demo=True, demo_home=demo_home, database_url="sqlite:///:memory:", admin_token="geheim-token-123",
-                    cache_seconds=0)
+                    cache_seconds=0, worker=False)
 
 
 @pytest.fixture

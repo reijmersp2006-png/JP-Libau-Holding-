@@ -1,5 +1,7 @@
 # NEXUS AI
 
+*Intelligence Behind Every Trade.*
+
 Het Command Center van JP-libau Holding: één plek voor alle bots. NEXUS leest de echte paper-stand
 van de holding, labelt elke waarde naar herkomst, en voegt de besturing toe die over alle bots
 heen hoort: handelsmodus, noodstop, een Risk Guardian met vetorecht en een audit-log.
@@ -36,17 +38,24 @@ Of alles in Docker (met TimescaleDB): `NEXUS_DB_PASSWORD=... docker compose -f n
 
 Tests: `cd nexus/backend && pytest` en `cd nexus/web && npm run build`.
 
-## Wat er nu werkt (fase 1)
+## Wat er nu werkt (persoonlijke MVP)
 
-| Onderdeel | |
-|---|---|
-| Command Center | vermogen, gerealiseerd/ongerealiseerd, kosten, vermogens- en drawdowncurve, verdeling, posities, marktregime, risicogebruik, Council-status, voorstellen, bevindingen, beslissingen, markten, verbindingen |
-| Herkomstlabels | LIVE · DELAYED · HISTORICAL · SIMULATED · UNAVAILABLE op elk paneel en elke koers |
-| Risk Guardian | 11 grenzen (conservatief, alleen strenger), veto per voorstel met elke check, "geen trade" altijd mogelijk |
-| Noodstop | knop met bevestiging; zet ook het KILL-bestand van de holding; opheffen alleen met admin-token |
-| Modi | research / paper; live wordt geweigerd met de live-poort |
-| Voorstellen | `POST /api/proposals`: verplicht formaat, idempotent, oordeel opgeslagen, nooit uitgevoerd |
-| Pagina's | 15 routes; Council, Radar, Meme Scanner, Portfolio, Risk, Journal en Settings met echte data, de rest toont eerlijk wat er al is en wat komt |
+| Systeem | Wat | Echt of gesimuleerd |
+|---|---|---|
+| Command Center | stand van de holding-bots en het NEXUS paper-account, risico, regime, markten, verbindingen | echte paper-stand |
+| Marktdata | één laag voor alle bronnen met bron, tijd, munt, versheid, sessie en kwaliteit (`/api/market/series`) | Bitvavo en Yahoo echt; CoinGecko, Polygon, FMP, FRED nog niet gekoppeld |
+| Strategy Lab | 5 geversioneerde strategieën met regels en een backtest: in-/out-of-sample, 5 vakken, regimes, koop-en-houd, kosten, spread, liquiditeitsgrens | echte dagkoersen (HISTORICAL) |
+| Paper trading | voorstel → Risk Guardian → order → vulling (deels mogelijk) → positie → waardering → reconciliatie | gesimuleerde vullingen op echte, vertraagde koersen |
+| Risk Guardian | 11 grenzen, veto op elk voorstel, noodstop | echt |
+| Database | 22 tabellen (gebruikers, organisaties, accounts, brokers, assets, marktdata, strategieën, backtests, voorstellen, orders, vullingen, posities, waarderingen, risicobeleid, AI-rapporten, agentbesluiten, audit, abonnementen, facturen) met Alembic | echt (SQLite of PostgreSQL) |
+| Realtime | WebSocket `/ws/events` (noodstop, modus, voorstellen, vullingen) + achtergrondworker | echt, in één proces |
+| SaaS-admin | plannen €19/€59/€149 (inactief), juridische poort, uptime en fouten | geen klanten, geen betaalkoppeling |
+
+Nog niet gebouwd: AI-agents op een taalmodel, inloggen en meerdere gebruikers, Stripe, Redis (nodig zodra er
+meer dan één API-proces draait), live broker-adapters, publieke website. Zie [docs/ROADMAP.md](docs/ROADMAP.md).
+
+Meer: [docs/OPERATIONS.md](docs/OPERATIONS.md) (uitrol, geheimen, monitoring, terugdraaien) en
+[docs/SECURITY.md](docs/SECURITY.md) (beveiliging, compliance, incidenten).
 
 ## API
 
@@ -58,6 +67,12 @@ Tests: `cd nexus/backend && pytest` en `cd nexus/web && npm run build`.
 | POST | `/api/controls/kill` | noodstop aan (geen token nodig) |
 | POST | `/api/controls/kill/release` | noodstop uit (admin-token) |
 | POST | `/api/controls/mode` | research/paper (admin-token); live → 403 |
-| POST | `/api/proposals` | voorstel laten beoordelen |
+| POST | `/api/proposals` | voorstel laten beoordelen (tegen het paper-account) |
+| POST | `/api/proposals/{id}/execute` | goedgekeurd voorstel als paper-order (alleen paper-modus) |
+| GET | `/api/paper` · POST `/api/paper/step` · POST `/api/paper/orders/{id}/cancel` | paper-account, orders, vullingen, reconciliatie |
+| GET | `/api/market/providers` · `/api/market/series?symbol=BTC-EUR&interval=1h` | marktdata met herkomst |
+| GET | `/api/strategies` · POST `/api/backtests` · GET `/api/backtests/{id}` | Strategy Lab |
+| GET | `/api/admin/overview` | SaaS-administratie |
+| WS | `/ws/events` | realtime gebeurtenissen |
 
 Interactieve docs: http://127.0.0.1:8000/docs

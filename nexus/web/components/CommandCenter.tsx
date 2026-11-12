@@ -27,7 +27,7 @@ export function CommandCenter() {
       <EnvBanner env={data.environment} />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">Command Center</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-white">Command Center <span className="ml-2 align-middle text-sm font-normal text-cyan-300/80">Intelligence Behind Every Trade.</span></h1>
           <p className="text-sm text-slate-400">
             Stand van {time(data.as_of ?? data.generated_at)} · ververst elke 30 s
             {updatedAt && <> · opgehaald {ago(updatedAt.toISOString())}</>}
@@ -41,7 +41,7 @@ export function CommandCenter() {
 
       {/* Rij 1: vermogen + besturing */}
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
-        <Panel title="Totaal vermogen" label={p ? p.label : "UNAVAILABLE"} glow>
+        <Panel title="Holding-bots · totaal vermogen" label={p ? p.label : "UNAVAILABLE"} glow>
           {p ? (
             <div className="grid gap-5 md:grid-cols-[minmax(220px,auto)_1fr]">
               <div>
@@ -83,6 +83,14 @@ export function CommandCenter() {
               <span className="text-slate-400">Paper-trades vandaag</span>
               <span className="num">{data.fills_today ?? "—"}</span>
             </div>
+            {data.nexus_paper && (
+              <Link href="/execution" className="block rounded-lg border border-white/5 bg-white/[.02] p-2.5 text-xs hover:border-cyan-400/30">
+                <div className="flex items-center justify-between"><span className="text-slate-400">NEXUS paper-account</span><DataBadge label={data.nexus_paper.label} /></div>
+                <div className="num mt-1 flex justify-between text-sm"><span>{eur(data.nexus_paper.equity_eur)}</span>
+                  <span className={tone(data.nexus_paper.pnl_eur)}>{eur(data.nexus_paper.pnl_eur)}</span></div>
+                <div className="text-slate-500">{data.nexus_paper.positions} posities · {data.nexus_paper.open_orders} open orders</div>
+              </Link>
+            )}
             <KillSwitch status={data.controls.kill} onChange={refresh} />
           </div>
         </Panel>

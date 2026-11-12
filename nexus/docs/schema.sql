@@ -1,6 +1,7 @@
--- NEXUS AI · doel-schema voor PostgreSQL 16 + TimescaleDB.
--- Fase 1 gebruikt de tabellen gemarkeerd met [F1] (via SQLAlchemy, ook op SQLite).
--- De rest is het ontwerp voor fase 2-6. Alle tijden in UTC (timestamptz).
+-- NEXUS AI · doel-schema voor PostgreSQL 16 + TimescaleDB (ontwerp).
+-- Het WERKENDE schema staat in backend/nexus/db.py met de Alembic-migratie in
+-- backend/nexus/migrations/versions/ (22 tabellen, met org_id voor tenant-scheiding).
+-- Dit bestand beschrijft de doelvorm met hypertables voor de productieversie.
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
