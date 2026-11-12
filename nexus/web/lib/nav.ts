@@ -11,6 +11,7 @@ export const NAV: NavItem[] = [
   { href: "/forex", label: "Forex Terminal", phase: 2, ready: false, group: "Markten" },
   { href: "/strategy-lab", label: "Strategy Lab", phase: 4, ready: true, group: "Onderzoek" },
   { href: "/backtesting", label: "Backtesting Studio", phase: 4, ready: true, group: "Onderzoek" },
+  { href: "/evolution", label: "Evolution Lab", phase: 4, ready: true, group: "Onderzoek" },
   { href: "/portfolio", label: "Portfolio Intelligence", phase: 1, ready: true, group: "Portefeuille" },
   { href: "/risk", label: "Risk Guardian", phase: 1, ready: true, group: "Portefeuille" },
   { href: "/execution", label: "Execution Monitor", phase: 5, ready: true, group: "Portefeuille" },

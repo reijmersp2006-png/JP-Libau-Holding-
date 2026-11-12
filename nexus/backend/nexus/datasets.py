@@ -142,6 +142,8 @@ class ResearchData:
                 notes.append("4h samengesteld uit 1h")
         currency = inst.currency
         if inst.asset_class is AssetClass.FX:
+            from jplh.backtest import unit_prices
+            candles = unit_prices(candles, inst)
             notes.append("valuta: rendement van de vreemde munt in euro (1/koers)")
             currency = "EUR"
         elif eur and inst.currency == "USD" and candles:

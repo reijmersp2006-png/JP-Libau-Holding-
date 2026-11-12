@@ -158,3 +158,22 @@ def expected_value(trade_pnls: list[float], trade_costs: list[float] | None = No
     return {"trades": n, "win_rate": wr, "avg_win": aw, "avg_loss": al, "avg_cost": c, "expected_value": ev,
             "payoff_ratio": aw / al if al > 0 else None,
             "largest_loss": -min(trade_pnls) if trade_pnls else 0.0}
+
+
+def max_drawdown(returns: list[float]) -> float:
+    eq = peak = 1.0
+    mdd = 0.0
+    for r in returns:
+        eq *= 1 + r
+        peak = max(peak, eq)
+        mdd = max(mdd, 1 - eq / peak)
+    return mdd
+
+
+def monte_carlo_drawdown(returns: list[float], samples: int = 1000, block: int = 10, seed: int = 11) -> dict:
+    """Verdeling van de maximale daling als dezelfde dagen in een andere volgorde (blokken) komen."""
+    if len(returns) < 20:
+        return {"available": False}
+    dd = block_bootstrap(returns, max_drawdown, samples, block, seed)
+    return {"available": True, "observed": max_drawdown(returns), "median": quantile(dd, 0.5),
+            "p95": quantile(dd, 0.95), "p99": quantile(dd, 0.99)}

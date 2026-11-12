@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    "anthropic>=2.8",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +22,7 @@ postgres = ["psycopg[binary]>=3.2"]
 
 [project.scripts]
 nexus-api = "nexus.main:run"
+nexus-research = "nexus.research_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["nexus*"]

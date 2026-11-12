@@ -22,14 +22,21 @@ Command Center, databaseschema met migraties (22 tabellen), frontend aan backend
 adapters (Bitvavo, Yahoo), 5 deterministische strategieën, backtest-workflow, paper trading met
 gedeeltelijke vullingen en reconciliatie, tests (backend + build), documentatie.
 
-Volgende mijlpalen, in deze volgorde:
-1. **AI Expert Council op Claude**: provider-abstractie, per agent input/output-schema, toegestane tools,
-   foutafhandeling, logging naar `agent_decisions`, evaluatietests. CIO-synthese levert alleen voorstellen
-   aan de Risk Guardian; geen pad naar orders.
-2. **Inloggen en tenants**: argon2-wachtwoorden, sessies, wachtwoordherstel, MFA (TOTP), rollen; elke query per `org_id`.
-3. **Redis + aparte worker**: pub/sub voor events en een jobqueue, zodat de API meerdere processen kan draaien.
-4. **Marktdata uitbreiden**: streaming (Bitvavo WebSocket), gelicentieerde aandelenbron (keuze Polygon/FMP),
+## Stand na Master Prompt 3.1 (Evolution Lab)
+
+Gedaan: diagnose van IWDA (attributie, 10 vragen), Alpha Research Engine, champion-challenger met 8 poorten en
+afgesloten holdout, multi-timeframe data, besluitgeheugen en leerlus met hypothesen en modelregister, AI Expert
+Council op Claude met debat en kalibratiegewichten, nieuwsintelligentie, Grok-vergelijking, geplande taken,
+hash-keten in het auditlog, Evolution Lab-dashboard. Resultaten: [research/RESULTS.md](../research/RESULTS.md).
+
+Volgende onderzoeksstappen staan in RESULTS.md. Volgende bouwstappen:
+1. Langere en intraday-geschiedenis ophalen in CI (het netwerk werkt daar) en de ontdekking op 1h/4h draaien.
+2. Bronnen voor marktverwachtingen (consensus) en funding/open interest koppelen, zodat event- en
+   crypto-families niet langer `niet beschikbaar` zijn.
+3. **Inloggen en tenants**: argon2-wachtwoorden, sessies, wachtwoordherstel, MFA (TOTP), rollen; elke query per `org_id`.
+4. **Redis + aparte worker**: pub/sub voor events en een jobqueue, zodat de API meerdere processen kan draaien.
+5. **Marktdata uitbreiden**: streaming (Bitvavo WebSocket), gelicentieerde aandelenbron (keuze Polygon/FMP),
    CoinGecko, FRED, meme-veiligheidschecks.
-5. **Stripe en onboarding** (pas na de juridische toets): abonnementen, proef, facturen, gebruiksmeting.
-6. **Publieke website**: landing, functies, prijzen, beveiliging, FAQ, documentatie, contact.
-7. **Live-gereedheid**: broker-adapters met permissiecheck, herstel na onderbreking, positie-reconciliatie met de broker.
+6. **Stripe en onboarding** (pas na de juridische toets): abonnementen, proef, facturen, gebruiksmeting.
+7. **Publieke website**: landing, functies, prijzen, beveiliging, FAQ, documentatie, contact.
+8. **Live-gereedheid**: broker-adapters met permissiecheck, herstel na onderbreking, positie-reconciliatie met de broker.

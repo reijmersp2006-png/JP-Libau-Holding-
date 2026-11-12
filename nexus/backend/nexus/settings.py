@@ -26,6 +26,10 @@ class Settings:
     anthropic_key_present: bool = False
     worker: bool = True                     # achtergrondronde voor open paper-orders en waarderingen
     worker_seconds: float = 60.0
+    research_db: Path | None = None         # eigen koersopslag voor onderzoek (andere tijdschalen)
+    research_out: Path | None = None        # map voor onderzoeksrapporten en het holdout-register
+    jobs: bool = True                       # geplande onderzoekstaken in de worker
+    council_symbols: tuple[str, ...] = ()   # dagelijkse Council-run (kost AI-budget); leeg = alleen op verzoek
     extra: dict = field(default_factory=dict)
 
     @classmethod
@@ -45,4 +49,8 @@ class Settings:
             anthropic_key_present=bool(os.environ.get("ANTHROPIC_API_KEY")),
             worker=os.environ.get("NEXUS_WORKER", "1") not in ("0", "false", "no"),
             worker_seconds=float(os.environ.get("NEXUS_WORKER_SECONDS", "60")),
+            research_db=Path(os.environ["NEXUS_RESEARCH_DB"]).expanduser() if os.environ.get("NEXUS_RESEARCH_DB") else None,
+            research_out=Path(os.environ["NEXUS_RESEARCH_OUT"]).expanduser() if os.environ.get("NEXUS_RESEARCH_OUT") else None,
+            jobs=os.environ.get("NEXUS_JOBS", "1") not in ("0", "false", "no"),
+            council_symbols=tuple(x.strip() for x in os.environ.get("NEXUS_COUNCIL_SYMBOLS", "").split(",") if x.strip()),
         )

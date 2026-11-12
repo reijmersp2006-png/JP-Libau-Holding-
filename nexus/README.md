@@ -50,8 +50,12 @@ Tests: `cd nexus/backend && pytest` en `cd nexus/web && npm run build`.
 | Database | 22 tabellen (gebruikers, organisaties, accounts, brokers, assets, marktdata, strategieën, backtests, voorstellen, orders, vullingen, posities, waarderingen, risicobeleid, AI-rapporten, agentbesluiten, audit, abonnementen, facturen) met Alembic | echt (SQLite of PostgreSQL) |
 | Realtime | WebSocket `/ws/events` (noodstop, modus, voorstellen, vullingen) + achtergrondworker | echt, in één proces |
 | SaaS-admin | plannen €19/€59/€149 (inactief), juridische poort, uptime en fouten | geen klanten, geen betaalkoppeling |
+| Evolution Lab (3.1) | Alpha Research Engine, champion-challenger met 8 poorten en afgesloten holdout, besluitgeheugen, foutpatronen → hypothesen → toets → modelregister, AI Expert Council (13 agents op Claude), nieuws met koersreacties, Grok-vergelijking, geplande taken | onderzoek = GESIMULEERD/SCHATTING; besluiten en vullingen = ACTUEEL (paper) |
 
-Nog niet gebouwd: AI-agents op een taalmodel, inloggen en meerdere gebruikers, Stripe, Redis (nodig zodra er
+Resultaten van het onderzoek: [research/RESULTS.md](research/RESULTS.md). Kort: geen enkele strategie verslaat
+koop-en-houd op IWDA geloofwaardig; dat staat er eerlijk.
+
+Nog niet gebouwd: inloggen en meerdere gebruikers, Stripe, Redis (nodig zodra er
 meer dan één API-proces draait), live broker-adapters, publieke website. Zie [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Meer: [docs/OPERATIONS.md](docs/OPERATIONS.md) (uitrol, geheimen, monitoring, terugdraaien) en
@@ -73,6 +77,13 @@ Meer: [docs/OPERATIONS.md](docs/OPERATIONS.md) (uitrol, geheimen, monitoring, te
 | GET | `/api/market/providers` · `/api/market/series?symbol=BTC-EUR&interval=1h` | marktdata met herkomst |
 | GET | `/api/strategies` · POST `/api/backtests` · GET `/api/backtests/{id}` | Strategy Lab |
 | GET | `/api/admin/overview` | SaaS-administratie |
+| GET | `/api/evolution/overview` · `/discovery` · `/arena?symbol=` · `/hypotheses` · `/memory` · `/models` | Evolution Lab |
+| POST | `/api/evolution/discovery` · `/api/evolution/cycle` · `/api/evolution/models/{id}/promote` · `/rollback` | onderzoek en register (admin-token; promoveren toetst de poorten opnieuw) |
+| GET | `/api/research/audit` · `/api/research/baseline` | attributie-audit en het bewaarde ijkpunt |
+| GET/POST | `/api/council/agents` · `/api/council/runs` · POST `/api/council/run` | AI Expert Council (admin-token, dagbudget) |
+| GET/POST | `/api/news` · POST `/api/news/ingest` | nieuws uit officiële bronnen met koersreactie |
+| GET/POST | POST `/api/external/import` · `/api/external` · `/api/external/{id}/compare` | vergelijking met een extern systeem |
+| GET/POST | `/api/jobs` · POST `/api/jobs/{key}/run` · `/api/audit/verify` | geplande taken en de hash-keten van het auditlog |
 | WS | `/ws/events` | realtime gebeurtenissen |
 
 Interactieve docs: http://127.0.0.1:8000/docs

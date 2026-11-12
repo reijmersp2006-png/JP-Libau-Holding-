@@ -78,5 +78,7 @@ markt van 2025-2026 wel minder diep achter dan vasthouden (bijvoorbeeld BTC: −
 - **Hypothese D (rotatie):** buiten de markt gaan levert 0% op. Rotatie naar geldmarkt (XEON) of
   obligaties (IEAG) verandert de rekensom.
 
-Deze hypothesen staan in het hypothese-register van NEXUS Evolution en worden getest op een
-afgesloten holdout-periode die tijdens het ontwikkelen niet bekeken wordt.
+Deze hypothesen staan in het hypothese-register van NEXUS Evolution en zijn getoetst op walk-forward-vakken;
+de afgesloten holdout (vanaf 9 september 2025) gaat pas open voor een uitdager die de ontwikkelpoorten haalt.
+Uitkomst: B gesteund tegenover het origineel, A, C en D onbeslist, en geen enkele verslaat koop-en-houd.
+Zie [RESULTS.md](RESULTS.md).

@@ -15,7 +15,7 @@ export default function Page() {
     <WithCC>{(d) => (
       <>
         <PageTitle title="AI Expert Council"
-          sub="Dertien rollen, met eerlijk per rol wat er al echt draait en waarop. Er wordt geen agent-activiteit verzonnen: ‘laatst actief’ komt uit echte tijdstempels. LLM-analyses met bewijs per bewering volgen in fase 3." />
+          sub="Dertien rollen, met eerlijk per rol wat er al echt draait en waarop. Er wordt geen agent-activiteit verzonnen: ‘laatst actief’ komt uit echte tijdstempels. De echte Council-runs (Claude, debat, trackrecord en kalibratie) staan in het Evolution Lab onder Agent Council." />
         <Panel title="Besluitvorming" className="mb-4">
           <ol className="flex flex-wrap items-center gap-1.5 text-xs">
             {["Data ophalen", "Datakwaliteit", "Marktregime", "Kansen", "Agent-analyse", "Strategie-toets", "Portefeuille-impact", "Risk Guardian (veto)", "Uitvoeringsplan", "Paper / live", "Monitoring"].map((s, i) => {
