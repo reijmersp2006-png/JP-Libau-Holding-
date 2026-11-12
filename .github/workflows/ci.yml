@@ -52,3 +52,22 @@ jobs:
         with:
           name: backtest-rapport
           path: reports/
+
+  nexus:
+    # NEXUS AI: API-tests (Risk Guardian, noodstop, live uit, reconciliatie) en de web-build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . -e "nexus/backend[dev]"
+      - run: pytest -q
+        working-directory: nexus/backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: nexus/web/package-lock.json
+      - run: npm ci && npm run lint && npm run build
+        working-directory: nexus/web

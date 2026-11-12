@@ -10,6 +10,8 @@ welke strategieën na kosten echt iets opleveren, en de rest uit te zetten.
 
 Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 
+**NEXUS AI** (het Command Center boven op alle bots) staat in [nexus/](nexus/README.md).
+
 ## Status: fase 1 tot en met 4
 
 | Onderdeel | Wat het doet |

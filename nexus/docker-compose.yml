@@ -1,0 +1,26 @@
+# NEXUS AI lokaal: API + web + PostgreSQL. Bouwen vanaf de root van de repo:
+#   docker compose -f nexus/docker-compose.yml up --build
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: ${NEXUS_DB_PASSWORD:?zet NEXUS_DB_PASSWORD}
+    volumes: [nexus-db:/var/lib/postgresql/data]
+  api:
+    build: { context: .., dockerfile: nexus/backend/Dockerfile }
+    environment:
+      NEXUS_DATABASE_URL: postgresql+psycopg://nexus:${NEXUS_DB_PASSWORD}@db:5432/nexus
+      NEXUS_HOLDING_HOME: /holding-data
+      NEXUS_DEMO: ${NEXUS_DEMO:-0}
+      NEXUS_ADMIN_TOKEN: ${NEXUS_ADMIN_TOKEN:-}
+    volumes: ["${NEXUS_HOLDING_HOME:-./.no-holding}:/holding-data"]
+    ports: ["8000:8000"]
+    depends_on: [db]
+  web:
+    build: { context: ./web, args: { NEXT_PUBLIC_NEXUS_API: "http://localhost:8000" } }
+    ports: ["3000:3000"]
+    depends_on: [api]
+volumes:
+  nexus-db:
