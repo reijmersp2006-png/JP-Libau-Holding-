@@ -31,13 +31,13 @@ from sqlalchemy.exc import IntegrityError
 
 from nexus import __version__
 from nexus import agents as agents_mod
-from nexus import evolution_api, jobs, lab
+from nexus import evolution_api, jobs, lab, sentinel_api, social
 from nexus.bridge import HoldingBridge
 from nexus.controls import Controls, LiveTradingDisabled, Mode
 from nexus.db import (DEFAULT_ORG, Backtest, BillingRecord, Database, Organization, RiskEvaluation, StrategyRow,
                       StrategyVersion, SubscriptionPlan, TradeProposal, User, iso)
 from nexus.events import EventBus
-from nexus.guardian import RiskGuardian, limits_from_env
+from nexus.guardian import Check, RiskGuardian, limits_from_env
 from nexus.marketdata import REGISTRY, MarketData
 from nexus.paper import PaperEngine, quote_from_store
 from nexus.proposals import TradeProposalIn
@@ -281,6 +281,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             log.exception("paper-account niet te waarderen")
             view = None
         verdict = guardian.evaluate(p, view, controls.mode(), controls.kill_engaged())
+        if p.asset_class == "meme" and p.direction == "buy":
+            # Verplichte on-chain veiligheidscontrole: zonder recente geslaagde controle geen aankoop.
+            ok, why = social.tradeable(db, p.symbol)
+            verdict.checks.append(Check("token_safety", ok, why))
+            if not ok and verdict.approved:
+                verdict.approved, verdict.reason = False, f"token_safety: {why}"
         try:
             with db.session.begin() as s:
                 row = TradeProposal(org_id=DEFAULT_ORG, account_id=paper.account_id(), idempotency_key=p.idempotency_key,
@@ -478,4 +484,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     evo["ctx"] = (evolution_api.mount(app, db=db, bridge=bridge, settings=settings, paper=paper, controls=controls,
                                    bus=bus, require_admin=require_admin, limiter=limiter, market_db=market_db))
+    sentinel_api.mount(app, db=db, ctx=evo["ctx"], settings=settings, require_admin=require_admin, limiter=limiter)
     return app

@@ -3,7 +3,9 @@ export interface NavItem { href: string; label: string; phase: number; ready: bo
 // ready = deze pagina toont al echte data. De rest laat eerlijk zien wat er nog moet komen.
 export const NAV: NavItem[] = [
   { href: "/", label: "Command Center", phase: 1, ready: true, group: "Overzicht" },
-  { href: "/council", label: "AI Expert Council", phase: 3, ready: true, group: "Overzicht" },
+  { href: "/hq", label: "AI Headquarters", phase: 3, ready: true, group: "Overzicht" },
+  { href: "/news", label: "News Reactor", phase: 3, ready: true, group: "Intelligence" },
+  { href: "/social", label: "Social Radar", phase: 3, ready: true, group: "Intelligence" },
   { href: "/radar", label: "Market Radar", phase: 2, ready: true, group: "Markten" },
   { href: "/crypto", label: "Crypto Terminal", phase: 2, ready: false, group: "Markten" },
   { href: "/stocks", label: "Stock Terminal", phase: 2, ready: false, group: "Markten" },

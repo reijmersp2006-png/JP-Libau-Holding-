@@ -95,8 +95,9 @@ def connections(snap: Snapshot | None, settings: Settings) -> list[dict]:
     out.append({"name": "Live broker", "kind": "broker", "status": "disabled", "label": "UNAVAILABLE",
                 "detail": "bestaat niet in deze versie (fase 6); live handelen staat uit"})
     out.append({"name": "Anthropic API", "kind": "ai", "status": "configured" if settings.anthropic_key_present else "not_configured",
-                "label": "UNAVAILABLE", "detail": "sleutel aanwezig, agents volgen in fase 3" if settings.anthropic_key_present
-                else "geen sleutel; LLM-agents volgen in fase 3"})
+                "label": "DELAYED" if settings.anthropic_key_present else "UNAVAILABLE",
+                "detail": "sleutel aanwezig: Council en Copilot kunnen Claude gebruiken (binnen het dagbudget)"
+                if settings.anthropic_key_present else "geen sleutel: Council draait niet, Copilot antwoordt zonder taalmodel"})
     return out
 
 

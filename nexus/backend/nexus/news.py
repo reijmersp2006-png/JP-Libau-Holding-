@@ -56,6 +56,10 @@ FEEDS = [
          "&type=8-K&dateb=&owner=include&count=20&output=atom", "official", ("AAPL",), needs_contact=True),
     Feed("edgar_msft", "SEC EDGAR 8-K Microsoft", "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000789019"
          "&type=8-K&dateb=&owner=include&count=20&output=atom", "official", ("MSFT",), needs_contact=True),
+    Feed("kraken_status", "Kraken (status en incidenten)", "https://status.kraken.com/history.rss", "exchange",
+         ("BTC-EUR", "ETH-EUR")),
+    Feed("coinbase_status", "Coinbase (status en incidenten)", "https://status.coinbase.com/history.rss", "exchange",
+         ("BTC-EUR", "ETH-EUR")),
     Feed("edgar_nvda", "SEC EDGAR 8-K NVIDIA", "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001045810"
          "&type=8-K&dateb=&owner=include&count=20&output=atom", "official", ("NVDA",), needs_contact=True),
 ]
@@ -153,9 +157,80 @@ def fetch(feed: Feed, timeout: float = 20.0) -> str:
         return r.read(5_000_000).decode("utf-8", errors="replace")
 
 
+# ── News Reactor: verwante berichten, feiten, relevantie, latenties ───────────────────────
+RELEVANCE = {"rate_decision": 0.9, "inflation": 0.85, "employment": 0.8, "earnings": 0.7, "etf": 0.65,
+             "security_incident": 0.7, "listing": 0.55, "crypto_regulation": 0.55, "regulation": 0.45,
+             "financial_stability": 0.6, "speech": 0.3, "other": 0.15}
+SIGNAL_THRESHOLD = 0.6        # vanaf hier gaat een gebeurtenis naar NEXUS Central (en zo nodig de Council)
+_STOP = {"the", "a", "an", "of", "and", "to", "in", "on", "for", "with", "by", "at", "from", "is", "its", "as",
+         "de", "het", "een", "van", "en", "statement", "press", "release"}
+_FACT_VERB = re.compile(r"\b(decided|announced|maintain\w*|raised|lowered|cut|increased|decreased|rose|fell|"
+                        r"reported|filed|approved|charged|launched|listed|delisted|halted|resumed|completed)\b", re.I)
+_NUM = re.compile(r"\d[\d.,]*\s?(%|percent|basis points|bp|million|billion)?", re.I)
+
+
+def tokens(title: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", title.lower()) if w not in _STOP and len(w) > 2}
+
+
+def similar(a: str, b: str) -> float:
+    ta, tb = tokens(a), tokens(b)
+    return len(ta & tb) / len(ta | tb) if ta and tb else 0.0
+
+
+def extract_facts(title: str, summary: str) -> list[dict]:
+    """Controleerbare beweringen: zinnen met een feitelijk werkwoord of een getal, zonder speculatietaal."""
+    out = []
+    for sent in re.split(r"(?<=[.!?])\s+", f"{title}. {summary or ''}"):
+        sent = sent.strip(" .")
+        if len(sent) < 12 or SPECULATIVE.search(sent):
+            continue
+        if _FACT_VERB.search(sent) or _NUM.search(sent):
+            out.append({"claim": sent[:300], "numbers": [m.group(0).strip() for m in _NUM.finditer(sent)][:5]})
+    return out[:6]
+
+
+def relevance(category: str, source_kind: str, assets: list, factuality: str) -> float:
+    r = RELEVANCE.get(category, 0.15)
+    r += 0.1 if source_kind == "official" else 0.0
+    r += 0.05 if len(assets) >= 3 else 0.0
+    r -= 0.15 if factuality == "speculation" else 0.0
+    return round(max(0.0, min(1.0, r)), 4)
+
+
+def latency(db: Database, since: datetime | None = None) -> dict:
+    """Gemeten vertragingen in seconden (mediaan en p90) per stap. Alleen echte tijdstempels."""
+    from nexus import stats as st
+    pub, ana, sig = [], [], []
+    with db.session() as s:
+        q = select(NewsEvent)
+        if since:
+            q = q.where(NewsEvent.fetched_at >= since)
+        for e in s.scalars(q):
+            p_, f_ = _utc(e.published_at), _utc(e.fetched_at)
+            pub.append((f_ - p_).total_seconds())
+            if e.analyzed_at:
+                ana.append((_utc(e.analyzed_at) - f_).total_seconds())
+            if e.signal_at and e.analyzed_at:
+                sig.append((_utc(e.signal_at) - _utc(e.analyzed_at)).total_seconds())
+
+    def summ(xs):
+        if not xs:
+            return {"n": 0, "median_s": None, "p90_s": None}
+        xs = sorted(xs)
+        return {"n": len(xs), "median_s": st.quantile(xs, 0.5), "p90_s": st.quantile(xs, 0.9)}
+    return {"publication_to_ingest": summ(pub), "ingest_to_analysis": summ(ana), "analysis_to_signal": summ(sig),
+            "note": "publicatie→binnenkomst hangt vooral af van hoe vaak de feed wordt opgehaald (elk uur)"}
+
+
+def _utc(d: datetime) -> datetime:
+    return d if d.tzinfo else d.replace(tzinfo=UTC)
+
+
 def ingest(db: Database, feeds: list[Feed] | None = None, fetcher=fetch, now: datetime | None = None) -> dict:
     """Haalt alle feeds op. Per bron: aantal nieuw, of UNAVAILABLE met de fout."""
     now = now or datetime.now(tz=UTC)
+    t0 = datetime.now(tz=UTC)
     report = {}
     for feed in feeds or FEEDS:
         try:
@@ -172,11 +247,23 @@ def ingest(db: Database, feeds: list[Feed] | None = None, fetcher=fetch, now: da
                 if s.scalar(select(NewsEvent.id).where(NewsEvent.content_hash == h)):
                     continue
                 cat, assets, fact = classify(it["title"], it["summary"], feed)
+                # Verwante berichten (andere bron of herhaling) binnen 48 uur: zelfde cluster, één signaal.
+                near = s.scalars(select(NewsEvent).where(
+                    NewsEvent.published_at >= it["published_at"] - timedelta(hours=48),
+                    NewsEvent.published_at <= it["published_at"] + timedelta(hours=48))).all()
+                dup = max(near, key=lambda e: similar(e.title, it["title"]), default=None)
+                is_dup = dup is not None and similar(dup.title, it["title"]) >= 0.6
+                rel = relevance(cat, feed.kind, list(assets), fact)
+                analyzed = now + (datetime.now(tz=UTC) - t0)        # verwerktijd, gemeten
                 s.add(NewsEvent(source=feed.key, source_kind=feed.kind, url=it["url"], title=it["title"],
                                 summary=it["summary"] or None, published_at=it["published_at"], fetched_at=now,
                                 category=cat, assets=list(assets), factuality=fact,
                                 expectation={"available": False, "reason": "geen bron voor marktverwachtingen gekoppeld"},
-                                content_hash=h))
+                                content_hash=h, cluster_key=((dup.cluster_key or dup.content_hash[:16]) if is_dup else h[:16]),
+                                duplicate_of=(dup.duplicate_of or dup.id) if is_dup else None,
+                                facts=extract_facts(it["title"], it["summary"]), relevance=rel,
+                                analyzed_at=analyzed))
+                s.flush()
                 new += 1
         report[feed.key] = {"status": "ok", "items": len(items), "new": new}
     return report
@@ -272,4 +359,8 @@ def latest(db: Database, limit: int = 50, category: str | None = None) -> list[d
         return [{"id": e.id, "source": e.source, "source_kind": e.source_kind, "title": e.title, "url": e.url,
                  "published_at": (e.published_at if e.published_at.tzinfo else e.published_at.replace(tzinfo=UTC)).isoformat(),
                  "category": e.category, "assets": e.assets, "factuality": e.factuality, "expectation": e.expectation,
-                 "analysis": e.analysis, "reaction": e.reaction} for e in s.scalars(q)]
+                 "analysis": e.analysis, "reaction": e.reaction, "facts": e.facts or [], "relevance": e.relevance,
+                 "cluster_key": e.cluster_key, "duplicate_of": e.duplicate_of,
+                 "fetched_at": _utc(e.fetched_at).isoformat(),
+                 "analyzed_at": _utc(e.analyzed_at).isoformat() if e.analyzed_at else None,
+                 "signal_at": _utc(e.signal_at).isoformat() if e.signal_at else None} for e in s.scalars(q)]

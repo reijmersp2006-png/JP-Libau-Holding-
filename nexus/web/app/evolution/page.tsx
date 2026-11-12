@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Empty, ErrorBox, PageTitle, Panel, Skeleton, Stat } from "@/components/ui";
+import { Btn as Button, useAdmin } from "@/components/admin";
+import { Empty, ErrorBox, PageTitle, Panel, Segmented, Skeleton, Stat, TruthTag } from "@/components/ui";
 import { api, useApi } from "@/lib/api";
 import { ago, num, pct, time, tone } from "@/lib/format";
 
@@ -16,7 +17,7 @@ const KIND: Record<Kind, { t: string; c: string; help: string }> = {
   estimate: { t: "SCHATTING", c: "text-amber-300 border-amber-400/30 bg-amber-400/10", help: "Onderzoeksschatting met onzekerheid" },
 };
 function K({ k }: { k: Kind }) {
-  return <span title={KIND[k].help} className={`rounded-md border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold tracking-wider ${KIND[k].c}`}>{KIND[k].t}</span>;
+  return <span title={KIND[k].help}><TruthTag kind={k} /></span>;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -36,32 +37,8 @@ function Loader<T>({ path, refresh = 60_000, children }: { path: string; refresh
   return <>{children(data as T, reload)}</>;
 }
 
-function useAdmin() {
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  async function post(path: string, body?: unknown, done?: () => void) {
-    setBusy(path); setMsg(null);
-    try {
-      const r = await api<Any>(path, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined });
-      setMsg(r?.status ? `Klaar: ${r.status}` : "Klaar");
-      done?.();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
-    } finally { setBusy(null); }
-  }
-  const field = (
-    <div className="flex items-center gap-2">
-      <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" placeholder="admin-token"
-        aria-label="Admin-token" className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs" />
-      {msg && <span className="max-w-xs truncate text-xs text-slate-400" title={msg}>{msg}</span>}
-    </div>
-  );
-  return { token, busy, post, field };
-}
-
 function Btn({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: ReactNode }) {
-  return <button onClick={onClick} disabled={disabled} className="rounded-md border border-slate-600 px-2.5 py-1 text-xs hover:border-cyan-400/60 disabled:opacity-40">{children}</button>;
+  return <Button onClick={onClick} disabled={disabled}>{children}</Button>;
 }
 
 const p0 = (v: number | null | undefined) => pct(v, 0);
@@ -75,16 +52,13 @@ export default function Page() {
       <PageTitle title="Evolution Lab"
         sub="Het onderzoeks- en leersysteem. Elke strategie moet koop-en-houd na kosten verslaan op data die bij het afstemmen niet gezien is. Lukt dat niet, dan staat dat hier. Leren verandert nooit zelf live handelen of risicolimieten."
         right={<div className="flex flex-col items-end gap-2">
-          <span className="rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-300">Live handelen: UIT</span>
-          <div className="flex gap-1.5"><K k="actual" /><K k="simulated" /><K k="estimate" /></div>
+          <span className="text-[12.5px] text-slate-400">Live handelen <b className="font-medium text-slate-100">uit</b></span>
+          <div className="flex gap-3"><K k="actual" /><K k="simulated" /><K k="estimate" /></div>
         </div>} />
-      <nav className="mb-4 flex flex-wrap gap-1" role="tablist">
-        {TABS.map(([k, t]) => (
-          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-            className={`rounded-md border px-3 py-1.5 text-xs ${tab === k ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-100" : "border-slate-700 text-slate-400 hover:text-slate-200"}`}>{t}</button>
-        ))}
-        <div className="ml-auto">{admin.field}</div>
-      </nav>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="max-w-full overflow-x-auto"><Segmented label="Onderdelen" value={tab} onChange={setTab} options={TABS.map(([k, t]) => [k, t] as [Tab, string])} /></div>
+        {admin.field}
+      </div>
       {tab === "discovery" && <Discovery admin={admin} />}
       {tab === "learning" && <Learning admin={admin} />}
       {tab === "council" && <Council admin={admin} />}

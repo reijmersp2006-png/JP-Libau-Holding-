@@ -450,6 +450,73 @@ class NewsEvent(Base):
     analysis: Mapped[dict] = mapped_column(JSON, default=dict)
     reaction: Mapped[dict] = mapped_column(JSON, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    # News Reactor (4.0): verwante berichten, latenties, feiten, relevantie.
+    cluster_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    duplicate_of: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    analyzed_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    signal_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    relevance: Mapped[float | None] = mapped_column(Numeric(6, 4, asdecimal=False), nullable=True)
+    facts: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class OrchestratorTask(Base):
+    """Eén taak van NEXUS Central: expliciete status, wie, waarom, uitkomst. Geen vrije agent-lussen."""
+
+    __tablename__ = "orchestrator_tasks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    department: Mapped[str] = mapped_column(String(24))
+    agent: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(20), index=True)   # queued running done failed escalated cancelled
+    priority: Mapped[int] = mapped_column(Integer, default=50)
+    subject: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_ref: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    history: Mapped[list] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_usd: Mapped[float] = mapped_column(Money(), default=0)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class Briefing(Base):
+    __tablename__ = "briefings"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    day: Mapped[str] = mapped_column(String(10), index=True)
+    content: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class SocialSnapshot(Base):
+    """Sociale meting voor één onderwerp (cashtag, contract) over een venster, met de bron en of die verbonden was."""
+
+    __tablename__ = "social_snapshots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    topic: Mapped[str] = mapped_column(String(128), index=True)
+    source: Mapped[str] = mapped_column(String(24))
+    window_start: Mapped[datetime] = mapped_column(TS, index=True)
+    window_end: Mapped[datetime] = mapped_column(TS)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class TokenCheck(Base):
+    """On-chain veiligheidscontrole van een token. Zakt een verplichte controle, dan geen handelsvoorstel."""
+
+    __tablename__ = "token_checks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chain: Mapped[str] = mapped_column(String(24))
+    address: Mapped[str] = mapped_column(String(128), index=True)
+    symbol: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(16))                 # pass, fail, unavailable
+    checks: Mapped[list] = mapped_column(JSON, default=list)
+    market: Mapped[dict] = mapped_column(JSON, default=dict)
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    checked_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
 
 
 class CouncilRun(Base):

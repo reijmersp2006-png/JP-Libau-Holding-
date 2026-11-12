@@ -84,8 +84,12 @@ def arena(data: ResearchData, symbol: str, interval: str = "1d", capital: float 
         early = all(g["status"] == "pass" for g in gates.values())
         if early:
             hold = alpha.evaluate_holdout(res, fam, panel, costs, ppy, capital, ledger, run=f"arena-{symbol}")
-            gates["3_holdout"] = _gate("pass" if hold["passed"] else "fail", round(hold["metrics"]["sharpe"], 3),
-                                       f"> {hold['benchmark']['sharpe']:.2f}", hold["note"])
+            if hold["status"] == "evaluated":
+                gates["3_holdout"] = _gate("pass" if hold["passed"] else "fail", round(hold["metrics"]["sharpe"], 3),
+                                           f"> {hold['benchmark']['sharpe']:.2f}", hold["note"])
+            else:
+                gates["3_holdout"] = _gate("pending", hold["governance"].get("bars"), hold["governance"].get("needed"),
+                                           hold["note"])
         else:
             gates["3_holdout"] = _gate("locked", note="pas open als poorten 1, 2, 4, 5 en 6 gehaald zijn")
         days = (paper_days or {}).get(fam.key, 0)
@@ -108,6 +112,7 @@ def arena(data: ResearchData, symbol: str, interval: str = "1d", capital: float 
         "symbol": symbol, "interval": interval, "capital_eur": capital, "data_notes": list(ds.notes),
         "split": {"warmup_end": candles[sp.warm].ts.isoformat(), "test_start": candles[sp.folds[0][0]].ts.isoformat(),
                   "holdout_start": candles[sp.dev_end].ts.isoformat(), "end": candles[-1].ts.isoformat()},
+        "holdout_governance": _governance(symbol, interval, candles, sp, ppy),
         "champion": {"key": champ_key, "version": champ_ver, "walk_forward": champ_wf["metrics"]},
         "buy_hold": champ_wf["bench_metrics"],
         "risk_matched_note": "koop-en-houd geschaald naar de beweeglijkheid van de uitdager, rest in cash (0%)",
@@ -147,3 +152,11 @@ def _best_lab(panel, symbol, costs, sp, ppy, capital) -> tuple[str, int]:
         if sh > best_sh:
             best, best_sh = (s.key, s.version), sh
     return best
+
+
+def _governance(symbol: str, interval: str, candles: list[Candle], sp: alpha.Split, ppy: int) -> dict:
+    from nexus import holdout as hg
+    key = f"{symbol}@{interval}"
+    rule = hg.contamination(key, candles[sp.dev_end].ts.isoformat())
+    w = hg.window(candles, sp.dev_end, rule, ppy)
+    return {"dataset": key, **{k: v for k, v in w.items() if k not in ("start", "end")}}

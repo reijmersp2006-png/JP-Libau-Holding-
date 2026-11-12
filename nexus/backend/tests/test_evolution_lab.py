@@ -253,7 +253,12 @@ def test_arena_keeps_holdout_paper_and_human_review_closed(synth, tmp_path):
         assert (g["3_holdout"]["status"] == "locked") == (not early)
         assert g["7_paper"]["status"] != "pass"                   # nul paperdagen
         assert g["8_risk_review"]["status"] != "pass"             # altijd een mens
-    assert len(led.entries()) == len(rep["passed_dev_gates"])          # elke holdout-blik staat in het register
+    # Synthetische dagdata vóór november 2026 valt onder de besmettingsregel: geen blik, wachten op prospectieve data.
+    assert rep["holdout_governance"]["status"] == "contaminated" and not rep["holdout_governance"]["ready"]
+    for c in rep["challengers"]:
+        if c["family"] in rep["passed_dev_gates"]:
+            assert c["gates"]["3_holdout"]["status"] == "pending"
+    assert led.entries() == []
 
 
 # ── taken ──────────────────────────────────────────────────────────────────────────────────
