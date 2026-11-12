@@ -1,14 +1,42 @@
 @import "tailwindcss";
 
 /* NEXUS design tokens: near-black, grafiet, elektrisch cyaan, beheerst violet. */
+/* NEXUS-kleurensysteem (prompt 2.0). De Tailwind-tinten die de componenten gebruiken worden
+   hier op het merk gezet, zodat elk component automatisch de merkkleuren krijgt. */
 @theme {
-  --color-void: #04060a;
-  --color-graphite-950: #070a10;
-  --color-graphite-900: #0b0f17;
-  --color-graphite-800: #121826;
-  --color-graphite-700: #1b2333;
-  --color-cyan-glow: #22d3ee;
-  --color-violet-glow: #a78bfa;
+  --color-void: #080D17;
+  --color-graphite-950: #0b1220;
+  --color-graphite-900: #101827;
+  --color-graphite-800: #172235;
+  --color-graphite-700: #1f2d45;
+  --color-cyan-glow: #56DFF5;
+  --color-violet-glow: #9775FA;
+  --color-white: #F2F6FF;
+  --color-slate-100: #F2F6FF;
+  --color-slate-200: #dde5f2;
+  --color-slate-300: #b9c5d8;
+  --color-slate-400: #91A0B8;
+  --color-slate-500: #7a89a1;
+  --color-slate-600: #4f5d74;
+  --color-slate-700: #2a3850;
+  --color-slate-800: #1c2840;
+  --color-cyan-200: #b5f1fb;
+  --color-cyan-300: #85e8f8;
+  --color-cyan-400: #56DFF5;
+  --color-cyan-500: #2fc7e0;
+  --color-violet-200: #d9ccfd;
+  --color-violet-300: #b9a2fc;
+  --color-violet-400: #9775FA;
+  --color-violet-500: #7d57f0;
+  --color-emerald-200: #b6f2de;
+  --color-emerald-300: #79e4c1;
+  --color-emerald-400: #3ED6A3;
+  --color-emerald-500: #28b887;
+  --color-rose-200: #ffc7d1;
+  --color-rose-300: #ff98aa;
+  --color-rose-400: #FF627D;
+  --color-rose-500: #FF627D;
+  --color-rose-600: #e8475f;
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
@@ -17,31 +45,31 @@
 
 body {
   background:
-    radial-gradient(1200px 600px at 85% -10%, rgba(34, 211, 238, 0.07), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(167, 139, 250, 0.06), transparent 60%),
+    radial-gradient(1200px 600px at 85% -10%, rgba(86, 223, 245, 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(151, 117, 250, 0.07), transparent 60%),
     var(--color-void);
-  color: #e2e8f0;
+  color: #F2F6FF;
   font-feature-settings: "tnum" 1, "cv11" 1;
 }
 
 .panel {
   position: relative;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(18, 24, 38, 0.78), rgba(11, 15, 23, 0.82));
+  background: linear-gradient(180deg, rgba(23, 34, 53, 0.72), rgba(16, 24, 39, 0.86));
   border: 1px solid rgba(148, 163, 184, 0.09);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(10px);
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
-.panel:hover { border-color: rgba(34, 211, 238, 0.22); }
+.panel:hover { border-color: rgba(86, 223, 245, 0.24); }
 .panel-glow::before {
   content: ""; position: absolute; inset: -1px; border-radius: 14px; pointer-events: none;
-  background: linear-gradient(120deg, rgba(34, 211, 238, 0.45), transparent 35%, transparent 65%, rgba(167, 139, 250, 0.35));
+  background: linear-gradient(120deg, rgba(86, 223, 245, 0.5), transparent 35%, transparent 65%, rgba(151, 117, 250, 0.45));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude; padding: 1px;
 }
 
-.eyebrow { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #64748b; font-weight: 600; }
+.eyebrow { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #7a89a1; font-weight: 600; }
 .num { font-variant-numeric: tabular-nums; }
 
 @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

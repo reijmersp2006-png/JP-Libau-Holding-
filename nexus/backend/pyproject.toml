@@ -12,6 +12,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "sqlalchemy>=2.0",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -26,3 +27,6 @@ include = ["nexus*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+nexus = ["migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]

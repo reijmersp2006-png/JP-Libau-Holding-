@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useApi } from "@/lib/api";
+import { API_BASE, useApi } from "@/lib/api";
 import { NAV } from "@/lib/nav";
 
 interface Health { status: string; environment: string; holding_data: boolean; live_trading: boolean; kill: boolean }
@@ -11,14 +11,14 @@ interface Health { status: string; environment: string; holding_data: boolean; l
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="relative grid h-8 w-8 place-items-center rounded-lg border border-cyan-400/40 bg-cyan-400/10 shadow-[0_0_24px_-6px_rgba(34,211,238,.7)]">
+      <div className="relative grid h-8 w-8 place-items-center rounded-lg border border-cyan-400/40 bg-cyan-400/10 shadow-[0_0_24px_-6px_rgba(86,223,245,.7)]">
         <svg viewBox="0 0 24 24" className="h-4 w-4 text-cyan-300" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 20V4l16 16V4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
       <div className="leading-tight">
         <div className="text-sm font-semibold tracking-[0.2em] text-white">NEXUS<span className="text-cyan-300"> AI</span></div>
-        <div className="text-[10px] text-slate-500">JP-libau Holding</div>
+        <div className="text-[10px] text-slate-500">Intelligence Behind Every Trade.</div>
       </div>
     </div>
   );
@@ -39,7 +39,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                 <li key={n.href}>
                   <Link href={n.href} onClick={onNavigate}
                     className={`group flex items-center justify-between rounded-lg px-2 py-1.5 text-[13px] transition-colors ${
-                      active ? "bg-cyan-400/10 text-cyan-200 shadow-[inset_2px_0_0_#22d3ee]" : "text-slate-400 hover:bg-white/[.03] hover:text-slate-200"}`}>
+                      active ? "bg-cyan-400/10 text-cyan-200 shadow-[inset_2px_0_0_#56DFF5]" : "text-slate-400 hover:bg-white/[.03] hover:text-slate-200"}`}>
                     <span>{n.label}</span>
                     {!n.ready && <span className="font-mono text-[9px] text-slate-600 group-hover:text-slate-500">F{n.phase}</span>}
                   </Link>
@@ -55,14 +55,33 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
 
 function StatusBar() {
   const { data, error, refresh } = useApi<Health>("/api/health", 15_000);
+  const [live, setLive] = useState(false);
   useEffect(() => {
     window.addEventListener("nexus:controls", refresh);
     return () => window.removeEventListener("nexus:controls", refresh);
+  }, [refresh]);
+  useEffect(() => {
+    // Realtime: noodstop- en modusgebeurtenissen direct tonen; valt terug op elke 15 s verversen.
+    let ws: WebSocket | null = null, stop = false, retry: ReturnType<typeof setTimeout> | undefined;
+    const connect = () => {
+      ws = new WebSocket(API_BASE.replace(/^http/, "ws") + "/ws/events");
+      ws.onopen = () => setLive(true);
+      ws.onclose = () => { setLive(false); if (!stop) retry = setTimeout(connect, 10_000); };
+      ws.onmessage = (m) => {
+        const kind = JSON.parse(m.data).kind;
+        if (kind === "kill" || kind === "mode") refresh();
+        window.dispatchEvent(new CustomEvent("nexus:event", { detail: kind }));
+      };
+    };
+    connect();
+    return () => { stop = true; clearTimeout(retry); ws?.close(); };
   }, [refresh]);
   const env = data?.environment;
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       {error && <Chip tone="rose">API offline</Chip>}
+      {data && <span title={live ? "realtime verbinding actief" : "geen realtime verbinding; verversen elke 15 s"}
+        className={`hidden h-2 w-2 rounded-full sm:inline-block ${live ? "pulse-dot bg-emerald-400" : "bg-slate-600"}`} />}
       {data && (
         <>
           <Chip tone={env === "demo" ? "violet" : env === "paper" ? "cyan" : "slate"}>

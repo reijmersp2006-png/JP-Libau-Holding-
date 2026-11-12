@@ -85,3 +85,60 @@ def test_proposals_are_idempotent_recorded_and_never_executed(client):
 
 def test_invalid_proposal_rejected(client):
     assert client.post("/api/proposals", json=proposal(stop_loss=None)).status_code == 422
+
+
+def test_proposal_to_paper_execution_flow(client):
+    p = proposal(idempotency_key="flow-0001-abc", symbol="BTC-EUR", asset_class="crypto", entry_price=60000.0,
+                 stop_loss=57000.0, size_eur=50.0, max_modeled_loss_eur=3.0, input_data_label="SIMULATED")
+    v = client.post("/api/proposals", json=p).json()
+    assert v["approved"], v["reason"]
+    r = client.post(f"/api/proposals/{v['id']}/execute").json()
+    assert r["fills"] and r["fills"][0]["side"] == "buy"
+    again = client.post(f"/api/proposals/{v['id']}/execute").json()
+    assert again["duplicate"] is True                       # geen dubbele order
+    paper = client.get("/api/paper").json()
+    assert paper["reconciliation"]["ok"] and paper["account"]["label"] == "SIMULATED"
+    assert paper["live_enabled"] is False and len(paper["executions"]) == 1
+
+
+def test_vetoed_proposal_cannot_execute(client):
+    v = client.post("/api/proposals", json=proposal(idempotency_key="veto-0001-abc", spread_pct=0.03)).json()
+    assert not v["approved"]
+    assert client.post(f"/api/proposals/{v['id']}/execute").status_code == 409
+
+
+def test_execute_only_in_paper_mode(client):
+    v = client.post("/api/proposals", json=proposal(idempotency_key="mode-0001-abc", symbol="BTC-EUR",
+                    asset_class="crypto", entry_price=60000.0, stop_loss=57000.0, size_eur=50.0,
+                    max_modeled_loss_eur=3.0, input_data_label="SIMULATED")).json()
+    client.post("/api/controls/mode", json={"mode": "research"}, headers=AUTH)
+    assert client.post(f"/api/proposals/{v['id']}/execute").status_code == 409
+
+
+def test_backtest_endpoint_runs_and_persists(client):
+    r = client.post("/api/backtests", json={"strategy": "trend_sma", "symbol": "BTC-EUR"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["data_label"] == "SIMULATED" and "out_of_sample" in d
+    runs = client.get("/api/strategies").json()["runs"]
+    assert runs[0]["id"] == d["id"]
+    assert client.get(f"/api/backtests/{d['id']}").json()["symbol"] == "BTC-EUR"
+    assert client.post("/api/backtests", json={"strategy": "bestaat_niet", "symbol": "BTC-EUR"}).status_code == 404
+
+
+def test_admin_overview_is_honest(client):
+    a = client.get("/api/admin/overview").json()
+    assert a["mrr_eur"] is None and a["billing_connected"] is False and a["customer_features_enabled"] is False
+    assert [p["price_eur"] for p in a["plans"]] == [19.0, 59.0, 149.0]
+    assert all(not g["done"] for g in a["legal_gate"])
+
+
+def test_websocket_says_hello(client):
+    with client.websocket_connect("/ws/events") as ws:
+        msg = ws.receive_json()
+    assert msg["kind"] == "hello" and msg["data"]["mode"] == "paper"
+
+
+def test_market_providers_listed(client):
+    names = {p["name"]: p["status"] for p in client.get("/api/market/providers").json()}
+    assert names["bitvavo"] == "connected" and names["polygon"] == "not_configured"

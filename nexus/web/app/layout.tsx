@@ -5,7 +5,7 @@ import { Shell } from "@/components/Shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NEXUS AI · Command Center",
+  title: "NEXUS AI · Intelligence Behind Every Trade.",
   description: "Multi-asset research- en handelsplatform van JP-libau Holding. Live handelen staat uit.",
 };
 

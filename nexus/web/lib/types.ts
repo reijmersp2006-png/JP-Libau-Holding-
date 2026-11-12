@@ -40,4 +40,41 @@ export interface CommandCenter {
     risk_director: { vol: number; target: number; exposure: number; computed_at: string } | null } | null;
   findings: FeedItem[]; decisions: FeedItem[]; risk: RiskRow[]; market: Quote[]; radar: RadarRow[];
   health: { status: string; issues: { level: string; text: string }[] } | null; fills_today?: number;
+  nexus_paper?: { equity_eur: number; cash_eur: number; pnl_eur: number; label: DataLabel; starting_cash: number; positions: number; open_orders: number } | null;
 }
+
+export interface StrategySpec {
+  key: string; version: number; name: string; family: string; params: Record<string, number>;
+  required_data: string; entry: string; exit: string; sizing: string; risk: string; status: string;
+}
+export type Metrics = Partial<Record<"net_return" | "annual_return" | "max_drawdown" | "sharpe" | "sortino" | "win_rate" |
+  "profit_factor" | "expectancy_eur" | "avg_win_eur" | "avg_loss_eur" | "exposure" | "costs_eur" | "costs_pct_capital" |
+  "turnover" | "years", number | null>> & { trades?: number; sharpe_ci95?: [number, number] | null; periods?: number; liquidity_capped_orders?: number };
+export interface BacktestResult {
+  id: number; strategy: StrategySpec; symbol: string; asset_class: string; interval: string; data_label: DataLabel;
+  data: { first: string; last: string; bars: number; warmup: number; oos_start: string };
+  assumptions: { fee_pct: number; min_fee_eur: number; slippage_pct: number; spread_pct: number; execution: string; not_modeled: string[] };
+  full: Metrics; in_sample: Metrics; out_of_sample: Metrics; benchmark: { full: Metrics; out_of_sample: Metrics };
+  benchmark_relative_return: number;
+  folds: { start: string; end: string; net_return: number; sharpe: number; max_drawdown: number; benchmark_return: number }[];
+  regimes: Record<string, { periods: number; mean_return: number; benchmark_mean_return: number; sharpe: number }>;
+  trades: { entry_ts: string; exit_ts: string | null; entry_price: number; exit_price: number | null; pnl_eur: number; ret: number; costs_eur: number; bars: number }[];
+  equity: [string, number][]; benchmark_equity: [string, number][]; passes: boolean; verdict: string[];
+}
+export interface RunSummary {
+  id: number; created_at: string; strategy: string; version: number; symbol: string; data_label: DataLabel; passes: boolean;
+  verdict: string[]; oos: Metrics; benchmark_oos: Metrics;
+}
+export interface PaperOrder {
+  id: number; client_order_id: string; proposal_id: number | null; symbol: string; side: string; notional_eur: number | null;
+  quantity: number | null; filled_quantity: number; filled_notional_eur: number; status: string; reject_reason: string | null;
+  created_at: string; updated_at: string;
+}
+export interface PaperExec { id: number; order_id: number; ts: string; symbol: string; side: string; quantity: number; price_eur: number; reference_price_eur: number; slippage_bps: number; fee_eur: number; data_label: DataLabel }
+export interface PaperAccount {
+  account_id: number; label: DataLabel; starting_cash: number; cash_eur: number; positions_value_eur: number; equity_eur: number;
+  pnl_eur: number; realized_eur: number; unrealized_eur: number; fees_eur: number; drawdown: number; day_pnl_pct: number;
+  positions: { symbol: string; asset_class: string; quantity: number; avg_price_eur: number; price_eur: number | null; price_label: DataLabel; value_eur: number; unrealized_eur: number | null }[];
+  unpriced: string[]; equity_curve: [string, number][];
+}
+export interface PaperOverview { account: PaperAccount; orders: PaperOrder[]; executions: PaperExec[]; reconciliation: { ok: boolean; differences: string[]; checked_at: string }; live_enabled: boolean; settings: { participation: number; spread_pct: number } }

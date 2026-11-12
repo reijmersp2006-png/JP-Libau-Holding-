@@ -24,6 +24,8 @@ class Settings:
     cache_seconds: float = 30.0
     rate_limit_per_minute: int = 30          # voor schrijvende endpoints, per IP
     anthropic_key_present: bool = False
+    worker: bool = True                     # achtergrondronde voor open paper-orders en waarderingen
+    worker_seconds: float = 60.0
     extra: dict = field(default_factory=dict)
 
     @classmethod
@@ -41,4 +43,6 @@ class Settings:
             cors_origins=tuple(o.strip() for o in origins.split(",")) if origins else cls.cors_origins,
             cache_seconds=float(os.environ.get("NEXUS_CACHE_SECONDS", "30")),
             anthropic_key_present=bool(os.environ.get("ANTHROPIC_API_KEY")),
+            worker=os.environ.get("NEXUS_WORKER", "1") not in ("0", "false", "no"),
+            worker_seconds=float(os.environ.get("NEXUS_WORKER_SECONDS", "60")),
         )

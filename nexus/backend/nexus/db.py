@@ -1,92 +1,370 @@
-"""Opslag van NEXUS zelf (los van de boekhouding van de holding).
+"""Opslag van NEXUS (los van de boekhouding van de holding-bots).
 
-Fase 1 gebruikt deze tabellen. Het volledige doel-schema voor PostgreSQL/TimescaleDB
-(koersen, orders, fills, backtests, agent-runs) staat in ``docs/schema.sql``.
-Standaard draait dit op SQLite; zet ``NEXUS_DATABASE_URL`` op een PostgreSQL-URL voor productie.
+Alle klant-gebonden tabellen hebben ``org_id``: zo blijft data van verschillende organisaties
+gescheiden zodra NEXUS meerdere gebruikers krijgt. In de persoonlijke MVP bestaat één
+organisatie (JP-libau Holding, id 1). Bedragen staan als NUMERIC in de database en worden als
+float teruggegeven; alle berekeningen zijn deterministisch (geen willekeur, geen klok in de som).
+
+Schemawijzigingen gaan via Alembic (``migrations/``). Tests en een lege SQLite-database in het
+geheugen gebruiken ``create_all``.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, create_engine, select
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import (JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String,
+                        Text, UniqueConstraint, create_engine, select)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+DEFAULT_ORG = 1
 
 
 def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def iso(ts: datetime) -> str:
+def iso(ts: datetime | None) -> str | None:
     """SQLite bewaart geen tijdzone; alles wat we opslaan is UTC."""
+    if ts is None:
+        return None
     return (ts if ts.tzinfo else ts.replace(tzinfo=UTC)).isoformat()
+
+
+def Money():  # noqa: N802
+    return Numeric(24, 10, asdecimal=False)
+
+
+TS = DateTime(timezone=True)
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class SystemState(Base):
-    """Sleutel-waarde voor de besturing: handelsmodus, noodstop."""
+# ── Organisaties, gebruikers, abonnementen ─────────────────────────────────────────────────
+class Organization(Base):
+    __tablename__ = "organizations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    plan_key: Mapped[str | None] = mapped_column(ForeignKey("subscription_plans.key"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
 
-    __tablename__ = "system_state"
-    key: Mapped[str] = mapped_column(String(64), primary_key=True)
-    value: Mapped[dict] = mapped_column(JSON)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mfa_secret_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)  # verwijzing naar secret store
+    role: Mapped[str] = mapped_column(String(16), default="owner")
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (CheckConstraint("role IN ('owner','admin','analyst','viewer')", name="ck_users_role"),)
 
 
-class AuditLog(Base):
-    """Alles wat de besturing verandert, wie het deed en waarom. Alleen toevoegen, nooit wijzigen."""
+class SubscriptionPlan(Base):
+    __tablename__ = "subscription_plans"
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+    price_eur_cents: Mapped[int] = mapped_column(Integer)
+    limits: Mapped[dict] = mapped_column(JSON, default=dict)        # AI-verzoeken, watchlists, strategieën
+    trial_days: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)    # pas aan na juridische toets
+    __table_args__ = (CheckConstraint("price_eur_cents >= 0", name="ck_plan_price"),)
 
-    __tablename__ = "audit_log"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
-    actor: Mapped[str] = mapped_column(String(64))
-    action: Mapped[str] = mapped_column(String(64), index=True)
-    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+class BillingRecord(Base):
+    __tablename__ = "billing_records"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    plan_key: Mapped[str] = mapped_column(ForeignKey("subscription_plans.key"))
+    period_start: Mapped[datetime] = mapped_column(TS)
+    period_end: Mapped[datetime] = mapped_column(TS)
+    amount_eur_cents: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))                 # draft, open, paid, failed, refunded
+    provider: Mapped[str] = mapped_column(String(32), default="stripe")
+    provider_ref: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+
+
+# ── Accounts en brokers ────────────────────────────────────────────────────────────────────
+class Account(Base):
+    __tablename__ = "accounts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(16))                   # paper | live
+    base_currency: Mapped[str] = mapped_column(String(3), default="EUR")
+    starting_cash: Mapped[float] = mapped_column(Money())
+    cash: Mapped[float] = mapped_column(Money())
+    realized_pnl: Mapped[float] = mapped_column(Money(), default=0.0)
+    fees: Mapped[float] = mapped_column(Money(), default=0.0)
+    peak_equity: Mapped[float] = mapped_column(Money())
+    broker_connection_id: Mapped[int | None] = mapped_column(ForeignKey("broker_connections.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (CheckConstraint("kind IN ('paper','live')", name="ck_account_kind"),
+                      CheckConstraint("kind = 'paper' OR broker_connection_id IS NOT NULL", name="ck_live_needs_broker"))
+
+
+class BrokerConnection(Base):
+    __tablename__ = "broker_connections"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    credentials_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)  # nooit de sleutel zelf
+    permissions: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="disconnected")
+    verified_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+# ── Markten ────────────────────────────────────────────────────────────────────────────────
+class Asset(Base):
+    __tablename__ = "assets"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64))
+    asset_class: Mapped[str] = mapped_column(String(16))
+    venue: Mapped[str] = mapped_column(String(32))
+    currency: Mapped[str] = mapped_column(String(3))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint("symbol", "venue", name="uq_asset_symbol_venue"),)
+
+
+class MarketBar(Base):
+    __tablename__ = "market_data"
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), primary_key=True)
+    interval: Mapped[str] = mapped_column(String(8), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(TS, primary_key=True)
+    open: Mapped[float] = mapped_column(Money())
+    high: Mapped[float] = mapped_column(Money())
+    low: Mapped[float] = mapped_column(Money())
+    close: Mapped[float] = mapped_column(Money())
+    volume: Mapped[float] = mapped_column(Money(), default=0.0)
+    source: Mapped[str] = mapped_column(String(32))
+    fetched_at: Mapped[datetime] = mapped_column(TS)                # point-in-time
+    quality: Mapped[str] = mapped_column(String(16), default="ok")
+
+
+# ── Strategieën en backtests ───────────────────────────────────────────────────────────────
+class StrategyRow(Base):
+    __tablename__ = "strategies"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), nullable=True, index=True)  # None = ingebouwd
+    key: Mapped[str] = mapped_column(String(64))
+    family: Mapped[str] = mapped_column(String(32))
+    description: Mapped[str] = mapped_column(Text, default="")
+    __table_args__ = (UniqueConstraint("org_id", "key", name="uq_strategy_org_key"),)
+
+
+class StrategyVersion(Base):
+    __tablename__ = "strategy_versions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    strategy_id: Mapped[int] = mapped_column(ForeignKey("strategies.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    params: Mapped[dict] = mapped_column(JSON)
+    spec: Mapped[dict] = mapped_column(JSON)                        # data, instap, uitstap, omvang, risico
+    status: Mapped[str] = mapped_column(String(16), default="research")
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (UniqueConstraint("strategy_id", "version", name="uq_strategy_version"),
+                      CheckConstraint("status IN ('research','paper','live_candidate','retired')", name="ck_sv_status"))
+
+
+class Backtest(Base):
+    __tablename__ = "backtests"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    strategy_version_id: Mapped[int] = mapped_column(ForeignKey("strategy_versions.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    interval: Mapped[str] = mapped_column(String(8))
+    data_label: Mapped[str] = mapped_column(String(16))
+    settings: Mapped[dict] = mapped_column(JSON)
+    result: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+# ── Voorstellen, risico, orders ────────────────────────────────────────────────────────────
+class RiskPolicy(Base):
+    __tablename__ = "risk_policies"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    limits: Mapped[dict] = mapped_column(JSON)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    created_by: Mapped[str] = mapped_column(String(64))
 
 
 class TradeProposal(Base):
-    """Een handelsvoorstel met alle verplichte velden (zie ``proposals.TradeProposalIn``)."""
-
     __tablename__ = "trade_proposals"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
     idempotency_key: Mapped[str] = mapped_column(String(128), unique=True)
-    source: Mapped[str] = mapped_column(String(64))          # wie stelde het voor (agent-id of "manual")
+    source: Mapped[str] = mapped_column(String(64))
     asset_class: Mapped[str] = mapped_column(String(16))
     symbol: Mapped[str] = mapped_column(String(64), index=True)
     direction: Mapped[str] = mapped_column(String(8))
     strategy_id: Mapped[str] = mapped_column(String(64))
-    payload: Mapped[dict] = mapped_column(JSON)                # het volledige voorstel
-    status: Mapped[str] = mapped_column(String(16), index=True)  # approved_by_guardian | vetoed
-    executed: Mapped[bool] = mapped_column(Boolean, default=False)  # fase 1: altijd False
+    payload: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(24), index=True)   # approved_by_guardian | vetoed | executed
+    executed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class RiskEvaluation(Base):
-    """Het oordeel van de Risk Guardian, met elke check. Hoort bij precies één voorstel."""
-
     __tablename__ = "risk_evaluations"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    proposal_id: Mapped[int] = mapped_column(Integer, index=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    proposal_id: Mapped[int] = mapped_column(ForeignKey("trade_proposals.id"), index=True)
+    ts: Mapped[datetime] = mapped_column(TS, default=utcnow)
     approved: Mapped[bool] = mapped_column(Boolean)
     reason: Mapped[str] = mapped_column(Text)
     checks: Mapped[list] = mapped_column(JSON)
     limits_snapshot: Mapped[dict] = mapped_column(JSON)
 
 
+class Order(Base):
+    __tablename__ = "orders"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("trade_proposals.id"), nullable=True)
+    evaluation_id: Mapped[int] = mapped_column(ForeignKey("risk_evaluations.id"))   # geen order zonder oordeel
+    client_order_id: Mapped[str] = mapped_column(String(128), unique=True)        # idempotentie
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    asset_class: Mapped[str] = mapped_column(String(16))
+    side: Mapped[str] = mapped_column(String(4))
+    order_type: Mapped[str] = mapped_column(String(8), default="market")
+    notional_eur: Mapped[float | None] = mapped_column(Money(), nullable=True)      # koop: bedrag
+    quantity: Mapped[float | None] = mapped_column(Money(), nullable=True)          # verkoop: aantal
+    filled_quantity: Mapped[float] = mapped_column(Money(), default=0.0)
+    filled_notional_eur: Mapped[float] = mapped_column(Money(), default=0.0)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (
+        CheckConstraint("side IN ('buy','sell')", name="ck_order_side"),
+        CheckConstraint("status IN ('new','partially_filled','filled','cancelled','rejected')", name="ck_order_status"),
+        CheckConstraint("(side = 'buy' AND notional_eur > 0) OR (side = 'sell' AND quantity > 0)", name="ck_order_size"),
+    )
+
+
+class Execution(Base):
+    __tablename__ = "executions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    ts: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    symbol: Mapped[str] = mapped_column(String(64))
+    side: Mapped[str] = mapped_column(String(4))
+    quantity: Mapped[float] = mapped_column(Money())
+    price_eur: Mapped[float] = mapped_column(Money())
+    reference_price_eur: Mapped[float] = mapped_column(Money())    # koers vóór spread en slippage
+    fee_eur: Mapped[float] = mapped_column(Money())
+    data_label: Mapped[str] = mapped_column(String(16))
+    __table_args__ = (CheckConstraint("quantity > 0", name="ck_exec_qty"),)
+
+
+class PositionRow(Base):
+    __tablename__ = "positions"
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64), primary_key=True)
+    asset_class: Mapped[str] = mapped_column(String(16))
+    quantity: Mapped[float] = mapped_column(Money())
+    avg_price_eur: Mapped[float] = mapped_column(Money())
+    updated_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class PortfolioValuation(Base):
+    __tablename__ = "portfolio_valuations"
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(TS, primary_key=True)
+    equity_eur: Mapped[float] = mapped_column(Money())
+    cash_eur: Mapped[float] = mapped_column(Money())
+    label: Mapped[str] = mapped_column(String(16))
+
+
+# ── AI ─────────────────────────────────────────────────────────────────────────────────────
+class ResearchReport(Base):
+    __tablename__ = "ai_research_reports"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    topic: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16))                 # running, done, failed
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+class AgentDecision(Base):
+    __tablename__ = "agent_decisions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("ai_research_reports.id"), index=True)
+    agent_id: Mapped[str] = mapped_column(String(32))
+    input_hash: Mapped[str] = mapped_column(String(64))
+    output: Mapped[dict] = mapped_column(JSON)                      # gevalideerd tegen het output-schema
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+# ── Besturing en audit ─────────────────────────────────────────────────────────────────────
+class SystemState(Base):
+    __tablename__ = "system_state"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class AuditLog(Base):
+    """Alleen toevoegen, nooit wijzigen."""
+
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, default=DEFAULT_ORG)
+    ts: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+    actor: Mapped[str] = mapped_column(String(64))
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+Index("ix_orders_account_status", Order.account_id, Order.status)
+Index("ix_exec_account_ts", Execution.account_id, Execution.ts)
+
+PLANS = [  # voorgestelde prijzen, configureerbaar; inactief tot de juridische toets klaar is
+    {"key": "starter", "name": "Starter", "price_eur_cents": 1900, "trial_days": 14,
+     "limits": {"ai_requests_month": 100, "watchlists": 3, "strategies": 3, "paper_accounts": 1}},
+    {"key": "pro", "name": "Pro", "price_eur_cents": 5900, "trial_days": 14,
+     "limits": {"ai_requests_month": 1000, "watchlists": 20, "strategies": 20, "paper_accounts": 3}},
+    {"key": "elite", "name": "Elite", "price_eur_cents": 14900, "trial_days": 14,
+     "limits": {"ai_requests_month": 5000, "watchlists": 100, "strategies": 100, "paper_accounts": 10}},
+]
+
+
 class Database:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, migrate: bool = True) -> None:
         kw: dict = {}
         if url.startswith("sqlite"):
             kw["connect_args"] = {"check_same_thread": False}
             if ":memory:" in url:
                 kw["poolclass"] = StaticPool       # één gedeelde verbinding, anders is elke thread leeg
+        self.url = url
         self.engine = create_engine(url, future=True, **kw)
-        Base.metadata.create_all(self.engine)
+        if ":memory:" in url or not migrate:
+            Base.metadata.create_all(self.engine)
+        else:
+            upgrade(url)
         self.session = sessionmaker(self.engine, expire_on_commit=False)
+        self._seed()
+
+    def _seed(self) -> None:
+        with self.session.begin() as s:
+            for p in PLANS:
+                if s.get(SubscriptionPlan, p["key"]) is None:
+                    s.add(SubscriptionPlan(**p, active=False))
+            if s.get(Organization, DEFAULT_ORG) is None:
+                s.add(Organization(id=DEFAULT_ORG, name="JP-libau Holding", plan_key=None))
 
     def get_state(self, key: str, default=None):
         with self.session() as s:
@@ -101,16 +379,29 @@ class Database:
             else:
                 s.add(SystemState(key=key, value=value))
 
-    def audit(self, actor: str, action: str, detail: dict | None = None, s: Session | None = None) -> None:
-        entry = AuditLog(actor=actor, action=action, detail=detail or {})
+    def audit(self, actor: str, action: str, detail: dict | None = None, s: Session | None = None,
+              org_id: int = DEFAULT_ORG) -> None:
+        entry = AuditLog(org_id=org_id, actor=actor, action=action, detail=detail or {})
         if s is not None:
             s.add(entry)
             return
         with self.session.begin() as s2:
             s2.add(entry)
 
-    def audit_entries(self, limit: int = 100) -> list[dict]:
+    def audit_entries(self, limit: int = 100, org_id: int = DEFAULT_ORG) -> list[dict]:
         with self.session() as s:
-            rows = s.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)).all()
+            rows = s.scalars(select(AuditLog).where(AuditLog.org_id == org_id)
+                             .order_by(AuditLog.id.desc()).limit(limit)).all()
             return [{"id": r.id, "ts": iso(r.ts), "actor": r.actor, "action": r.action,
                      "detail": r.detail} for r in rows]
+
+
+def upgrade(url: str) -> None:
+    """Database naar de nieuwste migratie brengen (Alembic)."""
+    from alembic import command
+    from alembic.config import Config
+    here = Path(__file__).resolve().parent
+    cfg = Config()
+    cfg.set_main_option("script_location", str(here / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "head")
