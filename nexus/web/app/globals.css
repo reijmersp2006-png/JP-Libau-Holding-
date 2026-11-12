@@ -1,87 +1,117 @@
 @import "tailwindcss";
 
-/* NEXUS design tokens: near-black, grafiet, elektrisch cyaan, beheerst violet. */
-/* NEXUS-kleurensysteem (prompt 2.0). De Tailwind-tinten die de componenten gebruiken worden
-   hier op het merk gezet, zodat elk component automatisch de merkkleuren krijgt. */
+/* NEXUS design system 4.1 · "Institutional luxury".
+   Bijna-zwart en grafiet, één ingetogen ijsblauw accent, violet alleen als tweede datareeks,
+   smaragd = positief, rood = risico. Geen neon, geen gloed, haarlijnen in plaats van randen.
+   De Tailwind-tinten die de componenten al gebruiken worden hier op het nieuwe palet gezet,
+   zodat elke bestaande pagina automatisch meeverandert. */
 @theme {
-  --color-void: #080D17;
-  --color-graphite-950: #0b1220;
-  --color-graphite-900: #101827;
-  --color-graphite-800: #172235;
-  --color-graphite-700: #1f2d45;
-  --color-cyan-glow: #56DFF5;
-  --color-violet-glow: #9775FA;
-  --color-white: #F2F6FF;
-  --color-slate-100: #F2F6FF;
-  --color-slate-200: #dde5f2;
-  --color-slate-300: #b9c5d8;
-  --color-slate-400: #91A0B8;
-  --color-slate-500: #7a89a1;
-  --color-slate-600: #4f5d74;
-  --color-slate-700: #2a3850;
-  --color-slate-800: #1c2840;
-  --color-cyan-200: #b5f1fb;
-  --color-cyan-300: #85e8f8;
-  --color-cyan-400: #56DFF5;
-  --color-cyan-500: #2fc7e0;
-  --color-violet-200: #d9ccfd;
-  --color-violet-300: #b9a2fc;
-  --color-violet-400: #9775FA;
-  --color-violet-500: #7d57f0;
-  --color-emerald-200: #b6f2de;
-  --color-emerald-300: #79e4c1;
-  --color-emerald-400: #3ED6A3;
-  --color-emerald-500: #28b887;
-  --color-rose-200: #ffc7d1;
-  --color-rose-300: #ff98aa;
-  --color-rose-400: #FF627D;
-  --color-rose-500: #FF627D;
-  --color-rose-600: #e8475f;
+  --color-void: #07080B;
+  --color-graphite-950: #0B0D11;
+  --color-graphite-900: #101318;
+  --color-graphite-800: #161A21;
+  --color-graphite-700: #1E232C;
+  --color-cyan-glow: #9BD4F5;
+  --color-violet-glow: #A79BEA;
+  --color-white: #F4F6FA;
+  --color-slate-100: #EEF1F6;
+  --color-slate-200: #D9DEE7;
+  --color-slate-300: #B4BCC9;
+  --color-slate-400: #8B94A3;
+  --color-slate-500: #6C7584;
+  --color-slate-600: #4A525F;
+  --color-slate-700: #2B313B;
+  --color-slate-800: #1C2129;
+  /* ijsblauw accent (vervangt het oude elektrische cyaan) */
+  --color-cyan-200: #D3ECFB;
+  --color-cyan-300: #B4DEF8;
+  --color-cyan-400: #8CCBF2;
+  --color-cyan-500: #67B4E6;
+  --color-violet-200: #DCD7F7;
+  --color-violet-300: #BEB4F0;
+  --color-violet-400: #A79BEA;
+  --color-violet-500: #8E80DD;
+  --color-emerald-200: #BFEBD7;
+  --color-emerald-300: #86D9B5;
+  --color-emerald-400: #4CC495;
+  --color-emerald-500: #33A87C;
+  --color-amber-200: #F3E2BC;
+  --color-amber-300: #E8CB8A;
+  --color-amber-400: #DDB25C;
+  --color-rose-200: #F8CDD0;
+  --color-rose-300: #F2A2A8;
+  --color-rose-400: #EA737C;
+  --color-rose-500: #E25A64;
+  --color-rose-600: #C9444F;
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --ease-out-quint: cubic-bezier(.22, 1, .36, 1);
 }
 
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  --accent: #8CCBF2;
+  --accent-soft: rgba(140, 203, 242, 0.12);
+  --hair: rgba(255, 255, 255, 0.06);
+  --hair-strong: rgba(255, 255, 255, 0.10);
+  --surface: #0F1217;
+  --surface-2: #13171D;
+  --pos: #4CC495;
+  --neg: #E25A64;
+}
 
 body {
   background:
-    radial-gradient(1200px 600px at 85% -10%, rgba(86, 223, 245, 0.07), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(151, 117, 250, 0.07), transparent 60%),
+    radial-gradient(1400px 700px at 70% -20%, rgba(140, 203, 242, 0.035), transparent 60%),
     var(--color-void);
-  color: #F2F6FF;
-  font-feature-settings: "tnum" 1, "cv11" 1;
+  color: #EEF1F6;
+  font-feature-settings: "tnum" 1, "cv11" 1, "ss01" 1;
+  letter-spacing: -0.003em;
 }
 
+::selection { background: rgba(140, 203, 242, 0.25); }
+
+/* Oppervlakken: vlak grafiet met haarlijn; geen gekleurde randen of gloed. */
 .panel {
   position: relative;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(23, 34, 53, 0.72), rgba(16, 24, 39, 0.86));
-  border: 1px solid rgba(148, 163, 184, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(10px);
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  transition: border-color 240ms var(--ease-out-quint);
 }
-.panel:hover { border-color: rgba(86, 223, 245, 0.24); }
-.panel-glow::before {
-  content: ""; position: absolute; inset: -1px; border-radius: 14px; pointer-events: none;
-  background: linear-gradient(120deg, rgba(86, 223, 245, 0.5), transparent 35%, transparent 65%, rgba(151, 117, 250, 0.45));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude; padding: 1px;
-}
+.panel:hover { border-color: var(--hair-strong); }
+.panel-glow { background: linear-gradient(180deg, #12161C, var(--surface)); }
+.panel-glow::before { content: none; }
+.surface-2 { background: var(--surface-2); }
+.hair { border-color: var(--hair); }
 
-.eyebrow { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #7a89a1; font-weight: 600; }
+/* Typografie */
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6C7584; font-weight: 500; }
+.title-lg { font-size: 28px; line-height: 1.15; letter-spacing: -0.022em; font-weight: 600; color: #F4F6FA; }
+.title-md { font-size: 15px; line-height: 1.3; letter-spacing: -0.01em; font-weight: 550; color: #EEF1F6; }
+.display { font-size: 44px; line-height: 1; letter-spacing: -0.035em; font-weight: 600; color: #F4F6FA; }
+.caption { font-size: 12px; color: #8B94A3; }
 .num { font-variant-numeric: tabular-nums; }
 
-@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
-@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.fade-up { animation: fade-up 380ms cubic-bezier(.2,.7,.2,1) both; }
+/* Beweging: kort, rustig en uitschakelbaar */
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.pulse-dot { animation: pulse-dot 2.4s ease-in-out infinite; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fade-up 420ms var(--ease-out-quint) both; }
 @keyframes shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
-.skeleton { background: linear-gradient(90deg, rgba(148,163,184,.06), rgba(148,163,184,.14), rgba(148,163,184,.06)); background-size: 800px 100%; animation: shimmer 1.4s linear infinite; border-radius: 8px; }
+.skeleton { background: linear-gradient(90deg, rgba(255,255,255,.03), rgba(255,255,255,.07), rgba(255,255,255,.03)); background-size: 800px 100%; animation: shimmer 1.6s linear infinite; border-radius: 8px; }
+/* Datastroom langs een verbinding (Decision Flow, Neural Core): alleen als er echt activiteit is. */
+@keyframes flow { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+.flow { stroke-dasharray: 2 10; animation: flow 1.6s linear infinite; }
+@keyframes breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.breathe { animation: breathe 3.2s ease-in-out infinite; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulse-dot, .fade-up, .skeleton { animation: none; }
+  .pulse-dot, .fade-up, .skeleton, .flow, .breathe { animation: none; }
+  * { transition-duration: 0ms !important; }
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: #1E232C; border-radius: 8px; }
