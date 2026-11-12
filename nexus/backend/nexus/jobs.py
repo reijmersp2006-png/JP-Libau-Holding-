@@ -272,7 +272,43 @@ def job_council(ctx: dict) -> dict:
     return {"runs": out, "ai_cost_usd": cost, "ai_requests": reqs}
 
 
+def job_central(ctx: dict) -> dict:
+    from nexus import central
+    out = central.step(ctx["db"], ctx)
+    return {**out, "ai_cost_usd": sum((r.get("cost_usd") or 0) for r in out["ran"])}
+
+
+def job_briefing(ctx: dict) -> dict:
+    from nexus import central
+    b = central.briefing(ctx["db"], ctx)
+    return {"day": b["day"], "actions": len(b["actions"]), "missing": b["missing"]}
+
+
+def job_security(ctx: dict) -> dict:
+    """Integriteit van het auditlog en de live-poort."""
+    v = ctx["db"].verify_audit_chain()
+    live = ctx["controls"].mode() == "live" if ctx.get("controls") else False
+    if not v["ok"]:
+        ctx["db"].audit("security", "audit_chain_broken", v)
+        raise RuntimeError(f"auditketen gebroken bij regel {v['broken_at']}")
+    return {"audit_chain": v, "live_mode": live}
+
+
+def job_social(ctx: dict) -> dict:
+    from nexus import social
+    db = ctx["db"]
+    checks = [{"symbol": t.symbol, "status": social.check_token(db, t)["status"]} for t in social.WATCHLIST if t.address]
+    snaps = []
+    if social.x_status()["connected"]:
+        snaps = [{"topic": r["topic"], "status": r["status"]} for r in (social.snapshot(db, t) for t in social.WATCHLIST)]
+    return {"token_checks": checks, "x": social.x_status(), "snapshots": snaps}
+
+
 JOBS: list[Job] = [
+    Job("central", "hourly", "NEXUS Central: taken plannen en uitvoeren, escalaties", job_central, uses_ai=True),
+    Job("social", "hourly", "Meme-radar: on-chain veiligheid en X-metingen (als verbonden)", job_social),
+    Job("briefing", "daily", "CEO-briefing", job_briefing),
+    Job("security", "daily", "Hash-keten van het auditlog controleren", job_security),
     Job("news", "hourly", "Nieuws ophalen en koersreacties bijwerken", job_news),
     Job("market_moves", "hourly", "Grote marktbewegingen signaleren (>3× normale beweeglijkheid)", job_market_moves),
     Job("risk_monitor", "hourly", "Paper-risico en noodstop bewaken", job_risk),

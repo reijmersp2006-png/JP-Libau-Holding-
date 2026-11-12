@@ -761,40 +761,56 @@ class HoldoutLedger:
     def uses(self, dataset_key: str, holdout_start: str) -> int:
         return sum(1 for e in self.entries() if e["dataset"] == dataset_key and e["holdout_start"] == holdout_start)
 
-    def record(self, dataset_key: str, holdout_start: str, candidate: str, params: dict, run: str) -> int:
+    def record(self, dataset_key: str, holdout_start: str, candidate: str, params: dict, run: str,
+               manifest: dict | None = None, kind: str = "evaluation") -> int:
         prior = self.uses(dataset_key, holdout_start)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a") as f:
             f.write(json.dumps({"dataset": dataset_key, "holdout_start": holdout_start, "candidate": candidate,
                                 "params": params, "run": run, "at": datetime.now(tz=UTC).isoformat(),
-                                "prior_uses": prior}, sort_keys=True) + "\n")
+                                "prior_uses": prior, "manifest": manifest, "kind": kind}, sort_keys=True) + "\n")
         return prior + 1
 
 
 def evaluate_holdout(res: dict, fam: Family, panel: dict, costs: dict, ppy: int, capital: float,
                      ledger: HoldoutLedger | None, run: str) -> dict:
+    """Eén bevroren kandidaat, één blik. Besmette holdout → alleen prospectieve data na de besmettingsdatum."""
+    from nexus import holdout as hg
     sp: Split = res["_split"]
     syms = res["symbols"]
     anchor = res["anchor"]
     p = res["frozen_params"]
+    dkey = f"{'+'.join(syms)}@{res['interval']}"
+    candles = panel[anchor]
+    rule = hg.contamination(dkey, res["split"]["holdout_start"])
+    win = hg.window(candles, sp.dev_end, rule, ppy)
+    base = {"governance": {k: v for k, v in win.items() if k not in ("start", "end")}, "dataset": dkey}
+    if rule is not None and not win["ready"]:
+        return {**base, "status": "awaiting_prospective", "passed": False, "metrics": None, "benchmark": None,
+                "note": f"holdout besmet; {win['bars']} van {win['needed']} prospectieve bars sinds {win['prospective_start']}"}
+    start, end = win["start"], win["end"]
+    wstart = candles[start].ts.isoformat()
+    man = hg.manifest(candles, start, end)
+    if ledger is not None:
+        prev = hg.already_evaluated(ledger.entries(), dkey, wstart, fam.key, p)
+        if prev is not None:
+            return {**base, "status": "already_evaluated", "passed": False, "metrics": None, "benchmark": None,
+                    "note": f"deze kandidaat zag dit venster al op {prev['at'][:10]}; een tweede blik telt niet"}
     if fam.kind == "single":
-        w = _single_weights(fam, panel[anchor], ppy, p, anchor)
+        w = _single_weights(fam, candles, ppy, p, anchor)
     else:
         w = fam.fn(panel, ppy, **{**fam_static(fam, syms), **p})
-    s = simulate_weights(panel, w, costs, sp.dev_end, sp.n, capital)
-    b = simulate_weights(panel, [{anchor: 1.0}] * sp.n, costs, sp.dev_end, sp.n, capital)
+    uses = ledger.record(dkey, wstart, fam.key, p, run, manifest=man) if ledger is not None else None
+    s = simulate_weights(panel, w, costs, start, end, capital)
+    b = simulate_weights(panel, [{anchor: 1.0}] * sp.n, costs, start, end, capital)
     m, bm = wmetrics(s, ppy, capital), wmetrics(b, ppy, capital)
-    uses = None
-    if ledger is not None:
-        uses = ledger.record(f"{'+'.join(syms)}@{res['interval']}", res["split"]["holdout_start"],
-                             f"{fam.key}", p, run)
     unc = stats.excess_uncertainty(s.returns, b.returns, ppy)
     rm = stats.excess_uncertainty(s.returns, risk_matched(s.returns, b.returns), ppy)
     passed = m["sharpe"] > bm["sharpe"] and (unc.get("p_sharpe_better") or 0) >= 0.5
-    return {"metrics": m, "benchmark": bm, "uncertainty": unc, "risk_matched_excess": rm, "holdout_uses": uses,
-            "passed": passed,
+    return {**base, "status": "evaluated", "manifest": man, "metrics": m, "benchmark": bm, "uncertainty": unc,
+            "risk_matched_excess": rm, "holdout_uses": uses, "passed": passed,
             "note": ("eerste keer bekeken" if uses == 1 else
-                     f"deze holdout is {uses}× gebruikt: niet langer onafhankelijk" if uses else "")}
+                     f"dit venster is {uses}× gebruikt (andere kandidaten): niet langer volledig onafhankelijk" if uses else "")}
 
 
 def research_costs(data: ResearchData, inst: Instrument) -> tuple[CostModel, float]:
@@ -850,16 +866,23 @@ def discover(data: ResearchData, interval: str = "1d", symbols: list[str] | None
         res["hypothesis"] = fam.hypothesis
         if res["status"] == "candidate" and holdout:
             res["holdout"] = evaluate_holdout(res, fam, panel, costs, ppy, capital, ledger, run)
-            res["status"] = "holdout_passed" if res["holdout"]["passed"] else "holdout_failed"
-            if not res["holdout"]["passed"]:
-                res["reasons"].append("holdout: niet beter voor risico dan koop-en-houd")
+            hs = res["holdout"]["status"]
+            if hs == "evaluated":
+                res["status"] = "holdout_passed" if res["holdout"]["passed"] else "holdout_failed"
+                if not res["holdout"]["passed"]:
+                    res["reasons"].append("holdout: niet beter voor risico dan koop-en-houd")
+            else:
+                res["status"] = "awaiting_holdout"
+                res["reasons"].append(f"holdout: {res['holdout']['note']}")
         res.pop("_split", None)
         res.pop("_wf_returns", None)
         results.append(res)
     summary = {
         "datasets": len({(tuple(r["symbols"]), r["interval"]) for r in results}),
         "combinations": len(results), "trials_total": trials_total,
-        "candidates": sum(1 for r in results if r["status"] in ("candidate", "holdout_passed", "holdout_failed")),
+        "candidates": sum(1 for r in results if r["status"] in ("candidate", "holdout_passed", "holdout_failed",
+                                                                "awaiting_holdout")),
+        "awaiting_holdout": sum(1 for r in results if r["status"] == "awaiting_holdout"),
         "holdout_passed": sum(1 for r in results if r["status"] == "holdout_passed"),
         "insufficient_history": sum(1 for r in results if r["status"] == "insufficient_history"),
         "better_risk_profile": sum(1 for r in results if r.get("risk_profile_better")),

@@ -1,0 +1,12 @@
+{
+  "note": "Alleen toevoegen. Een holdout die de keuze van een strategie al heeft beïnvloed, is besmet en telt niet meer als onafhankelijke toets.",
+  "entries": [
+    {
+      "datasets": "*@1d",
+      "seen_until": "2026-11-11",
+      "recorded_at": "2026-11-12",
+      "reason": "Het lab-ijkpunt (90 combinaties, 18 instrumenten) en de IWDA-audit hebben alle dagkoersen tot en met 11 november 2026 bekeken. De hypothesen A tot D en de families volfilter_v2 en vol_target zijn op die uitkomsten gebaseerd. Elke dag-holdout die vóór die datum begint, is daarmee besmet.",
+      "prospective_start": "2026-11-12"
+    }
+  ]
+}
