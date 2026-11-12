@@ -105,6 +105,23 @@ SPECS: list[StrategySpec] = [
 ]
 
 
+# Accumulerende ETF's herbeleggen dividend zelf: de beurskoers is dan al het totaalrendement.
+ACCUMULATING = {"IWDA.AS": "iShares Core MSCI World UCITS ETF (Acc)"}
+
+
+def price_basis(inst: Instrument) -> str:
+    if inst.symbol in ACCUMULATING:
+        return "accumulerende ETF: dividend zit in de koers (totaalrendement), in euro genoteerd"
+    if inst.asset_class.value in ("crypto", "meme"):
+        return "spotkoers in euro (Bitvavo), geen dividend"
+    if inst.asset_class.value == "fx":
+        return "valutakoers; renteverschil (carry) niet meegenomen"
+    if inst.asset_class.value == "metals":
+        return "doorlopende future (Yahoo); rolkosten en contango niet meegenomen"
+    return (f"slotkoers zonder dividend (Yahoo, gecorrigeerd voor splitsingen), in {inst.currency}; "
+            "maatlat en strategie missen het dividend allebei, de maatlat iets meer")
+
+
 def spec(key: str, version: int | None = None) -> StrategySpec:
     for s in SPECS:
         if s.key == key and (version is None or s.version == version):
@@ -134,6 +151,9 @@ class Sim:
     in_market: int
     turnover_eur: float
     capped_orders: int = 0
+    held: list[bool] = field(default_factory=list)          # per periode: positie aan het eind van de periode
+    traded: list[int] = field(default_factory=list)         # per periode: +1 koop, -1 verkoop, 0 niets
+    period_costs: list[float] = field(default_factory=list)  # per periode: kosten (fee + spread + slippage)
 
 
 def simulate(targets: list[int], candles: list[Candle], cost: CostModel, spread_pct: float, start: int, end: int,
@@ -147,9 +167,11 @@ def simulate(targets: list[int], candles: list[Candle], cost: CostModel, spread_
     prev = capital
     open_trade: dict | None = None
     half = spread_pct / 2
+    held, traded, pcosts = [], [], []
     for i in range(start, end):
         c = candles[i]
         want = targets[i - 1] if i >= 1 else 0
+        costs_before, side = costs, 0
         if want and qty == 0 and cash > 0:
             px = c.open * (1 + half + cost.slippage_pct)
             budget = cash
@@ -164,6 +186,7 @@ def simulate(targets: list[int], candles: list[Candle], cost: CostModel, spread_
                 spread_cost = qty * (px - c.open)
                 costs += fee + spread_cost
                 turnover += budget
+                side = 1
                 open_trade = {"i": i, "ts": c.ts, "px": px, "cost": budget, "fees": fee + spread_cost}
         elif not want and qty > 0:
             px = c.open * (1 - half - cost.slippage_pct)
@@ -177,9 +200,12 @@ def simulate(targets: list[int], candles: list[Candle], cost: CostModel, spread_
             pnl = gross - fee - ot.get("cost", 0.0)
             trades.append(Trade(ot["ts"].isoformat(), c.ts.isoformat(), ot["px"], px, pnl,
                                 pnl / ot["cost"] if ot.get("cost") else 0.0, ot["fees"] + fee + spread_cost, i - ot["i"]))
-            qty, open_trade = 0.0, None
+            qty, open_trade, side = 0.0, None, -1
         value = cash + qty * c.close
         in_market += qty > 0
+        held.append(qty > 0)
+        traded.append(side)
+        pcosts.append(costs - costs_before)
         returns.append(value / prev - 1 if prev > 0 else 0.0)
         equity.append(value)
         prev = value
@@ -189,7 +215,7 @@ def simulate(targets: list[int], candles: list[Candle], cost: CostModel, spread_
         pnl = val - open_trade["cost"]
         trades.append(Trade(open_trade["ts"].isoformat(), None, open_trade["px"], None, pnl,
                             pnl / open_trade["cost"], open_trade["fees"], end - 1 - open_trade["i"]))
-    return Sim(equity, returns, trades, costs, in_market, turnover, capped)
+    return Sim(equity, returns, trades, costs, in_market, turnover, capped, held, traded, pcosts)
 
 
 def metrics(sim: Sim, ppy: int, capital: float) -> dict:
@@ -227,7 +253,10 @@ def metrics(sim: Sim, ppy: int, capital: float) -> dict:
         "expectancy_eur": sum(t.pnl_eur for t in closed) / len(closed) if closed else None,
         "avg_win_eur": gross_win / len(wins) if wins else None,
         "avg_loss_eur": -gross_loss / len(losses) if losses else None,
-        "exposure": sim.in_market / n, "costs_eur": sim.costs, "costs_pct_capital": sim.costs / capital,
+        "exposure": sim.in_market / n,
+        "exposure_adjusted_return": ((eq ** (1 / years) - 1) / (sim.in_market / n)
+                                     if years > 0 and eq > 0 and sim.in_market else None),
+        "costs_eur": sim.costs, "costs_pct_capital": sim.costs / capital,
         "turnover": sim.turnover_eur / capital / years if years > 0 else None,
         "liquidity_capped_orders": sim.capped_orders,
     }
@@ -249,8 +278,12 @@ def regimes(candles: list[Candle], start: int, end: int, window: int = 200) -> l
 
 def run_backtest(s: StrategySpec, inst: Instrument, candles: list[Candle], cost: CostModel, interval: str = "1d",
                  spread_pct: float = 0.001, capital: float = 1000.0, oos_fraction: float = 0.3,
-                 folds: int = 5) -> dict:
-    """Volledige backtest van één versie op één instrument. Geeft alles terug wat het lab toont."""
+                 folds: int = 5, oos_start: str | None = None) -> dict:
+    """Volledige backtest van één versie op één instrument. Geeft alles terug wat het lab toont.
+
+    ``oos_start`` (ISO-datum) legt het begin van het out-of-sample deel vast. Zonder datum hangt
+    het af van de opwarmtijd van de strategie, en vergelijken strategieën dus verschillende
+    perioden (zo is het in versie 1 gemeten; de audit laat het verschil zien)."""
     ppy = PERIODS_PER_YEAR[(interval, inst.asset_class.value)]
     candles = unit_prices(candles, inst)
     strat = s.build()
@@ -260,6 +293,10 @@ def run_backtest(s: StrategySpec, inst: Instrument, candles: list[Candle], cost:
     targets = strat.targets(candles)
     n = len(candles)
     split = warm + int((n - warm) * (1 - oos_fraction))
+    if oos_start:
+        split = next((i for i, c in enumerate(candles) if c.ts.date().isoformat() >= oos_start[:10]), n)
+        if split <= warm + 60 or split >= n - 20:
+            raise ValueError(f"out-of-sample start {oos_start[:10]} laat te weinig in- of out-of-sample data over")
     full = simulate(targets, candles, cost, spread_pct, warm, n, capital)
     ins = simulate(targets, candles, cost, spread_pct, warm, split, capital)
     oos = simulate(targets, candles, cost, spread_pct, split, n, capital)
@@ -310,11 +347,14 @@ def run_backtest(s: StrategySpec, inst: Instrument, candles: list[Candle], cost:
         "assumptions": {"fee_pct": cost.fee_pct, "min_fee_eur": cost.min_fee_eur, "slippage_pct": cost.slippage_pct,
                         "spread_pct": spread_pct, "max_volume_share": 0.01, "capital_eur": capital,
                         "execution": "besluit op slotkoers, uitvoering op de volgende opening",
-                        "not_modeled": ["feestdagen", "dividend en splitsingen (Yahoo-koersen zijn niet aangepast)",
-                                        "survivorship: universum is de huidige instrumentenlijst"]},
+                        "price_basis": price_basis(inst),
+                        "not_modeled": ["feestdagen (gaten in de reeks, geen handel)",
+                                        "survivorship: universum is de huidige instrumentenlijst",
+                                        "belasting"]},
         "full": m_full, "in_sample": metrics(ins, ppy, capital), "out_of_sample": m_oos,
         "benchmark": {"full": b_full, "out_of_sample": b_oos},
         "benchmark_relative_return": m_full["net_return"] - b_full["net_return"],
+        "benchmark_relative_return_oos": m_oos["net_return"] - b_oos["net_return"],
         "folds": fold_rows, "regimes": by_regime,
         "trades": [asdict(t) for t in full.trades[-50:]],
         "equity": [[candles[warm + i].ts.date().isoformat(), round(e, 2)] for i, e in enumerate(full.equity)][::max(1, len(full.equity) // 400)],
