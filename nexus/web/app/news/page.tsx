@@ -66,6 +66,8 @@ export default function Page() {
             ))}
           </section>
 
+          <Timeline admin={admin} />
+
           <Panel title="Verwerking in twaalf stappen" action={<span className="caption">{data.latency.note}</span>}>
             <ol className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[12.5px] sm:grid-cols-3 lg:grid-cols-6">
               {STEPS.map((s, i) => (
@@ -166,5 +168,75 @@ function NewsRow({ n, threshold }: { n: Item; threshold: number }) {
         </div>
       )}
     </li>
+  );
+}
+
+interface WfStep { step: string; agent: string; status: string; at: string; ms?: number; detail: Record<string, unknown> }
+interface Wf {
+  id: number; trace_id: string; news_id: number; status: string; simulated: boolean; source: string; title: string; url: string;
+  published_at: string; detected_at: string; finished_at: string | null; cost_usd: number; steps: WfStep[];
+  intelligence: { what_happened: string; assets: string[]; confirmed: string; new_information: boolean; market_expectation: string;
+    already_reacted: Record<string, [number | null, number | null]>; enough_evidence_for_research: boolean; evidence_note: string;
+    missing: string[]; research_priority: string };
+}
+const STEP_NL: Record<string, string> = {
+  validate: "Tijd", deduplicate: "Ontdubbelen", classify: "Classificatie", social: "Sociaal", market: "Markt",
+  research: "Onderzoeker", challenge: "Uitdager", quant: "Quant", risk: "Risk", central: "Central", explain: "Uitleg",
+};
+const ST_DOT: Record<string, string> = { ok: "ok", warning: "degraded", duplicate: "disabled", not_applicable: "disabled", unavailable: "not_configured", skipped: "not_configured" };
+
+function Timeline({ admin }: { admin: ReturnType<typeof useAdmin> }) {
+  const { data, refresh } = useApi<{ items: Wf[]; total: number; ai_per_day: number }>("/api/workflows?limit=12", 60_000);
+  const [sel, setSel] = useState<number | null>(null);
+  const w = data?.items.find((x) => x.id === sel) ?? data?.items[0];
+  return (
+    <Panel title="News Impact Timeline · één spoor per gebeurtenis"
+      action={<div className="flex items-center gap-3"><span className="caption">{data ? `${data.total} sporen · max ${data.ai_per_day} met AI per dag` : ""}</span>
+        <Btn disabled={!admin.token || !!admin.busy} onClick={() => admin.post("/api/workflows/run", {}, refresh)}>Open signalen verwerken</Btn></div>}>
+      {!data ? <Skeleton className="h-48" /> : !data.items.length ? <Empty>Nog geen sporen. Elk signaal krijgt een eigen spoor: bron → markt → onderzoeker → uitdager → quant → risk → Central. Zonder echte feeds blijft dit leeg.</Empty> : (
+        <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+          <ul className="space-y-1 text-[12.5px]">
+            {data.items.map((x) => (
+              <li key={x.id}><button onClick={() => setSel(x.id)} className={`w-full rounded-md px-2.5 py-2 text-left ${w?.id === x.id ? "bg-white/[.06]" : "hover:bg-white/[.03]"}`}>
+                <div className="line-clamp-2 text-slate-200">{x.title}</div>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">{x.source} · {ago(x.published_at)}{x.simulated && <TruthTag kind="simulated" />}</div>
+              </button></li>
+            ))}
+          </ul>
+          {w && (
+            <div className="min-w-0 text-[12.5px]">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-mono text-[11.5px] text-slate-500">{w.trace_id}</span>
+                {w.simulated && <TruthTag kind="simulated" />}
+                <span className="text-slate-400">prioriteit onderzoek: <span className="text-white">{w.intelligence.research_priority}</span></span>
+                <span className="text-slate-500">· geen handelsadvies · kosten ${num(w.cost_usd, 3)}</span>
+              </div>
+              <ol className="mt-3 flex flex-wrap gap-1.5">
+                {w.steps.map((s, i) => (
+                  <li key={i} title={JSON.stringify(s.detail).slice(0, 300)} className="inline-flex items-center gap-1.5 rounded-md border border-white/[.07] px-2 py-1">
+                    <StatusDot status={ST_DOT[s.status] ?? "down"} /><span className="text-slate-300">{STEP_NL[s.step] ?? s.step}</span>
+                    <span className="text-[10.5px] text-slate-500">{s.status}</span>
+                  </li>
+                ))}
+              </ol>
+              <dl className="mt-4 grid gap-x-6 gap-y-2.5 md:grid-cols-2">
+                {([
+                  ["Wat gebeurde er", w.intelligence.what_happened],
+                  ["Bevestigd", w.intelligence.confirmed],
+                  ["Instrumenten", w.intelligence.assets.join(", ") || "geen"],
+                  ["Nieuw", w.intelligence.new_information ? "ja" : "nee (duplicaat)"],
+                  ["Verwachting markt", w.intelligence.market_expectation],
+                  ["Al gereageerd", Object.entries(w.intelligence.already_reacted ?? {}).map(([k, [b, a]]) => `${k}: 5d vooraf ${b == null ? "—" : pct(b, 1)}, dag na ${a == null ? "nog niet" : pct(a, 1)}`).join(" · ") || "geen koersdata"],
+                  ["Genoeg bewijs voor onderzoek", `${w.intelligence.enough_evidence_for_research ? "ja" : "nee"} · ${w.intelligence.evidence_note ?? ""}`],
+                  ["Ontbreekt", w.intelligence.missing.join("; ")],
+                ] as const).map(([k, v]) => <div key={k}><dt className="caption">{k}</dt><dd className="mt-0.5 text-slate-200">{v}</dd></div>)}
+              </dl>
+              <div className="num mt-3 text-[11.5px] text-slate-500">gepubliceerd {new Date(w.published_at).toLocaleString("nl-NL")} · binnen {new Date(w.detected_at).toLocaleString("nl-NL")} · verwerkt {w.finished_at ? new Date(w.finished_at).toLocaleString("nl-NL") : "—"} · <a href={w.url} target="_blank" rel="noreferrer" className="text-cyan-300">bron</a></div>
+              <p className="mt-2 text-[12px] text-slate-400">{String(w.steps.find((s) => s.step === "explain")?.detail.text ?? "")}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
   );
 }

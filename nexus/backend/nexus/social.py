@@ -28,6 +28,7 @@ from sqlalchemy import select
 from nexus import stats
 from nexus.db import Database, SocialSnapshot, TokenCheck
 
+
 # ── Bekende tokens op de watchlist (contract op Ethereum; DOGE is een eigen keten) ─────────
 @dataclass(frozen=True)
 class Token:
@@ -59,7 +60,7 @@ class SourceUnavailable(Exception):
 def _get(url: str, headers: dict | None = None, timeout: float = 20.0) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json", **(headers or {})})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:        # noqa: S310 - vaste https-API's
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read(5_000_000))
     except urllib.error.HTTPError as e:
         if e.code == 429:
@@ -76,17 +77,55 @@ def x_status() -> dict:
             "detail": "Bearer-token aanwezig" if tok else "niet verbonden: zet X_BEARER_TOKEN (eigen X API-abonnement)"}
 
 
-def x_search(query: str, getter=_get, max_results: int = 100) -> dict:
-    """Recente openbare posts. Geeft posts + auteurs; gooit ``SourceUnavailable`` als er geen toegang is."""
+def _get_full(url: str, headers: dict | None = None, timeout: float = 20.0) -> tuple[dict, dict]:
+    """Als ``_get``, maar met de antwoordheaders (voor de rate limits van X)."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json", **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read(5_000_000)), dict(r.headers.items())
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise SourceUnavailable(f"limiet bereikt (429), opnieuw na {e.headers.get('x-rate-limit-reset', '?')}") from e
+        if e.code in (401, 403):
+            raise SourceUnavailable(f"HTTP {e.code}: token ongeldig of abonnement staat zoeken niet toe") from e
+        raise SourceUnavailable(f"HTTP {e.code}") from e
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise SourceUnavailable(str(e)[:200]) from e
+
+
+RATE_HEADERS = ("x-rate-limit-limit", "x-rate-limit-remaining", "x-rate-limit-reset")
+
+
+def x_search(query: str, getter=_get_full, max_results: int = 100, max_pages: int = 1) -> dict:
+    """Recente openbare posts via de officiële API v2, met paginering (``next_token``), ontdubbeling op id
+    en de rate-limitheaders. Gooit ``SourceUnavailable`` als er geen toegang is. Er wordt niets bewaard
+    behalve geaggregeerde metingen (geen volledige posts), in lijn met de bewaarregels van X."""
     tok = os.environ.get("X_BEARER_TOKEN", "").strip()
     if not tok:
         raise SourceUnavailable("X niet verbonden (geen X_BEARER_TOKEN)")
-    q = urllib.parse.urlencode({"query": f"{query} -is:retweet lang:en", "max_results": max(10, min(100, max_results)),
-                                "tweet.fields": "created_at,public_metrics,author_id",
-                                "expansions": "author_id", "user.fields": "created_at,public_metrics,verified"})
-    d = getter(f"https://api.x.com/2/tweets/search/recent?{q}", {"Authorization": f"Bearer {tok}"})
-    users = {u["id"]: u for u in (d.get("includes") or {}).get("users", [])}
-    return {"posts": d.get("data", []), "users": users}
+    posts: dict[str, dict] = {}
+    users: dict[str, dict] = {}
+    rate: dict = {}
+    token = None
+    pages = 0
+    for _ in range(max(1, max_pages)):
+        params = {"query": f"{query} -is:retweet lang:en", "max_results": max(10, min(100, max_results)),
+                  "tweet.fields": "created_at,public_metrics,author_id",
+                  "expansions": "author_id", "user.fields": "created_at,public_metrics,verified"}
+        if token:
+            params["next_token"] = token
+        res = getter(f"https://api.x.com/2/tweets/search/recent?{urllib.parse.urlencode(params)}",
+                     {"Authorization": f"Bearer {tok}"})
+        d, hdr = res if isinstance(res, tuple) else (res, {})
+        pages += 1
+        rate = {k: hdr.get(k) for k in RATE_HEADERS if hdr.get(k) is not None} or rate
+        for p in d.get("data", []) or []:
+            posts.setdefault(p.get("id") or f"_{len(posts)}", p)
+        users.update({u["id"]: u for u in (d.get("includes") or {}).get("users", [])})
+        token = (d.get("meta") or {}).get("next_token")
+        if not token or (rate.get("x-rate-limit-remaining") is not None and int(rate["x-rate-limit-remaining"]) < 2):
+            break
+    return {"posts": list(posts.values()), "users": users, "pages": pages, "rate_limit": rate}
 
 
 _URL = re.compile(r"https?://\S+|@\w+|\$\w+|#\w+")
@@ -130,7 +169,31 @@ def momentum(posts: list[dict], users: dict, now: datetime) -> dict:
             "duplicate_text_share": coord, "new_account_share": new_acc / na, "low_follower_share": low_f / na,
             "bot_risk": round(min(1.0, bot), 3),
             "sentiment_lexicon": (pos - neg) / max(1, pos + neg), "sentiment_note": "ruwe woordenlijst, geen model",
+            "contract_mentions": _contracts(posts), "decay": _decay(times),
             "first": times[0].isoformat(), "last": times[-1].isoformat()}
+
+
+_EVM = re.compile(r"\b0x[a-fA-F0-9]{40}\b")
+
+
+def _contracts(posts: list[dict]) -> dict:
+    """Genoemde EVM-contractadressen: veel verschillende adressen onder één cashtag = mogelijke nep-tokens."""
+    c = Counter(a.lower() for p in posts for a in _EVM.findall(p.get("text", "")))
+    return {"distinct": len(c), "top": [{"address": a, "mentions": n} for a, n in c.most_common(5)]}
+
+
+def _decay(times: list[datetime]) -> dict:
+    """Vermeldingen per uur in het laatste derde van het venster t.o.v. het eerste derde. < 1 = afnemend."""
+    if len(times) < 9:
+        return {"available": False, "reason": "te weinig posts"}
+    span = (times[-1] - times[0]).total_seconds()
+    if span <= 0:
+        return {"available": False, "reason": "geen tijdspreiding"}
+    third = span / 3
+    first = sum(1 for t in times if (t - times[0]).total_seconds() <= third)
+    last = sum(1 for t in times if (t - times[0]).total_seconds() >= 2 * third)
+    return {"available": True, "ratio_last_vs_first": last / max(1, first),
+            "state": "versnellend" if last > 1.5 * first else "afnemend" if last < 0.67 * first else "stabiel"}
 
 
 def with_baseline(db: Database, topic: str, m: dict, min_history: int = 5) -> dict:
@@ -147,13 +210,14 @@ def with_baseline(db: Database, topic: str, m: dict, min_history: int = 5) -> di
                               "unusual": z is not None and z > 3}}
 
 
-def snapshot(db: Database, token: Token, getter=_get, now: datetime | None = None) -> dict:
+def snapshot(db: Database, token: Token, getter=_get_full, now: datetime | None = None) -> dict:
     now = now or datetime.now(tz=UTC)
     try:
         d = x_search(f"${token.cashtag}", getter=getter)
     except SourceUnavailable as e:
         return {"topic": f"${token.cashtag}", "status": "unavailable", "error": str(e)}
     m = with_baseline(db, f"${token.cashtag}", momentum(d["posts"], d["users"], now))
+    m["source_meta"] = {"pages": d.get("pages"), "rate_limit": d.get("rate_limit"), "fetched_at": now.isoformat()}
     with db.session.begin() as s:
         s.add(SocialSnapshot(topic=f"${token.cashtag}", source="x_api_v2", window_start=now - timedelta(days=7),
                              window_end=now, metrics=json.loads(json.dumps(m, default=str))))

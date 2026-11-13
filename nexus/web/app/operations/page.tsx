@@ -3,18 +3,21 @@
 import { useState } from "react";
 import { Btn, useAdmin } from "@/components/admin";
 import { Empty, PageTitle, Panel, Segmented, Skeleton, StatusDot } from "@/components/ui";
-import { useApi } from "@/lib/api";
+import { api, useApi } from "@/lib/api";
 import { ago, num, pct } from "@/lib/format";
 
 interface Prov {
   key: string; name: string; group: string; host: string; note: string; required_env: string[]; missing_env: string[];
-  state: "connected" | "disconnected" | "not_configured" | "unknown"; last_check: string | null; last_success: string | null;
+  state: State; last_check: string | null; last_success: string | null; last_failure: string | null; last_failure_class: string | null;
+  freshness: { newest: string; age_hours: number; stale: boolean } | null; mode: string;
   error_class: string | null; explain: string | null; http_status: number | null; latency_ms: number | null;
   rate_limit: Record<string, string> | null; detail: { network?: string; items?: number; error?: string };
   ai_cost_30d_usd: number | null; ai_calls_30d: number;
 }
 interface AiProv { provider: string; usable: boolean; reason: string; model: string | null; price_per_mtok_usd: { input: number; output: number } | null; max_calls_per_day: number }
-interface Providers { providers: Prov[]; ai: AiProv[] }
+type State = "CONNECTED" | "DEGRADED" | "DISCONNECTED" | "SIMULATED" | "NOT CONFIGURED";
+interface Sim { key: string; name: string; state: State; mode: string; note: string }
+interface Providers { providers: Prov[]; ai: AiProv[]; simulated: Sim[] }
 interface Gw {
   policies: Record<string, { providers: string[]; purpose: string; effort: string }>; deterministic_only: string[];
   routes: Record<string, { provider: string; status: string }[]>;
@@ -32,9 +35,10 @@ interface Entrant { entrant: string; kind: string; status: string; reason?: stri
 interface Eval { latest: { benchmark: string; frozen: string; note: string; items: number; entrants: Entrant[]; measured_at: string } | null; calibration: { rows: { provider: string; n: number; brier: number; verdict: string }[]; note: string } }
 
 const GROUPS: [string, string][] = [["ai", "AI-aanbieders"], ["social", "Sociaal"], ["onchain", "On-chain"], ["news", "Nieuws"], ["market", "Marktdata"]];
-const STATE: Record<Prov["state"], [string, string, string]> = {
-  connected: ["Verbonden", "text-emerald-300", "ok"], disconnected: ["Niet verbonden", "text-rose-300", "down"],
-  not_configured: ["Niet ingesteld", "text-slate-400", "not_configured"], unknown: ["Nog niet getest", "text-slate-500", "disabled"],
+const STATE: Record<State, [string, string, string]> = {
+  CONNECTED: ["CONNECTED", "text-emerald-300", "ok"], DEGRADED: ["DEGRADED", "text-amber-300", "degraded"],
+  DISCONNECTED: ["DISCONNECTED", "text-rose-300", "down"], SIMULATED: ["SIMULATED", "text-violet-300", "configured"],
+  "NOT CONFIGURED": ["NOT CONFIGURED", "text-slate-400", "not_configured"],
 };
 const NET: Record<string, string> = {
   reachable: "host bereikbaar", network_blocked: "host geblokkeerd door deze omgeving", timeout: "time-out", network_unreachable: "geen verbinding",
@@ -72,13 +76,15 @@ export default function Page() {
                     return (
                       <tr key={p.key} className="border-t border-white/[.04] align-top">
                         <td className="px-1 py-2.5"><div className="text-slate-100">{p.name}</div><div className="text-[11.5px] text-slate-500">{p.host}</div></td>
-                        <td className={`py-2.5 ${c}`}><span className="inline-flex items-center gap-2"><StatusDot status={dot} />{t}</span></td>
+                        <td className={`py-2.5 ${c}`}><span className="inline-flex items-center gap-2 font-mono text-[11.5px]"><StatusDot status={dot} />{t}</span><div className="text-[11px] text-slate-500">{p.mode}</div></td>
                         <td className="py-2.5 pr-4 text-slate-400">
-                          {p.explain ?? (p.state === "connected" ? "test geslaagd" : "—")}
+                          {p.explain ?? (p.state === "CONNECTED" ? "test geslaagd" : "—")}
+                          {p.freshness && <div className={`text-[11.5px] ${p.freshness.stale ? "text-amber-300" : "text-slate-500"}`}>nieuwste bericht {num(p.freshness.age_hours, 1)} u oud{p.freshness.stale ? " · VEROUDERD" : ""}</div>}
                           {p.missing_env.length > 0 && <div className="font-mono text-[11px] text-amber-300/90">{p.missing_env.join(", ")}</div>}
                           {p.detail?.network && <div className="text-[11.5px] text-slate-500">{NET[p.detail.network] ?? p.detail.network}</div>}
                         </td>
-                        <td className="py-2.5 text-slate-400">{p.last_success ? ago(p.last_success) : "nooit"}<div className="text-[11.5px] text-slate-600">{p.last_check ? `getest ${ago(p.last_check)}` : "nog niet getest"}</div></td>
+                        <td className="py-2.5 text-slate-400">{p.last_success ? ago(p.last_success) : "nooit"}<div className="text-[11.5px] text-slate-600">{p.last_check ? `getest ${ago(p.last_check)}` : "nog niet getest"}</div>
+                          {p.last_failure && <div className="text-[11.5px] text-rose-300/70">fout {ago(p.last_failure)} · {p.last_failure_class}</div>}</td>
                         <td className="num py-2.5 text-right text-slate-400">{p.latency_ms != null ? `${p.latency_ms} ms` : "—"}</td>
                         <td className="py-2.5 pl-4 font-mono text-[11px] text-slate-500">{p.rate_limit && Object.keys(p.rate_limit).length ? Object.entries(p.rate_limit).map(([k, v]) => `${k.replace(/^x-|ratelimit-|rate-limit-/g, "")}: ${v}`).join(" · ") : "—"}</td>
                         <td className="num py-2.5 text-right text-slate-300">{p.group === "ai" ? (p.ai_calls_30d ? `$${num(p.ai_cost_30d_usd, 2)} · ${p.ai_calls_30d}×` : "$0,00") : "—"}</td>
@@ -87,9 +93,19 @@ export default function Page() {
                   })}
                 </tbody>
               </table>
+              <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-white/[.05] pt-3 text-[12.5px]">
+                {prov.data.simulated.map((x) => (
+                  <div key={x.key} className="flex items-center gap-2"><StatusDot status={STATE[x.state][2]} />
+                    <span className="text-slate-200">{x.name}</span><span className={`font-mono text-[11px] ${STATE[x.state][1]}`}>{x.state}</span>
+                    <span className="text-slate-500">· {x.mode}</span></div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11.5px] text-slate-500">Groen (CONNECTED) betekent: een echte test tegen de aanbieder is gelukt. Geslaagde unit-tests tellen daar niet voor.</p>
             </div>
           )}
         </Panel>
+
+        <Activation admin={admin} />
 
         <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
           <Panel title="AI Gateway · routering per taak" action={gw.data && <span className="caption num">vandaag ${num(gw.data.spent_today_usd, 2)} · over ${num(gw.data.budget_left_usd, 2)}</span>}>
@@ -159,6 +175,8 @@ export default function Page() {
           )}
         </Panel>
 
+        <Labelling admin={admin} />
+
         <Debates admin={admin} />
 
         {health.data && (
@@ -226,6 +244,80 @@ function Debates({ admin }: { admin: ReturnType<typeof useAdmin> }) {
               <div><div className="text-slate-100">#{d.id} {d.subject}</div>
                 <div className="text-[11.5px] text-slate-500">{d.author ?? "—"} vs {d.challenger ?? "—"} · {d.summary.independence} · {d.summary.agreements.length} gedeeld, {d.summary.disagreements.length} betwist, {d.summary.unsupported.length} zonder bewijs</div></div>
               <div className="text-right"><div className={d.status === "done" ? "text-slate-200" : "text-slate-500"}>{d.summary.recommendation}</div><div className="text-[11.5px] text-slate-500">{ago(d.created_at)} · ${num(d.cost_usd, 3)}</div></div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+interface Act { status: string; at: string; reason?: string; run_id?: number;
+  connectivity: { status: string; error_class: string | null; latency_ms: number | null };
+  live_call?: { provider: string; model: string; latency_ms: number; tokens_in: number; tokens_out: number; estimated_cost_usd: number | null; actual_cost_usd: number | null };
+  checks: { check: string; ok: boolean; detail: string }[] }
+
+function Activation({ admin }: { admin: ReturnType<typeof useAdmin> }) {
+  const { data, refresh } = useApi<{ latest: Act | null }>("/api/activation/council", 120_000);
+  const a = data?.latest;
+  const tone = a?.status === "CONNECTED" ? "text-emerald-300" : a?.status === "DEGRADED" ? "text-amber-300" : "text-slate-300";
+  return (
+    <Panel title="Council-activatie · eerste echte AI-taak"
+      action={<Btn disabled={!admin.token || !!admin.busy} onClick={() => admin.post("/api/activation/council", undefined, refresh)}>Activatietest draaien</Btn>}>
+      {!a ? <Empty>Nog niet gedraaid. De test doet één kleine onderzoeksvraag met echte feiten, plus een fallback-, budget- en CEO-escalatietest. Zonder sleutel wordt niets verstuurd.</Empty> : (
+        <div className="grid gap-5 md:grid-cols-[260px_1fr] text-[13px]">
+          <div>
+            <div className={`font-mono text-[15px] ${tone}`}>{a.status.replace("_", " ")}</div>
+            <div className="mt-1 text-[11.5px] text-slate-500">{ago(a.at)} · verbinding: {a.connectivity.status}{a.connectivity.error_class ? ` (${a.connectivity.error_class})` : ""}</div>
+            {a.reason && <p className="mt-2 text-slate-400">{a.reason}</p>}
+          </div>
+          {a.live_call ? (
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
+              <div><dt className="caption">Model (echt)</dt><dd className="mt-0.5 font-mono text-[12px] text-white">{a.live_call.model}</dd></div>
+              <div><dt className="caption">Latency</dt><dd className="num mt-0.5 text-white">{a.live_call.latency_ms} ms</dd></div>
+              <div><dt className="caption">Tokens in/uit</dt><dd className="num mt-0.5 text-white">{a.live_call.tokens_in} / {a.live_call.tokens_out}</dd></div>
+              <div><dt className="caption">Kosten schatting → echt</dt><dd className="num mt-0.5 text-white">${num(a.live_call.estimated_cost_usd, 4)} → ${num(a.live_call.actual_cost_usd, 4)}</dd></div>
+              {a.checks.map((c) => <div key={c.check} className="col-span-2 flex gap-2"><StatusDot status={c.ok ? "ok" : "down"} /><span className="text-slate-300">{c.check}</span><span className="truncate text-slate-500">{c.detail}</span></div>)}
+            </dl>
+          ) : <p className="text-slate-500">Geen echte aanroep gedaan, dus geen model, latency of kosten om te tonen.</p>}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+interface LabelItem { id: number; title: string; source: string; published_at: string }
+interface LabelStatus { labels: { labelled: number; test_items: number; dev_items: number; min_for_verdict: number; note: string } }
+
+function Labelling({ admin }: { admin: ReturnType<typeof useAdmin> }) {
+  const st = useApi<LabelStatus>("/api/eval/status", 120_000);
+  const [queue, setQueue] = useState<{ items: LabelItem[]; labels: string[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  async function load() {
+    setErr(null);
+    try { setQueue(await api("/api/eval/label-queue?limit=10", { headers: { Authorization: `Bearer ${admin.token}` } })); }
+    catch (e) { setErr(e instanceof Error ? e.message : "laden mislukt"); }
+  }
+  function label(id: number, l: string) {
+    admin.post("/api/eval/labels", { news_id: id, label: l }, () => { setQueue((q) => q && { ...q, items: q.items.filter((x) => x.id !== id) }); st.refresh(); });
+  }
+  const s = st.data?.labels;
+  return (
+    <Panel title="Onafhankelijke eval-set · koppen labelen"
+      action={<div className="flex items-center gap-3">{s && <span className="caption num">{s.labelled} gelabeld · test {s.test_items}/{s.min_for_verdict}</span>}
+        <Btn disabled={!admin.token} onClick={load}>Koppen laden</Btn></div>}>
+      <p className="mb-3 text-[12.5px] leading-relaxed text-slate-400">{s?.note ?? "Echte koppen, gelabeld door een mens die de regels niet schreef."} Je ziet alleen kop en bron, niet wat NEXUS ervan denkt.</p>
+      {err && <p className="text-[12.5px] text-rose-300">{err}</p>}
+      {!queue ? <Empty>Laad koppen met het admin- of operator-token.</Empty> : !queue.items.length ? <Empty>Geen ongelabelde echte berichten. Echte feeds moeten eerst binnenkomen (fixtures tellen niet).</Empty> : (
+        <ul className="divide-y divide-white/[.05] text-[13px]">
+          {queue.items.map((it) => (
+            <li key={it.id} className="grid gap-2 py-2.5 md:grid-cols-[1fr_240px]">
+              <div><div className="text-slate-100">{it.title}</div><div className="text-[11.5px] text-slate-500">{it.source} · {ago(it.published_at)}</div></div>
+              <select aria-label={`Label voor ${it.id}`} defaultValue="" onChange={(e) => e.target.value && label(it.id, e.target.value)}
+                className="rounded-md border border-white/[.08] bg-[#0F1217] px-2 py-1.5 text-[12.5px] text-slate-200">
+                <option value="">Kies label…</option>
+                {queue.labels.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
             </li>
           ))}
         </ul>

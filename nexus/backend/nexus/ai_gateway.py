@@ -108,7 +108,9 @@ def key_of(p: str) -> str:
 
 
 def model_of(p: str) -> str | None:
-    c = CONF[p]
+    c = CONF.get(p)
+    if c is None:                    # testaanbieder (bv. de bewust falende in de activatie): geen model
+        return None
     if _env(c.model_env):
         return _env(c.model_env)
     if p == "anthropic":
@@ -117,7 +119,9 @@ def model_of(p: str) -> str | None:
 
 
 def price_of(p: str) -> tuple[float, float] | None:
-    c = CONF[p]
+    c = CONF.get(p)
+    if c is None:
+        return None
     if p == "anthropic":
         return _anthropic_default()[1]
     if c.price_env and _env(c.price_env[0]) and _env(c.price_env[1]):
@@ -151,6 +155,8 @@ def describe() -> list[dict]:
 
 
 def calls_cap(p: str) -> int:
+    if p not in CONF:
+        return 1
     try:
         return int(_env(CONF[p].calls_env) or CONF[p].default_calls_per_day)
     except ValueError:
@@ -170,7 +176,7 @@ def anthropic_adapter(system, user, schema, effort, timeout, max_tokens, model, 
     client = client or council._client()
     if hasattr(client, "with_options"):
         client = client.with_options(timeout=timeout)
-    return council._call(client, system, user, schema, effort)
+    return council._call_full(client, system, user, schema, effort)
 
 
 def _chat_compatible(base: str, key: str, system, user, schema, timeout, max_tokens, model, post):
@@ -184,7 +190,8 @@ def _chat_compatible(base: str, key: str, system, user, schema, timeout, max_tok
     if r["choices"][0].get("finish_reason") == "length":
         raise RuntimeError("antwoord afgekapt (max_tokens)")
     u = r.get("usage") or {}
-    return json.loads(msg["content"]), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
+    return (json.loads(msg["content"]), int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0)),
+            r.get("model"))
 
 
 def openai_adapter(system, user, schema, effort, timeout, max_tokens, model, post=_post_json):
@@ -210,7 +217,8 @@ def gemini_adapter(system, user, schema, effort, timeout, max_tokens, model, pos
         raise RuntimeError("antwoord afgekapt (max_tokens)")
     text = "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []))
     u = r.get("usageMetadata") or {}
-    return json.loads(text), int(u.get("promptTokenCount", 0)), int(u.get("candidatesTokenCount", 0))
+    return (json.loads(text), int(u.get("promptTokenCount", 0)), int(u.get("candidatesTokenCount", 0)),
+            r.get("modelVersion"))
 
 
 ADAPTERS: dict[str, Callable] = {"anthropic": anthropic_adapter, "openai": openai_adapter,
@@ -251,6 +259,7 @@ class Gateway:
     is_configured: Callable[[str], tuple[bool, str]] = configured
     breaker_failures: int = 3
     breaker_minutes: int = 15
+    budget_override: float | None = None          # alleen voor de budgettest van de activatie
 
     @classmethod
     def from_env(cls, db: Database) -> Gateway:
@@ -289,6 +298,8 @@ class Gateway:
         return len(last) >= self.breaker_failures and all(c.status == "error" for c in last)
 
     def budget_left(self, now: datetime | None = None) -> float:
+        if self.budget_override is not None:
+            return self.budget_override
         from nexus import council
         return council.daily_budget() - council.spent_today(self.db, now) - self.spent_today(now)
 
@@ -328,16 +339,19 @@ class Gateway:
             model = model_of(p)
             t0 = time.monotonic()
             try:
-                out, tin, tout = self.adapters[p](system, user, schema, pol.effort, pol.timeout_s, pol.max_tokens, model)
+                res = self.adapters[p](system, user, schema, pol.effort, pol.timeout_s, pol.max_tokens, model)
+                out, tin, tout = res[0], res[1], res[2]
+                served = (res[3] if len(res) > 3 else None) or model      # het model dat echt antwoordde
                 errs = validate(out, schema)
                 if errs:
                     raise ValueError("antwoord volgt het schema niet: " + "; ".join(errs[:3]))
                 ms = int((time.monotonic() - t0) * 1000)
                 pr = price_of(p)
                 cost = (tin * pr[0] + tout * pr[1]) / 1e6 if pr else None
-                self._log(task, p, model, "ok", ms, tin, tout, cost, None, ref, h)
+                self._log(task, p, served, "ok", ms, tin, tout, cost, None, ref, h)
                 trail.append({"provider": p, "status": "ok", "latency_ms": ms})
-                return {"output": out, "provider": p, "model": model, "latency_ms": ms, "tokens_in": tin,
+                return {"output": out, "provider": p, "model": served, "requested_model": model, "latency_ms": ms,
+                        "tokens_in": tin,
                         "tokens_out": tout, "cost_usd": cost, "cost_known": pr is not None, "trail": trail}
             except Exception as e:  # noqa: BLE001 - volgende provider proberen, fout vastleggen
                 ms = int((time.monotonic() - t0) * 1000)

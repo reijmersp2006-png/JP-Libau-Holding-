@@ -16,8 +16,21 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import (JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String,
-                        Text, UniqueConstraint, create_engine, select)
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+    select,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -35,7 +48,7 @@ def iso(ts: datetime | None) -> str | None:
     return (ts if ts.tzinfo else ts.replace(tzinfo=UTC)).isoformat()
 
 
-def Money():  # noqa: N802
+def Money():
     return Numeric(24, 10, asdecimal=False)
 
 
@@ -739,3 +752,31 @@ class Debate(Base):
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+class NewsLabel(Base):
+    """Onafhankelijk label (door de CEO of een andere mens, niet door de ontwikkelaar) voor een echt nieuwsbericht."""
+
+    __tablename__ = "news_labels"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    news_id: Mapped[int] = mapped_column(ForeignKey("news_events.id"), index=True)
+    label: Mapped[str] = mapped_column(String(32))
+    labeller: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (UniqueConstraint("news_id", "labeller", name="uq_news_label"),)
+
+
+class EventWorkflow(Base):
+    """Eén nieuwsgebeurtenis door de hele organisatie: elke stap met tijd, bron en status (trace-id)."""
+
+    __tablename__ = "event_workflows"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trace_id: Mapped[str] = mapped_column(String(40), unique=True)
+    news_id: Mapped[int] = mapped_column(ForeignKey("news_events.id"), unique=True)
+    status: Mapped[str] = mapped_column(String(16))                 # running, done, partial, failed
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    intelligence: Mapped[dict] = mapped_column(JSON, default=dict)
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)

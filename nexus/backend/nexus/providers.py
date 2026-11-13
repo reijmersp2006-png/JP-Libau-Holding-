@@ -232,6 +232,7 @@ def status(db: Database, now: datetime | None = None) -> list[dict]:
         cost = {p: (float(c or 0), n) for p, c, n in s.execute(
             select(AiCall.provider, func.sum(AiCall.cost_usd), func.count()).where(
                 AiCall.created_at >= now - timedelta(days=30)).group_by(AiCall.provider))}
+        freshness = _freshness(s, now)
         for p in all_providers():
             last = s.scalars(select(ProviderCheck).where(ProviderCheck.provider == p.key)
                              .order_by(ProviderCheck.id.desc())).first()
@@ -241,16 +242,22 @@ def status(db: Database, now: datetime | None = None) -> list[dict]:
             last_ok = max([t for t in (ok.checked_at if ok else None, ai_ok) if t is not None],
                           default=None, key=lambda t: t if t.tzinfo else t.replace(tzinfo=UTC))
             miss = missing_env(p)
-            if last is None:
-                state = "not_configured" if miss else "unknown"
-            else:
-                state = "connected" if last.status == "ok" else ("not_configured" if miss else "disconnected")
+            fail = s.scalars(select(ProviderCheck).where(ProviderCheck.provider == p.key, ProviderCheck.status == "error")
+                             .order_by(ProviderCheck.id.desc())).first()
+            recent_err = s.scalar(select(func.count()).select_from(AiCall).where(
+                AiCall.provider == p.key, AiCall.status != "ok", AiCall.created_at >= now - timedelta(hours=1))) or 0
+            state = classify_state(last, miss, recent_err)
             cls = last.error_class if last else ("credentials_missing" if miss else None)
             rows.append({
                 "key": p.key, "name": p.name, "group": p.group, "host": p.host, "note": p.note,
                 "required_env": list(p.env), "missing_env": miss, "state": state,
                 "last_check": _iso(last.checked_at) if last else None,
                 "last_success": _iso(last_ok),
+                "last_failure": _iso(fail.checked_at) if fail else None,
+                "last_failure_class": fail.error_class if fail else None,
+                "freshness": freshness.get(p.key),
+                "mode": ("geen sleutel" if miss else "live alleen-lezen" if state in ("CONNECTED", "DEGRADED")
+                         else "uitgeschakeld"),
                 "error_class": cls, "explain": EXPLAIN.get(cls or "", None),
                 "http_status": last.http_status if last else None,
                 "latency_ms": last.latency_ms if last else None,
@@ -259,6 +266,48 @@ def status(db: Database, now: datetime | None = None) -> list[dict]:
                 "ai_cost_30d_usd": cost.get(p.key, (None, 0))[0], "ai_calls_30d": cost.get(p.key, (None, 0))[1],
             })
     return rows
+
+
+STATES = ("CONNECTED", "DEGRADED", "DISCONNECTED", "SIMULATED", "NOT CONFIGURED")
+
+
+def classify_state(last, missing: list[str], recent_errors: int = 0) -> str:
+    """Expliciete status. Groen (CONNECTED) alleen na een echte, geslaagde test tegen de aanbieder —
+    nooit omdat unit-tests slagen. DEGRADED: wel bereikbaar, maar traag, bijna aan de limiet of recente fouten."""
+    if missing:
+        return "NOT CONFIGURED"
+    if last is None or last.status != "ok":
+        return "DISCONNECTED"
+    rl = (last.detail or {}).get("rate_limit") or {}
+    rem = [int(v) for k, v in rl.items() if k.endswith("remaining") and str(v).isdigit()]
+    low = bool(rem) and min(rem) < 5
+    if recent_errors >= 2 or (last.latency_ms or 0) > 5000 or low:
+        return "DEGRADED"
+    return "CONNECTED"
+
+
+def _freshness(s, now: datetime) -> dict:
+    """Leeftijd van de nieuwste échte (niet-fixture) gegevens per nieuwsbron, in uren."""
+    from nexus.db import NewsEvent
+    out = {}
+    for src, ts in s.execute(select(NewsEvent.source, func.max(NewsEvent.fetched_at))
+                             .where(NewsEvent.source_kind != "fixture").group_by(NewsEvent.source)):
+        if ts is None:
+            continue
+        ts = ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+        out[f"news:{src}"] = {"newest": ts.isoformat(), "age_hours": round((now - ts).total_seconds() / 3600, 1),
+                              "stale": now - ts > timedelta(hours=24)}
+    return out
+
+
+def simulated_services() -> list[dict]:
+    """Diensten die bewust niet echt zijn: zo staat het er, in plaats van een groene status."""
+    return [
+        {"key": "paper_broker", "name": "Papieren broker", "group": "uitvoering", "state": "SIMULATED",
+         "mode": "papier: geen echt geld", "note": "alle orders zijn gesimuleerd"},
+        {"key": "live_broker", "name": "Echte broker", "group": "uitvoering", "state": "NOT CONFIGURED",
+         "mode": "uit (live trading staat UIT)", "note": "bewust niet gekoppeld; vereist CEO-besluit en Risk Guardian"},
+    ]
 
 
 def _iso(d):
