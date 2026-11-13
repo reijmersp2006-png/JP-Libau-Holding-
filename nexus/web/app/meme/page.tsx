@@ -1,6 +1,7 @@
 "use client";
 
 import { WithCC } from "@/components/useCC";
+import { Workstation } from "@/components/Workstation";
 import { Empty, PageTitle, Panel } from "@/components/ui";
 import { pct, tone, usd } from "@/lib/format";
 
@@ -8,13 +9,11 @@ export default function Page() {
   return (
     <WithCC>{(d) => (
       <>
-        <PageTitle title="Meme Coin Scanner"
-          sub="Hoog-risico radar via DexScreener: alleen kijken. Gehandeld wordt uitsluitend op gereguleerde exchanges, en alleen met contract-, honeypot- en liquiditeitschecks (die nog gebouwd worden). Hype alleen is nooit een reden." />
-        <div className="mb-4 grid gap-3 md:grid-cols-3">
-          {[["Contract- & honeypotcheck", "fase 2 · nog niet"], ["Houderverdeling & dev-wallets", "fase 2 · nog niet"], ["Liquiditeit & rode vlaggen", "draait (DexScreener)"]].map(([t, s]) => (
-            <Panel key={t}><div className="text-sm font-medium text-slate-200">{t}</div><div className="text-xs text-slate-500">{s}</div></Panel>
-          ))}
-        </div>
+        <Workstation classes={["meme"]} title="Memecoins" initial="DOGE-EUR"
+          intro="Hoog risico, alleen onderzoek. Koersen komen uit de opslag; social trends, tokenveiligheid, liquiditeit en concentratie komen uit de Social Radar en zijn alleen zo goed als de verbonden bronnen. Ontbrekende veiligheidsinformatie telt nooit als veilig." />
+        <div className="mt-10" />
+        <PageTitle title="DEX-radar"
+          sub="Laatste ophaalronde van DexScreener door de holding: alleen kijken. Contract- en honeypotcontroles staan in de Social Radar (GoPlus); zonder geslaagde controle nooit een voorstel." />
         <Panel title="Radar (laatste ophaalronde)" label={d.environment === "demo" ? "SIMULATED" : d.radar.length ? "DELAYED" : "UNAVAILABLE"}>
           {d.radar.length ? (
             <div className="overflow-x-auto">

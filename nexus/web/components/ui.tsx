@@ -31,7 +31,7 @@ export function Panel({ title, label, action, children, className = "", glow = f
   title?: string; label?: DataLabel; action?: ReactNode; children: ReactNode; className?: string; glow?: boolean;
 }) {
   return (
-    <section className={`panel fade-up p-5 ${glow ? "panel-glow" : ""} ${className}`}>
+    <section className={`panel fade-up min-w-0 p-5 ${glow ? "panel-glow" : ""} ${className}`}>
       {(title || label || action) && (
         <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -135,7 +135,7 @@ export function TruthTag({ kind, className = "" }: { kind: Truth; className?: st
 
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="tablist" aria-label={label} className="inline-flex rounded-lg border border-white/[.07] bg-white/[.02] p-0.5">
+    <div role="tablist" aria-label={label} className="inline-flex max-w-full flex-wrap rounded-lg border border-white/[.07] bg-white/[.02] p-0.5">
       {options.map(([k, t]) => (
         <button key={k} role="tab" aria-selected={value === k} onClick={() => onChange(k)}
           className={`rounded-md px-3 py-1.5 text-[12.5px] transition-colors ${value === k ? "bg-white/[.08] text-white" : "text-slate-400 hover:text-slate-200"}`}>{t}</button>

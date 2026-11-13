@@ -71,3 +71,45 @@ jobs:
           cache-dependency-path: nexus/web/package-lock.json
       - run: npm ci && npm run lint && npm run build
         working-directory: nexus/web
+
+  nexus-visual:
+    # Visuele rooktest (Milestone D): demo-omgeving met synthetische, als SIMULATED gelabelde data.
+    # Controleert consolefouten en horizontale overloop op desktop, tablet en mobiel; screenshots als artefact.
+    # Niet blokkerend zolang de test nieuw is; geen pixelvergelijking (tijdstempels veranderen per run).
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . -e "nexus/backend[dev]"
+      - name: API starten (demo, geen sleutels, live uit)
+        working-directory: nexus/backend
+        run: |
+          NEXUS_DEMO=1 NEXUS_DEMO_HOME=$RUNNER_TEMP/demo NEXUS_DATABASE_URL=sqlite:///$RUNNER_TEMP/smoke.db NEXUS_WORKER=0 \
+            nohup uvicorn nexus.main:app --port 8000 > $RUNNER_TEMP/api.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf http://127.0.0.1:8000/api/health && break; sleep 1; done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: nexus/web/package-lock.json
+      - name: Web bouwen en starten
+        working-directory: nexus/web
+        run: |
+          npm ci && npm run build
+          nohup npx next start -p 3000 > $RUNNER_TEMP/web.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000 > /dev/null && break; sleep 1; done
+      - name: Rooktest
+        working-directory: nexus/web
+        run: |
+          npm i --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          SMOKE_OUT=$RUNNER_TEMP/smoke node e2e/visual-smoke.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-visual-smoke
+          path: ${{ runner.temp }}/smoke
+          retention-days: 14

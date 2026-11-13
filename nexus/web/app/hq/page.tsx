@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Btn, useAdmin } from "@/components/admin";
 import { BriefingCard } from "@/components/BriefingCard";
-import { DecisionFlow } from "@/components/DecisionFlow";
-import { NeuralCore } from "@/components/NeuralCore";
+import Link from "next/link";
+import { NeuralGraph } from "@/components/NeuralGraph";
 import { Empty, PageTitle, Panel, Segmented, Skeleton } from "@/components/ui";
 import { useApi } from "@/lib/api";
 import { ago } from "@/lib/format";
@@ -24,13 +24,24 @@ const STATUS_TEXT: Record<string, [string, string]> = {
   failed: ["mislukt", "text-rose-300"], escalated: ["wacht op CEO", "text-amber-300"], cancelled: ["geannuleerd", "text-slate-500"],
 };
 const EXAMPLES = [
-  "Wat zijn de sterkste kansen in het onderzoek?",
-  "Waarom is het laatste voorstel afgewezen?",
-  "Wat heeft het systeem deze week geleerd?",
-  "Welk belangrijk nieuws was er?",
-  "Hoe doet Grok het vergeleken met NEXUS?",
-  "Wat wacht op mijn goedkeuring?",
+  "Wat onderzoeken de AI-agenten?",
+  "Welke gebeurtenissen vragen mijn aandacht?",
+  "Waarom is het voorstel voor BTC afgewezen?",
+  "Wat zijn onze grootste risico's?",
+  "Welke strategieën presteerden het best?",
+  "Welke providers zijn offline?",
+  "Wat hebben we deze week geleerd?",
 ];
+// Vervolgacties per onderwerp: een vervolgvraag en de plek waar het bewijs staat. Niets voert iets uit.
+const FOLLOW: Record<string, [string, string][]> = {
+  providers: [["Provider Control Center", "/operations"], ["Activatiechecklist", "/operations"]],
+  agents: [["Decision Theater", "/decisions"], ["Takenwachtrij", "#taken"]],
+  approvals: [["Takenwachtrij", "#taken"], ["Risk Guardian", "/risk"]],
+  opportunities: [["Evolution Lab", "/evolution"], ["Decision Theater", "/decisions"]],
+  rejection: [["Risk Guardian", "/risk"], ["Execution Monitor", "/execution"]],
+  risk: [["Risk Guardian", "/risk"], ["Command Center", "/"]],
+  learning: [["Evolution Lab", "/evolution"]], news: [["News Reactor", "/news"]], underperforming: [["Evolution Lab", "/evolution"]],
+};
 
 export default function Page() {
   const admin = useAdmin();
@@ -40,8 +51,8 @@ export default function Page() {
         sub="Wie doet wat, waarom, en wat er op jouw besluit wacht. Alles hieronder komt uit echte taken en gebeurtenissen in de database; agents kunnen geen limieten verhogen, regels herschrijven of orders plaatsen."
         right={admin.field} />
       <div className="space-y-5">
-        <Panel title="Organisatie" action={<span className="caption">kies een rol voor taken, uitkomsten en fouten</span>}>
-          <NeuralCore />
+        <Panel title="Neural Core" action={<span className="caption">echte taken en overdrachten · klik een rol voor het dossier</span>}>
+          <NeuralGraph />
         </Panel>
         <div className="grid gap-5 xl:grid-cols-[1fr_440px]">
           <Copilot admin={admin} />
@@ -50,8 +61,11 @@ export default function Page() {
             <BriefingCard full />
           </Panel>
         </div>
-        <Panel title="Live Decision Timeline"><DecisionFlow /></Panel>
-        <Tasks admin={admin} />
+        <Link href="/decisions" className="panel flex items-center justify-between px-5 py-4 text-[13px] hover:border-white/[.12]">
+          <span><span className="title-md">Decision Theater</span><span className="ml-3 text-slate-400">elke gebeurtenis van bron tot besluit, stap voor stap te inspecteren</span></span>
+          <span className="text-cyan-300">Openen →</span>
+        </Link>
+        <div id="taken"><Tasks admin={admin} /></div>
         <HoldoutStatus />
       </div>
     </>
@@ -101,7 +115,12 @@ function Copilot({ admin }: { admin: ReturnType<typeof useAdmin> }) {
                 </ul>
               </details>
             )}
-            {a.mode === "claude" && a.data_gaps.length > 0 && <p className="mt-2 text-[12px] text-amber-300/90">Ontbreekt: {a.data_gaps.join(" · ")}</p>}
+            {a.data_gaps.length > 0 && <p className="mt-2 text-[12px] text-amber-300/90">Ontbreekt: {a.data_gaps.join(" · ")}</p>}
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+              <span className="text-slate-500">Vervolg:</span>
+              {(FOLLOW[a.topic] ?? [["Command Center", "/"]]).map(([l, h]) => <Link key={l} href={h} className="chip hover:text-slate-200">{l}</Link>)}
+              <span className="text-slate-600">· de Copilot kan niets uitvoeren of limieten wijzigen</span>
+            </div>
           </article>
         ))}
       </div>

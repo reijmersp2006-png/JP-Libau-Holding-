@@ -1,11 +1,6 @@
-import { Placeholder } from "@/components/Placeholder";
+import { Workstation } from "@/components/Workstation";
 
 export default function Page() {
-  return <Placeholder spec={{
-    title: "Forex Terminal", phase: 2,
-    purpose: "Valutaparen, renteverschillen, macro-agenda en spreads per sessie. Omwisselen staat los van speculatieve FX-handel.",
-    existing: ["EUR/USD, EUR/GBP, EUR/JPY uurkoersen (Yahoo, DELAYED)", "Officiële ECB-referentiekoersen", "Valuta-afdeling: aanhouden van vreemde munt, zonder hefboom"],
-    next: ["Renteverschillen per paar", "Economische kalender met event-risico", "Sessie-liquiditeit (Azië/Europa/VS)", "Correlatiematrix van valuta"],
-    sources: ["ECB Data Portal (gratis)", "Economische kalender: Trading Economics of FRED (FRED gratis met sleutel)"],
-  }} />;
+  return <Workstation classes={["fx", "context"]} title="Valuta" initial="EURUSD=X"
+    intro="Valutaparen met dagkoersen sinds 2021 en beperkte uurkoersen. Als macrocontext zijn de dollarindex, de Amerikaanse 10-jaarsrente en de VIX te vergelijken. Een macrokalender met consensusverwachtingen is niet gekoppeld." />;
 }

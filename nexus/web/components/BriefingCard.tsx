@@ -1,5 +1,6 @@
 "use client";
 
+import { safeUrl } from "@/lib/url";
 import Link from "next/link";
 import { useApi } from "@/lib/api";
 import { eur, time } from "@/lib/format";
@@ -45,7 +46,7 @@ export function BriefingCard({ full = false }: { full?: boolean }) {
           <div><div className="eyebrow mb-1">Onderzoek</div>{b.research ? <div className="text-slate-200">{b.research.symbol}: kampioen Sharpe {b.research.champion_sharpe?.toFixed(2)} tegen koop-en-houd {b.research.buy_hold_sharpe?.toFixed(2)} · holdout {b.research.holdout === "contaminated" ? "besmet, wacht op nieuwe data" : b.research.holdout}</div> : <div className="text-slate-500">nog geen arena-run</div>}</div>
           <div><div className="eyebrow mb-1">Leren (7 dagen)</div><div className="text-slate-200">{b.learning.hypotheses_resolved_7d} hypothesen getoetst · {b.learning.decisions_measured} besluiten afgerekend</div></div>
           <div><div className="eyebrow mb-1">AI (24 uur)</div><div className="text-slate-200">{b.ai.council_runs} Council-runs, {b.ai.done} voltooid · ${b.ai.cost_usd.toFixed(2)}</div></div>
-          <div><div className="eyebrow mb-1">Belangrijk nieuws</div>{b.news.length ? <ul className="space-y-1">{b.news.map((n) => <li key={n.id}><a href={n.url} target="_blank" rel="noreferrer" className="text-slate-200 hover:text-white">{n.title}</a> <span className="text-slate-500">{n.source}</span></li>)}</ul> : <div className="text-slate-500">geen</div>}</div>
+          <div><div className="eyebrow mb-1">Belangrijk nieuws</div>{b.news.length ? <ul className="space-y-1">{b.news.map((n) => <li key={n.id}><a href={safeUrl(n.url)} target="_blank" rel="noreferrer noopener" className="text-slate-200 hover:text-white">{n.title}</a> <span className="text-slate-500">{n.source}</span></li>)}</ul> : <div className="text-slate-500">geen</div>}</div>
         </div>
       )}
       {b.missing.length > 0 && (
