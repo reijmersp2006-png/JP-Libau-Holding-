@@ -10,7 +10,10 @@ interface Tok {
   symbol: string; cashtag: string; chain: string | null; address: string | null;
   price: { last: number; ts: string; ret_1d: number; ret_7d: number; volume_change: number; label: "DELAYED" } | null;
   social: { status: string; at?: string; mentions?: number; unique_authors?: number; mentions_per_hour?: number; bot_risk?: number;
-    duplicate_text_share?: number; new_account_share?: number; sentiment_lexicon?: number;
+    duplicate_text_share?: number; new_account_share?: number; sentiment_lexicon?: number; top_author_share?: number;
+    contract_mentions?: { distinct: number; top: { address: string; mentions: number }[] };
+    decay?: { available: boolean; reason?: string; ratio_last_vs_first?: number; state?: string };
+    source_meta?: { pages: number; rate_limit: Record<string, string>; fetched_at: string };
     baseline?: { available: boolean; history: number; needed?: number; z?: number | null; unusual?: boolean } };
   safety: { status: string; checks?: Check[]; market?: { liquidity_usd?: number | null; volume_24h_usd?: number | null; dex?: string }; sources?: Record<string, string>; at?: string };
   tradeable: [boolean, string];
@@ -95,9 +98,14 @@ function TokenCard({ t }: { t: Tok }) {
             <dt className="text-slate-500">vermeldingen / uur</dt><dd className="text-right text-slate-200">{num(s.mentions_per_hour, 1)}</dd>
             <dt className="text-slate-500">unieke auteurs</dt><dd className="text-right text-slate-200">{s.unique_authors}</dd>
             <dt className="text-slate-500">botrisico</dt><dd className={`text-right ${(s.bot_risk ?? 0) > 0.5 ? "text-rose-300" : "text-slate-200"}`}>{pct(s.bot_risk, 0)}</dd>
+            <dt className="text-slate-500">grootste account</dt><dd className="text-right text-slate-200">{pct(s.top_author_share, 0)}</dd>
+            <dt className="text-slate-500">momentum</dt><dd className="text-right text-slate-200">{s.decay?.available ? `${s.decay.state} (${num(s.decay.ratio_last_vs_first, 1)}×)` : "te weinig posts"}</dd>
+            <dt className="text-slate-500">contractadressen</dt><dd className={`text-right ${(s.contract_mentions?.distinct ?? 0) > 1 ? "text-amber-300" : "text-slate-200"}`}>{s.contract_mentions?.distinct ?? 0}{(s.contract_mentions?.distinct ?? 0) > 1 ? " · let op nep-tokens" : ""}</dd>
             <dt className="text-slate-500">t.o.v. normaal</dt><dd className="text-right text-slate-200">{s.baseline?.available ? `${num(s.baseline.z, 1)}σ` : `basislijn ${s.baseline?.history ?? 0}/${s.baseline?.needed ?? 5}`}</dd>
           </dl>
-        ) : <div className="text-[12.5px] text-slate-500">{s.status === "not_connected" ? "X niet verbonden: geen metingen." : "Nog geen meting."}</div>}
+        ) : null}
+        {s.status === "ok" && s.source_meta && <div className="mt-1 text-[11px] text-slate-500">gemeten {ago(s.source_meta.fetched_at)} · {s.source_meta.pages} pagina&apos;s{s.source_meta.rate_limit?.["x-rate-limit-remaining"] ? ` · limiet over: ${s.source_meta.rate_limit["x-rate-limit-remaining"]}` : ""}</div>}
+        {s.status !== "ok" && <div className="text-[12.5px] text-slate-500">{s.status === "not_connected" ? "X niet verbonden: geen metingen." : "Nog geen meting."}</div>}
       </div>
 
       <div className="mt-4 flex-1">

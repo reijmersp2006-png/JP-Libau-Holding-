@@ -72,7 +72,7 @@ def test_probe_ok_records_rate_limit_and_never_stores_the_key(db, monkeypatch):
     assert rows[0]["status"] == "ok" and rows[0]["detail"]["rate_limit"]["anthropic-ratelimit-requests-remaining"] == "49"
     assert seen["x-api-key"] == SECRET
     st = next(r for r in providers.status(db) if r["key"] == "anthropic")
-    assert st["state"] == "connected" and st["last_success"]
+    assert st["state"] == "CONNECTED" and st["last_success"]
     assert SECRET not in json.dumps(providers.status(db)) and SECRET not in json.dumps(ai_gateway.describe())
 
 
@@ -181,12 +181,12 @@ def test_adapter_contracts_with_recorded_response_shapes():
         seen[url] = body
         if "generativelanguage" in url:
             return {"candidates": [{"content": {"parts": [{"text": '{"label": "a"}'}]}, "finishReason": "STOP"}],
-                    "usageMetadata": {"promptTokenCount": 12, "candidatesTokenCount": 3}}
+                    "usageMetadata": {"promptTokenCount": 12, "candidatesTokenCount": 3}, "modelVersion": "g-1"}
         return {"choices": [{"message": {"content": '{"label": "b"}'}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 11, "completion_tokens": 2}}
-    assert ai_gateway.openai_adapter("s", "u", SCHEMA, "low", 5, 100, "m", post=post) == ({"label": "b"}, 11, 2)
-    assert ai_gateway.xai_adapter("s", "u", SCHEMA, "low", 5, 100, "m", post=post) == ({"label": "b"}, 11, 2)
-    assert ai_gateway.gemini_adapter("s", "u", SCHEMA, "low", 5, 100, "m", post=post) == ({"label": "a"}, 12, 3)
+                "usage": {"prompt_tokens": 11, "completion_tokens": 2}, "model": "served-1"}
+    assert ai_gateway.openai_adapter("s", "u", SCHEMA, "low", 5, 100, "m", post=post) == ({"label": "b"}, 11, 2, "served-1")
+    assert ai_gateway.xai_adapter("s", "u", SCHEMA, "low", 5, 100, "m", post=post)[:3] == ({"label": "b"}, 11, 2)
+    assert ai_gateway.gemini_adapter("s", "u", SCHEMA, "low", 5, 100, "m", post=post) == ({"label": "a"}, 12, 3, "g-1")
     oa = seen["https://api.openai.com/v1/chat/completions"]
     assert oa["messages"][0]["role"] == "system" and oa["response_format"]["type"] == "json_schema"
 
@@ -200,9 +200,10 @@ def test_anthropic_adapter_uses_the_existing_council_call():
     def create(**kw):
         assert kw["output_config"]["format"]["type"] == "json_schema"
         return SimpleNamespace(usage=SimpleNamespace(input_tokens=7, output_tokens=3), stop_reason="end_turn",
-                               content=[SimpleNamespace(type="text", text='{"label": "a"}')])
+                               model="served-model", content=[SimpleNamespace(type="text", text='{"label": "a"}')])
     client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
-    assert ai_gateway.anthropic_adapter("s", "u", SCHEMA, "low", 5, 100, "m", client=client) == ({"label": "a"}, 7, 3)
+    assert ai_gateway.anthropic_adapter("s", "u", SCHEMA, "low", 5, 100, "m", client=client) == ({"label": "a"}, 7, 3,
+                                                                                                "served-model")
 
 
 # ── Debat ────────────────────────────────────────────────────────────────────────────────────

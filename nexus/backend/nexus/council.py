@@ -22,10 +22,10 @@ Grenzen die in de code zitten, niet in de prompt:
 from __future__ import annotations
 
 import hashlib
-from collections import Counter
 import json
 import math
 import os
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -332,6 +332,12 @@ def _client():
 
 
 def _call(client, system: str, user: str, schema: dict, effort: str) -> tuple[dict, int, int]:
+    out, tin, tout, _model = _call_full(client, system, user, schema, effort)
+    return out, tin, tout
+
+
+def _call_full(client, system: str, user: str, schema: dict, effort: str) -> tuple[dict, int, int, str | None]:
+    """Als ``_call``, plus het model dat echt antwoordde (bij server-side fallback kan dat afwijken)."""
     resp = client.beta.messages.create(
         model=MODEL, max_tokens=8000, system=system,
         messages=[{"role": "user", "content": user}],
@@ -344,7 +350,7 @@ def _call(client, system: str, user: str, schema: dict, effort: str) -> tuple[di
     if resp.stop_reason == "max_tokens":
         raise RuntimeError("antwoord afgekapt (max_tokens)")
     text = next((b.text for b in resp.content if b.type == "text"), "")
-    return json.loads(text), tin, tout
+    return json.loads(text), tin, tout, getattr(resp, "model", None)
 
 
 def relevant_agents(asset_class: str) -> list[Agent]:
@@ -585,4 +591,4 @@ def runs(db: Database, limit: int = 20) -> list[dict]:
         return [_as_dict(r) for r in s.scalars(select(CouncilRun).order_by(CouncilRun.id.desc()).limit(limit))]
 
 
-__all__ = ["AGENTS", "convene", "scorecard", "signal_combinations", "resolve_forecasts", "weights", "math"]
+__all__ = ["AGENTS", "convene", "math", "resolve_forecasts", "scorecard", "signal_combinations", "weights"]

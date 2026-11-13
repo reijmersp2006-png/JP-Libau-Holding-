@@ -20,9 +20,25 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 
 from nexus import council, news
-from nexus.db import (AgentForecast, Briefing, CouncilRun, Database, DecisionRecord, Execution, Hypothesis, JobRun,
-                      ModelVersion, NewsEvent, Order, OrchestratorTask, ResearchRun, RiskEvaluation, TokenCheck,
-                      TradeProposal, utcnow)
+from nexus.db import (
+    AgentForecast,
+    Briefing,
+    CouncilRun,
+    Database,
+    DecisionRecord,
+    Execution,
+    Hypothesis,
+    JobRun,
+    ModelVersion,
+    NewsEvent,
+    OrchestratorTask,
+    Order,
+    ResearchRun,
+    RiskEvaluation,
+    TokenCheck,
+    TradeProposal,
+    utcnow,
+)
 
 log = logging.getLogger("nexus.central")
 
@@ -179,12 +195,15 @@ def plan(db: Database, ctx: dict | None = None, now: datetime | None = None) -> 
 
 # ── Uitvoeren ───────────────────────────────────────────────────────────────────────────────
 def _h_news_review(db: Database, t: OrchestratorTask, ctx: dict) -> dict:
+    from nexus import workflow
     nid = t.payload["news_id"]
     with db.session.begin() as s:
         e = s.get(NewsEvent, nid)
         e.signal_at = e.signal_at or utcnow()
-        return {"news_id": nid, "relevance": e.relevance, "facts": len(e.facts or []), "assets": e.assets,
-                "note": "onderzoekssignaal, geen handelssignaal: de Council en de Risk Guardian beslissen daarna"}
+    w = workflow.run(db, ctx, nid)            # de hele keten: sociaal, markt, debat, quant, risico, samenvatting
+    return {"news_id": nid, "trace_id": w["trace_id"], "workflow": w["status"],
+            "research_priority": w["intelligence"].get("research_priority"), "cost_usd": w["cost_usd"],
+            "note": "onderzoekssignaal, geen handelssignaal: de Council en de Risk Guardian beslissen daarna"}
 
 
 def _h_hypothesis(db: Database, t: OrchestratorTask, ctx: dict) -> dict:
@@ -228,7 +247,7 @@ def run(db: Database, ctx: dict | None = None, limit: int = MAX_TASKS_PER_STEP) 
             new, err = "done", None
             if t.kind == "council_review" and res.get("status") != "done":
                 new = "escalated" if res.get("status") == "failed" else "done"
-        except Exception as e:  # noqa: BLE001 - vastgelegd, niet ingevuld
+        except Exception as e:
             log.exception("taak %s mislukt", tid)
             res, new, err = {}, "failed", str(e)[:500]
         with db.session.begin() as s:
