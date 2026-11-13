@@ -19,6 +19,7 @@ export const NAV: NavItem[] = [
   { href: "/execution", label: "Execution Monitor", phase: 5, ready: true, group: "Portefeuille" },
   { href: "/journal", label: "Trade Journal", phase: 1, ready: true, group: "Portefeuille" },
   { href: "/analytics", label: "Analytics & Reports", phase: 4, ready: false, group: "Systeem" },
+  { href: "/operations", label: "Provider Control Center", phase: 5, ready: true, group: "Systeem" },
   { href: "/settings", label: "Settings & Integrations", phase: 1, ready: true, group: "Systeem" },
   { href: "/admin", label: "SaaS Administration", phase: 8, ready: true, group: "Systeem" },
 ];
