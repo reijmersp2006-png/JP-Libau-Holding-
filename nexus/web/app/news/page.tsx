@@ -1,5 +1,6 @@
 "use client";
 
+import { safeUrl } from "@/lib/url";
 import { useState } from "react";
 import { Btn, useAdmin } from "@/components/admin";
 import { Empty, PageTitle, Panel, Segmented, Skeleton, StatusDot, TruthTag } from "@/components/ui";
@@ -138,7 +139,7 @@ function NewsRow({ n, threshold }: { n: Item; threshold: number }) {
           <div className="min-w-0 flex-1">
             <div className="text-[13.5px] text-slate-100">{n.title}</div>
             <div className="mt-0.5 text-[11.5px] text-slate-500">
-              {n.source} · {ago(n.published_at)} · {n.category}{n.assets?.length ? ` · ${n.assets.join(", ")}` : ""}
+              <Verify kind={n.source_kind} /> {n.source} · {ago(n.published_at)} · {n.category}{n.assets?.length ? ` · ${n.assets.join(", ")}` : ""}
               {n.duplicate_of != null && ` · duplicaat van #${n.duplicate_of}`}
             </div>
           </div>
@@ -163,7 +164,7 @@ function NewsRow({ n, threshold }: { n: Item; threshold: number }) {
               <dt>geanalyseerd</dt><dd>{n.analyzed_at ? new Date(n.analyzed_at).toLocaleString("nl-NL") : "—"}</dd>
               <dt>signaal</dt><dd>{n.signal_at ? new Date(n.signal_at).toLocaleString("nl-NL") : "geen"}</dd>
             </dl>
-            <a href={n.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-cyan-300 hover:text-cyan-200">Originele bron</a>
+            <a href={safeUrl(n.url)} target="_blank" rel="noreferrer noopener" className="mt-2 inline-block text-cyan-300 hover:text-cyan-200">Originele bron</a>
           </div>
         </div>
       )}
@@ -231,7 +232,7 @@ function Timeline({ admin }: { admin: ReturnType<typeof useAdmin> }) {
                   ["Ontbreekt", w.intelligence.missing.join("; ")],
                 ] as const).map(([k, v]) => <div key={k}><dt className="caption">{k}</dt><dd className="mt-0.5 text-slate-200">{v}</dd></div>)}
               </dl>
-              <div className="num mt-3 text-[11.5px] text-slate-500">gepubliceerd {new Date(w.published_at).toLocaleString("nl-NL")} · binnen {new Date(w.detected_at).toLocaleString("nl-NL")} · verwerkt {w.finished_at ? new Date(w.finished_at).toLocaleString("nl-NL") : "—"} · <a href={w.url} target="_blank" rel="noreferrer" className="text-cyan-300">bron</a></div>
+              <div className="num mt-3 text-[11.5px] text-slate-500">gepubliceerd {new Date(w.published_at).toLocaleString("nl-NL")} · binnen {new Date(w.detected_at).toLocaleString("nl-NL")} · verwerkt {w.finished_at ? new Date(w.finished_at).toLocaleString("nl-NL") : "—"} · <a href={safeUrl(w.url)} target="_blank" rel="noreferrer noopener" className="text-cyan-300">bron</a></div>
               <p className="mt-2 text-[12px] text-slate-400">{String(w.steps.find((s) => s.step === "explain")?.detail.text ?? "")}</p>
             </div>
           )}
@@ -239,4 +240,14 @@ function Timeline({ admin }: { admin: ReturnType<typeof useAdmin> }) {
       )}
     </Panel>
   );
+}
+
+/** Bronverificatie: officieel (toezichthouder, centrale bank, beurs) versus media; fixtures altijd zichtbaar als gesimuleerd. */
+function Verify({ kind }: { kind: string }) {
+  const m: Record<string, [string, string]> = {
+    official: ["officiële bron", "text-emerald-300 border-emerald-300/20"], exchange: ["exchange", "text-emerald-300 border-emerald-300/20"],
+    media: ["media, niet bevestigd", "text-amber-200 border-amber-300/20"], fixture: ["fixture · gesimuleerd", "text-violet-200 border-violet-300/25"],
+  };
+  const [t, c] = m[kind] ?? [kind, "text-slate-400 border-white/10"];
+  return <span className={`chip mr-1 ${c}`}>{t}</span>;
 }

@@ -28,7 +28,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function useApi<T>(path: string, refreshMs = 30_000) {
+export function useApi<T>(path: string | null, refreshMs = 30_000) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +36,7 @@ export function useApi<T>(path: string, refreshMs = 30_000) {
   const alive = useRef(true);
 
   const load = useCallback(async () => {
+    if (!path) { setLoading(false); return; }
     try {
       const d = await api<T>(path);
       if (!alive.current) return;

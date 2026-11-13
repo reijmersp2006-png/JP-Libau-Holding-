@@ -18,8 +18,8 @@
   --color-slate-200: #D9DEE7;
   --color-slate-300: #B4BCC9;
   --color-slate-400: #8B94A3;
-  --color-slate-500: #6C7584;
-  --color-slate-600: #4A525F;
+  --color-slate-500: #7E8798;   /* bijschrift: 5,2:1 op paneel (WCAG AA); was #6C7584 = 4,0:1 */
+  --color-slate-600: #788192;   /* zachtste tekst: 4,8:1 op paneel; was #4A525F = 2,3:1 */
   --color-slate-700: #2B313B;
   --color-slate-800: #1C2129;
   /* ijsblauw accent (vervangt het oude elektrische cyaan) */
@@ -50,6 +50,24 @@
 
 :root {
   color-scheme: dark;
+  /* ── Apex 6.0 tokens (zie docs/APEX-DESIGN-SYSTEM.md) ── */
+  --bg: #07080B;
+  --surface-0: #0B0D11;          /* zijbalk, onderlaag */
+  --surface-1: #0F1217;          /* paneel */
+  --surface-3: #181C23;          /* hover, geselecteerd */
+  --text-1: #F4F6FA;             /* cijfers en titels */
+  --text-2: #D9DEE7;             /* lopende tekst */
+  --text-3: #8B94A3;             /* labels */
+  --text-4: #7E8798;             /* bijschrift, as-labels: 5,2:1 op --surface-1 (WCAG AA) */
+  --metal: #B9C2CF;              /* neutraal metaal voor primaire reeksen */
+  --ice: #8CCBF2;                /* enige accent: selectie, focus, actieve reeks */
+  --ice-dim: rgba(140, 203, 242, 0.14);
+  --series-2: #A79BEA;           /* tweede reeks / vergelijking */
+  --series-3: #DDB25C;           /* derde reeks / waarschuwing */
+  --sim: #BEB4F0;                /* gesimuleerd */
+  --dur-1: 140ms;                /* hover, focus */
+  --dur-2: 240ms;                /* paneel, tab */
+  --dur-3: 420ms;                /* binnenkomst, data-update */
   --accent: #8CCBF2;
   --accent-soft: rgba(140, 203, 242, 0.12);
   --hair: rgba(255, 255, 255, 0.06);
@@ -85,6 +103,42 @@ body {
 .surface-2 { background: var(--surface-2); }
 .hair { border-color: var(--hair); }
 
+/* Typografie (Apex): 4 maten voor cijfers, 4 voor tekst; tabulaire cijfers overal */
+.t-display { font-size: 40px; line-height: 1; letter-spacing: -0.035em; font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.t-kpi { font-size: 20px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.t-label { font-size: 11.5px; color: var(--text-3); letter-spacing: 0.01em; }
+.t-micro { font-size: 10.5px; color: var(--text-4); letter-spacing: 0.02em; }
+
+/* KPI-strook: één oppervlak, haarlijnen tussen de cellen, geen losse kaartjes */
+.kpi-strip { display: grid; border: 1px solid var(--hair); border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+.kpi-strip > * { padding: 14px 18px; border-left: 1px solid var(--hair); border-top: 1px solid var(--hair); margin-left: -1px; margin-top: -1px; }
+
+/* Tabellen: rustige rijen, rechts uitgelijnde cijfers, kop klein en grijs */
+.dtable { width: 100%; font-size: 13px; border-collapse: collapse; }
+.dtable th { font-weight: 400; font-size: 11.5px; color: var(--text-3); text-align: left; padding: 0 8px 10px; white-space: nowrap; }
+.dtable td { padding: 9px 8px; border-top: 1px solid rgba(255,255,255,.04); }
+.dtable tbody tr { transition: background-color var(--dur-1) ease; }
+.dtable tbody tr:hover { background: rgba(255,255,255,.018); }
+.dtable tr[aria-selected="true"] { background: var(--ice-dim); }
+.dtable .r { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Knoppen en chips */
+.btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: 1px solid var(--hair-strong); padding: 6px 11px; font-size: 12.5px; color: var(--text-2); transition: border-color var(--dur-1), background-color var(--dur-1), color var(--dur-1); }
+.btn:hover:not(:disabled) { border-color: rgba(255,255,255,.2); color: var(--text-1); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn[aria-pressed="true"] { background: rgba(255,255,255,.07); color: var(--text-1); }
+.chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; border: 1px solid var(--hair); padding: 2px 7px; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+
+/* Zijpaneel (agentdossier, stapdetail) */
+@keyframes drawer-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.drawer { animation: drawer-in var(--dur-2) var(--ease-out-quint) both; }
+/* Paginawissel: korte, rustige binnenkomst van de inhoud */
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-in { animation: page-in var(--dur-3) var(--ease-out-quint) both; }
+/* Een getal dat net veranderd is licht één keer op (data-update), daarna niets meer */
+@keyframes tick { from { background-color: var(--ice-dim); } to { background-color: transparent; } }
+.tick { animation: tick 1.2s ease-out both; border-radius: 4px; }
+
 /* Typografie */
 .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6C7584; font-weight: 500; }
 .title-lg { font-size: 28px; line-height: 1.15; letter-spacing: -0.022em; font-weight: 600; color: #F4F6FA; }
@@ -109,7 +163,7 @@ body {
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulse-dot, .fade-up, .skeleton, .flow, .breathe { animation: none; }
+  .pulse-dot, .fade-up, .skeleton, .flow, .breathe, .drawer, .page-in, .tick { animation: none; }
   * { transition-duration: 0ms !important; }
 }
 

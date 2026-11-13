@@ -20,14 +20,17 @@ from nexus.db import (CouncilRun, Database, DecisionRecord, ExternalBatch, Hypot
                       OrchestratorTask, ResearchRun, RiskEvaluation, TradeProposal)
 
 TOPICS = [
-    ("opportunities", r"kans|opportunit|sterkst|strongest|research"),
+    ("providers", r"provider|aanbieder|offline|verbind|connect|bron(nen)? (uit|plat)"),
+    ("agents", r"agent|onderzoeken (de|ze)|researching|wat doen de"),
+    ("approvals", r"(gebeurtenis|event|zaken|punten).*(aandacht|attention)|goedkeur|approv|wacht op"),
+    ("opportunities", r"kans|opportunit|sterkst|strongest|research|beste strateg|best.*strateg|strateg.*best"),
     ("rejection", r"waarom.*(afgewezen|reject|niet)|why.*reject|afgewezen|rejected"),
     ("underperforming", r"slecht|underperform|achter|presteert"),
     ("learning", r"geleerd|learn|leren"),
     ("news", r"nieuws|news"),
     ("grok", r"grok|extern|vergelijk"),
     ("risk", r"risico|risk"),
-    ("approvals", r"goedkeur|approv|wacht"),
+    ("approvals", r"wacht"),
 ]
 SYMBOL = re.compile(r"\b(bitcoin|btc|ethereum|eth|solana|sol|xrp|doge|dogecoin|shib|pepe|iwda|asml|aapl|apple|msft|"
                     r"microsoft|nvda|nvidia|goud|gold|zilver|silver)\b", re.I)
@@ -158,6 +161,28 @@ def facts(db: Database, topic: str, q: str, ctx: dict | None = None) -> dict:
             n_veto = s.query(RiskEvaluation).filter(RiskEvaluation.ts >= now - timedelta(days=7),
                                                     RiskEvaluation.approved.is_(False)).count()
             add(f"{n_veto} veto's van de Risk Guardian in 7 dagen. Live handelen staat uit.", "risk", "/risk")
+        elif topic == "providers":
+            from nexus import providers as prov
+            rows = prov.status(db, now)
+            for r in rows:
+                if r["state"] != "CONNECTED":
+                    add(f"{r['name']}: {r['state']}{' (' + r['explain'] + ')' if r.get('explain') else ''}.",
+                        f"provider:{r['key']}", "/operations")
+            ok = [r["name"] for r in rows if r["state"] == "CONNECTED"]
+            add(f"Verbonden na een echte test: {', '.join(ok) if ok else 'geen'}.", "providers", "/operations")
+        elif topic == "agents":
+            for t in s.scalars(select(OrchestratorTask).where(OrchestratorTask.status.in_(("queued", "running", "escalated")))
+                               .order_by(OrchestratorTask.priority.desc()).limit(6)):
+                add(f"{t.agent}: {t.kind} ({t.status}) — {t.reason}"[:300], f"task:{t.id}", "/hq")
+            from nexus.db import EventWorkflow
+            for w in s.scalars(select(EventWorkflow).order_by(EventWorkflow.id.desc()).limit(4)):
+                add(f"Spoor {w.trace_id}{' (gesimuleerd)' if w.simulated else ''}: prioriteit "
+                    f"{(w.intelligence or {}).get('research_priority', '?')}, status {w.status}.",
+                    f"workflow:{w.id}", f"/decisions?trace={w.id}")
+            for h in s.scalars(select(Hypothesis).where(Hypothesis.status == "open").order_by(Hypothesis.id.desc()).limit(3)):
+                add(f"Open hypothese: {h.title}", f"hypothesis:{h.id}", "/evolution")
+            if not F:
+                gaps.append("geen open taken, sporen of hypothesen: de agenten onderzoeken nu niets")
         elif topic == "approvals":
             for t in s.scalars(select(OrchestratorTask).where(OrchestratorTask.status == "escalated")
                                .order_by(OrchestratorTask.priority.desc()).limit(8)):

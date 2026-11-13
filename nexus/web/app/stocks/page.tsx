@@ -1,11 +1,6 @@
-import { Placeholder } from "@/components/Placeholder";
+import { Workstation } from "@/components/Workstation";
 
 export default function Page() {
-  return <Placeholder spec={{
-    title: "Stock Terminal", phase: 2,
-    purpose: "Aandelen en ETF’s: bedrijfsprofiel, jaarcijfers, waardering, winstkalender, nieuws en sectorvergelijking.",
-    existing: ["Uur- en dagkoersen van Yahoo Finance voor IWDA, ASML, AAPL, MSFT, NVDA (DELAYED, onofficiële bron)", "Aandelenafdeling: vasthouden met kwartaal-herverdeling"],
-    next: ["Bedrijfsprofiel en financiële overzichten", "Winstkalender en estimate-revisies", "Waarderingsmultiples t.o.v. sector", "Beursuren- en jurisdictiechecks per markt"],
-    sources: ["Fundamentele data: Financial Modeling Prep, Polygon of EODHD (betaald)", "Officiële koersbron ter vervanging van Yahoo (licentie)", "Broker voor uitvoering: bijv. Interactive Brokers of Saxo (fase 6)"],
-  }} />;
+  return <Workstation classes={["stocks", "metals", "context"]} title="Aandelen, ETF's en grondstoffen" initial="IWDA.AS"
+    intro="Vertraagde dagkoersen sinds 2020 (Yahoo, onofficieel) en een beperkte reeks uurkoersen. Jaarcijfers en een winstkalender ontbreken tot er een aandelenbron is gekozen. Het IWDA-onderzoek blijft negatief ten opzichte van kopen en vasthouden." />;
 }

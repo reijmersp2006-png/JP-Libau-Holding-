@@ -2,6 +2,7 @@
 
 import { Btn, useAdmin } from "@/components/admin";
 import { DataBadge, Empty, PageTitle, Panel, Skeleton, TruthTag } from "@/components/ui";
+import { KpiCell, KpiStrip } from "@/components/ds";
 import { useApi } from "@/lib/api";
 import { ago, num, pct, tone } from "@/lib/format";
 
@@ -29,6 +30,8 @@ const usd = (v: number | null | undefined) => v == null ? "—" : `$${v >= 1e6 ?
 export default function Page() {
   const admin = useAdmin();
   const { data, loading, error, refresh } = useApi<Radar>("/api/social/radar", 120_000);
+  const measured = data?.tokens.filter((t) => (t.social.mentions ?? 0) > 0 || t.social.status === "ok").length ?? 0;
+  const safe = data?.tokens.filter((t) => t.safety.status === "pass").length ?? 0;
   return (
     <>
       <PageTitle title="Social Radar"
@@ -37,29 +40,40 @@ export default function Page() {
           <Btn disabled={!admin.token || !!admin.busy} onClick={() => admin.post("/api/social/refresh", undefined, refresh)}>Nu meten</Btn></div>} />
       {loading && !data ? <Skeleton className="h-96" /> : error && !data ? <Empty>Radar niet te laden: {error}</Empty> : data && (
         <div className="space-y-5">
-          <section className="panel fade-up grid gap-6 p-5 md:grid-cols-3">
-            <div>
-              <div className="caption flex items-center gap-2">X API <TruthTag kind={data.x.connected ? "connected" : "unavailable"} /></div>
-              <div className="mt-1.5 text-[14px] text-slate-200">{data.x.detail}</div>
-              <div className="mt-1 text-[12px] text-slate-500">Alleen de officiële API; geen scraping.</div>
-            </div>
-            <div>
-              <div className="caption">Uitvoerbaar nu</div>
-              <div className="num mt-1.5 text-[22px] font-semibold text-white">{data.tokens.filter((t) => t.tradeable[0]).length} / {data.tokens.length}</div>
-              <div className="mt-1 text-[12px] text-slate-500">na veiligheidscontrole; voorstellen gaan daarna nog door de Risk Guardian</div>
-            </div>
-            <div className="text-[12.5px] leading-relaxed text-slate-400">{data.rule}</div>
-          </section>
+          <KpiStrip cols="md:grid-cols-5">
+            <KpiCell label="X API" value={<span className={data.x.connected ? "text-emerald-300" : "text-amber-200"}>{data.x.connected ? "Verbonden" : "Niet verbonden"}</span>}
+              sub={data.x.connected ? "officiële API" : "geen metingen, geen scraping"} />
+            <KpiCell label="Gevolgde tokens" value={data.tokens.length} sub="vaste onderzoekslijst" />
+            <KpiCell label="Sociaal gemeten" value={`${measured} / ${data.tokens.length}`} sub={measured ? "met echte X-metingen" : "nog geen enkele meting"} />
+            <KpiCell label="Veiligheid geslaagd" value={`${safe} / ${data.tokens.length}`} sub="GoPlus en DexScreener" />
+            <KpiCell label="Uitvoerbaar nu" value={`${data.tokens.filter((t) => t.tradeable[0]).length} / ${data.tokens.length}`} sub="daarna nog langs de Risk Guardian" />
+          </KpiStrip>
+          {!data.x.connected && (
+            <section className="panel fade-up flex flex-wrap items-start gap-x-8 gap-y-2 p-5 text-[12.5px]">
+              <div className="flex items-center gap-2"><TruthTag kind="unavailable" /><span className="text-slate-200">{data.x.detail}</span></div>
+              <p className="max-w-3xl leading-relaxed text-slate-400">Zolang X niet verbonden is, tonen we geen vermeldingen, sentiment, bot-risico of verhalen. Er wordt niets geschat
+                of nagebootst. Verbinden gebeurt alleen aan de serverkant met een sleutel die nooit in de browser komt.</p>
+            </section>
+          )}
+          <p className="text-[12.5px] leading-relaxed text-slate-500">{data.rule}</p>
 
           <div className="grid gap-5 lg:grid-cols-3">
             {data.tokens.map((t) => <TokenCard key={t.symbol} t={t} />)}
           </div>
 
+          <div className="grid gap-5 lg:grid-cols-2">
+          <Panel title="Verhalen (narratieven)">
+            {data.tokens.some((t) => (t.social.mentions ?? 0) > 0) ? (
+              <ul className="space-y-1.5 text-[12.5px]">{[...data.tokens].filter((t) => (t.social.mentions ?? 0) > 0).sort((a, b) => (b.social.mentions ?? 0) - (a.social.mentions ?? 0)).map((t) => (
+                <li key={t.symbol} className="flex justify-between gap-3"><span className="text-slate-200">{t.symbol}</span><span className="num text-slate-400">{num(t.social.mentions ?? 0, 0)} vermeldingen · {num(t.social.unique_authors ?? 0, 0)} auteurs</span></li>))}</ul>
+            ) : <Empty>Geen verhalen te tonen: er zijn nog geen sociale metingen. Clustering van onderwerpen start pas met echte X-data.</Empty>}
+          </Panel>
           <Panel title="Sociaal vóór de koers?">
             <p className="text-[13px] leading-relaxed text-slate-400">De lead/lag-analyse (kruiscorrelatie van vermeldingen per uur tegen koersrendement, met een 95%-grens) en de
               betrouwbaarheid van accounts hebben minstens 30 gelijktijdige metingen en 10 uitkomsten per account nodig. Zonder X-verbinding zijn er nul metingen, dus
               er is nog <b className="font-medium text-slate-200">geen uitspraak</b>. Dat is de eerlijke stand.</p>
           </Panel>
+          </div>
         </div>
       )}
     </>

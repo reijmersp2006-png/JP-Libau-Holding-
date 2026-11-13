@@ -1,5 +1,6 @@
 "use client";
 
+import { safeUrl } from "@/lib/url";
 import { useState, type ReactNode } from "react";
 import { Btn as Button, useAdmin } from "@/components/admin";
 import { Empty, ErrorBox, PageTitle, Panel, Segmented, Skeleton, Stat, TruthTag } from "@/components/ui";
@@ -224,6 +225,10 @@ function Arena() {
             <Stat label="Door ontwikkelpoorten" value={a.passed_dev_gates.length} sub={a.passed_dev_gates.join(", ") || "geen"} />
           </div>
         </Panel>
+        <Panel title="Strategievergelijking · walk-forward na kosten" action={<span className="flex items-center gap-2"><K k="simulated" /><span className="text-[11.5px] text-slate-500">holdout: {a.holdout_governance?.status === "contaminated" ? "besmet, wacht op nieuwe data" : a.holdout_governance?.status ?? "—"}</span></span>}>
+          <Compare rows={[{ name: "Koop-en-houd (referentie)", wf: a.buy_hold, ref: true }, { name: `Kampioen · ${a.champion.key}`, wf: a.champion.walk_forward },
+            ...a.challengers.map((c: Any) => ({ name: c.name, wf: c.walk_forward }))]} />
+        </Panel>
         <Panel title="Poorten per uitdager">
           <div className="overflow-x-auto"><table className="w-full text-xs">
             <thead className="text-left text-slate-500"><tr><th className="py-1">Uitdager</th><th>Sharpe</th><th>Rendement</th><th>Daling</th><th>P(&gt; kampioen)</th><th>P(&gt; K&amp;H)</th>{["1", "2", "3", "4", "5", "6", "7", "8"].map((g) => <th key={g}>{g}</th>)}</tr></thead>
@@ -248,7 +253,7 @@ function News({ admin }: { admin: Admin }) {
           {d.items.length === 0 ? <Empty>Nog geen nieuws opgehaald. Bronnen: {d.feeds.map((f: Any) => f.name).join(", ")}.</Empty> : d.items.map((n: Any) => (
             <div key={n.id} className="border-t border-white/5 py-2 first:border-0">
               <div className="flex justify-between gap-2 text-[11px] text-slate-500"><span>{n.source} · {n.category} · {n.factuality === "fact" ? "feit" : n.factuality === "mixed" ? "feit + vooruitblik" : "speculatie"}</span><span>{time(n.published_at)}</span></div>
-              <a href={n.url} target="_blank" rel="noreferrer" className="text-sm text-slate-200 hover:text-cyan-200">{n.title}</a>
+              <a href={safeUrl(n.url)} target="_blank" rel="noreferrer noopener" className="text-sm text-slate-200 hover:text-cyan-200">{n.title}</a>
               {n.reaction && Object.keys(n.reaction).length > 0 && <div className="mt-1 flex flex-wrap gap-2 text-[11px]"><K k="actual" />{Object.entries(n.reaction).map(([s, r]: [string, Any]) => <span key={s} className="font-mono">{s} 1d {r.d1 ? `${pct(r.d1.return, 2, true)} (${num(r.d1.z, 1)}σ)` : "—"}</span>)}</div>}
               <div className="mt-0.5 text-[11px] text-slate-600">Verwachting: {n.expectation?.available ? JSON.stringify(n.expectation) : "geen bron voor marktverwachtingen"}</div>
             </div>))}
@@ -347,5 +352,47 @@ function External({ admin }: { admin: Admin }) {
         </Panel>
       </div>
     )}</Loader>
+  );
+}
+
+/** Rendement en grootste daling naast elkaar, met koop-en-houd als verticale referentielijn.
+ *  Een strategie die slechter is dan de referentie staat links van de lijn: mooi tekenen verbergt niets. */
+function Compare({ rows }: { rows: { name: string; wf: Any; ref?: boolean }[] }) {
+  const ret = rows.map((r) => r.wf?.net_return ?? 0), dd = rows.map((r) => r.wf?.max_drawdown ?? 0);
+  const lo = Math.min(0, ...ret), hi = Math.max(0.0001, ...ret), span = hi - lo;
+  const ddMax = Math.max(0.0001, ...dd);
+  const bh = rows.find((r) => r.ref)?.wf?.net_return ?? 0;
+  const x = (v: number) => ((v - lo) / span) * 100;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] text-[12.5px]">
+        <thead><tr className="text-left text-[11.5px] text-slate-500"><th className="pb-2 font-normal">Strategie</th><th className="pb-2 font-normal">Netto rendement</th><th className="pb-2 font-normal">Grootste daling</th><th className="pb-2 text-right font-normal">Sharpe</th></tr></thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const v = r.wf?.net_return ?? 0;
+            const worse = !r.ref && v < bh;
+            return (
+              <tr key={i} className="border-t border-white/[.04]">
+                <td className={`py-2 pr-4 ${r.ref ? "text-slate-400" : "text-slate-100"}`}>{r.name}</td>
+                <td className="w-[38%] py-2 pr-4">
+                  <div className="relative h-4">
+                    <div className="absolute inset-y-0 w-px bg-white/15" style={{ left: `${x(0)}%` }} />
+                    <div className="absolute inset-y-[3px] rounded-sm" style={{ left: `${Math.min(x(0), x(v))}%`, width: `${Math.abs(x(v) - x(0))}%`, background: r.ref ? "#6C7584" : worse ? "#E25A64" : "#4CC495", opacity: 0.75 }} />
+                    <div className="absolute -inset-y-0.5 w-0 border-l border-dashed border-violet-300/70" style={{ left: `${x(bh)}%` }} title="koop-en-houd" />
+                  </div>
+                  <div className={`num mt-0.5 text-[11px] ${worse ? "text-rose-300" : "text-slate-400"}`}>{pct(v, 1, true)}{worse ? " · slechter dan koop-en-houd" : ""}</div>
+                </td>
+                <td className="w-[26%] py-2 pr-4">
+                  <div className="h-1.5 rounded-full bg-white/[.05]"><div className="h-full rounded-full bg-rose-400/70" style={{ width: `${((r.wf?.max_drawdown ?? 0) / ddMax) * 100}%` }} /></div>
+                  <div className="num mt-0.5 text-[11px] text-slate-400">−{pct(r.wf?.max_drawdown, 1)}</div>
+                </td>
+                <td className="num py-2 text-right text-slate-200">{num(r.wf?.sharpe, 2)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-2 text-[11px] text-slate-500">Gestippelde violette lijn = koop-en-houd. Rood = slechter dan koop-en-houd. Alle cijfers zijn backtests (gesimuleerd) op de walk-forward-periode, niet de beschermde holdout.</p>
+    </div>
   );
 }
