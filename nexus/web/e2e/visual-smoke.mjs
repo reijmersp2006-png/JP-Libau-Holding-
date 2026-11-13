@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE = process.env.SMOKE_BASE ?? "http://127.0.0.1:3000";
 const OUT = process.env.SMOKE_OUT ?? "smoke-shots";
-const ROUTES = ["/", "/crypto", "/stocks", "/forex", "/meme", "/hq", "/decisions", "/news", "/social", "/pulse", "/evolution", "/operations"];
+const ROUTES = ["/", "/crypto", "/stocks", "/forex", "/meme", "/hq", "/decisions", "/news", "/social", "/pulse", "/evolution", "/operations", "/research"];
 const VIEWPORTS = { desktop: [1440, 900], tablet: [834, 1112], mobile: [390, 844] };
 
 mkdirSync(OUT, { recursive: true });

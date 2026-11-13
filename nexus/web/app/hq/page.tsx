@@ -24,18 +24,25 @@ const STATUS_TEXT: Record<string, [string, string]> = {
   failed: ["mislukt", "text-rose-300"], escalated: ["wacht op CEO", "text-amber-300"], cancelled: ["geannuleerd", "text-slate-500"],
 };
 const EXAMPLES = [
-  "Wat onderzoeken de AI-agenten?",
+  "Wat onderzoeken de AI-agenten nu?",
+  "Welke agent was het oneens met de conclusie?",
+  "Welk bewijs ondersteunt deze analyse?",
+  "Welke onderzoekstaken zijn mislukt?",
+  "Wat hebben we geleerd van eerdere voorspellingen?",
+  "Welke aanbieders zijn niet verbonden?",
+  "Welke besluiten wachten op mijn goedkeuring?",
   "Welke gebeurtenissen vragen mijn aandacht?",
   "Waarom is het voorstel voor BTC afgewezen?",
   "Wat zijn onze grootste risico's?",
   "Welke strategieën presteerden het best?",
-  "Welke providers zijn offline?",
   "Wat hebben we deze week geleerd?",
 ];
 // Vervolgacties per onderwerp: een vervolgvraag en de plek waar het bewijs staat. Niets voert iets uit.
 const FOLLOW: Record<string, [string, string][]> = {
   providers: [["Provider Control Center", "/operations"], ["Activatiechecklist", "/operations"]],
-  agents: [["Decision Theater", "/decisions"], ["Takenwachtrij", "#taken"]],
+  agents: [["AI-onderzoek", "/research"], ["Decision Theater", "/decisions"], ["Takenwachtrij", "#taken"]],
+  disagreement: [["AI-onderzoek", "/research"]], evidence: [["AI-onderzoek", "/research"]],
+  failures: [["Kosten en storingen", "/research#kosten"]], predictions: [["Prediction Ledger", "/research#ledger"]],
   approvals: [["Takenwachtrij", "#taken"], ["Risk Guardian", "/risk"]],
   opportunities: [["Evolution Lab", "/evolution"], ["Decision Theater", "/decisions"]],
   rejection: [["Risk Guardian", "/risk"], ["Execution Monitor", "/execution"]],

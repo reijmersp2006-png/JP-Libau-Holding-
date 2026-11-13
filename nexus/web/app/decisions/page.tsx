@@ -63,6 +63,7 @@ export default function Page() {
       <PageHeader eyebrow="AI-organisatie" title="Decision Theater"
         sub="Elke gebeurtenis van bron tot besluit: wie deed wat, wanneer, op basis van welk bewijs, en wat er ontbreekt. Gemeten resultaten, vaste regels en AI-meningen zijn steeds apart gemarkeerd."
         right={<span className="chip">Live handelen uit · geen order zonder Risk Guardian en CEO</span>} />
+      <ResearchTheater />
       {loading && !data ? <Skeleton className="h-[600px]" /> : !data?.items.length ? (
         <Empty>Nog geen gebeurtenis-sporen. Een spoor ontstaat als NEXUS Central een relevant nieuwsbericht verwerkt; zonder bereikbare feeds blijft dit leeg.</Empty>
       ) : (
@@ -153,6 +154,45 @@ function StageDetail({ st, w }: { st: Stage; w: Wf }) {
       ) : <p className="text-[12.5px] text-slate-500">{st.key === "exec" ? "Niet bereikt: dit spoor heeft geen order opgeleverd en live handelen staat uit." : st.key === "learn" ? "Niet bereikt: er is geen besluit om af te rekenen." : "Deze stap is voor dit spoor niet uitgevoerd."}</p>}
       <p className="t-micro mt-4">Beperking: {st.limitation}</p>
       {st.key === "ceo" && <p className="mt-2 text-[12px]"><Link href="/hq#taken" className="text-cyan-300">Takenwachtrij</Link> voor wat op jouw besluit wacht.</p>}
+    </Panel>
+  );
+}
+
+/* Onderzoekssporen (Genesis): elke stap met agent, model, bewijs, tijdstip, besluit, kosten en status. */
+interface RRow { trace_id: string; subject: string; variant: string; status: string; created_at: string; cost_usd: number | null; recommendation: string | null; disagreements: number }
+interface RStep { step: string; agent: string; status: string; at: string; model: string | null; provider: string | null; evidence: string[]; decision: string | null; cost_usd: number | null }
+const RDOT: Record<string, string> = { ok: "ok", done: "ok", partial: "degraded", blocked: "not_configured", skipped: "disabled", not_applicable: "disabled", failed: "down", running: "degraded" };
+
+function ResearchTheater() {
+  const list = useApi<{ items: RRow[] }>("/api/research?limit=8", 60_000);
+  const [sel, setSel] = useState<string | null>(null);
+  const cur = sel ?? list.data?.items[0]?.trace_id ?? null;
+  const one = useApi<{ trace_id: string; steps: RStep[] }>(cur ? `/api/research/${encodeURIComponent(cur)}` : null, 60_000);
+  if (!list.data?.items.length) return null;
+  const steps = one.data?.trace_id === cur ? one.data.steps : [];
+  return (
+    <Panel title="Onderzoekssporen" className="mb-5" action={<Link href={cur ? `/research?trace=${cur}` : "/research"} className="text-[12px] text-cyan-300">Volledig spoor en conclusie →</Link>}>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {list.data.items.map((x) => (
+          <button key={x.trace_id} onClick={() => setSel(x.trace_id)} aria-pressed={cur === x.trace_id}
+            className={`chip ${cur === x.trace_id ? "border-cyan-300/40 text-white" : ""}`}><StatusDot status={RDOT[x.status] ?? "down"} />{x.subject} · {x.variant} · {ago(x.created_at)}</button>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-[12px]">
+          <thead><tr className="t-label text-left"><th className="py-1.5">Stap</th><th>Agent</th><th>Model</th><th>Bewijs</th><th>Tijdstip</th><th>Besluit</th><th className="pr-6 text-right">Kosten</th><th>Status</th></tr></thead>
+          <tbody>{steps.map((s, i) => (
+            <tr key={i} className="border-t border-white/[.05] align-baseline">
+              <td className="py-1.5 font-mono text-slate-200">{s.step}</td><td className="text-slate-300">{s.agent}</td>
+              <td className="text-slate-400">{s.model ? `${s.provider} · ${s.model}` : s.status === "blocked" ? "geen aanbieder" : "vaste code"}</td>
+              <td className="max-w-[220px] truncate font-mono text-[11px] text-slate-500" title={s.evidence.join(", ")}>{s.evidence.length ? `${s.evidence.length}: ${s.evidence.slice(0, 3).join(", ")}${s.evidence.length > 3 ? " …" : ""}` : "—"}</td>
+              <td className="num text-slate-400">{new Date(s.at).toLocaleTimeString("nl-NL")}</td>
+              <td className="max-w-[240px] text-slate-300">{s.decision ?? "—"}</td>
+              <td className="num pr-6 text-right text-slate-300">{s.cost_usd != null ? `$${num(s.cost_usd, 4)}` : "—"}</td>
+              <td><span className="flex items-center gap-1.5"><StatusDot status={RDOT[s.status] ?? "down"} />{s.status}</span></td>
+            </tr>))}</tbody>
+        </table>
+      </div>
     </Panel>
   );
 }

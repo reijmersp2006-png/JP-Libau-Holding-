@@ -23,6 +23,7 @@ postgres = ["psycopg[binary]>=3.2"]
 [project.scripts]
 nexus-api = "nexus.main:run"
 nexus-research = "nexus.research_cli:main"
+nexus-genesis = "nexus.genesis_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["nexus*"]
