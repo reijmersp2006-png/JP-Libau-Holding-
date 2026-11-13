@@ -70,15 +70,26 @@ CATEGORIES = [
                        "key ecb interest rates", "rate decision")),
     ("inflation", ("consumer price index", "cpi", "inflation", "hicp", "producer price")),
     ("employment", ("employment situation", "nonfarm", "unemployment", "jobs report", "payroll")),
+    ("macro_release", ("gross domestic product", "gdp", "retail sales", "industrial production", "pmi",
+                       "trade balance", "housing starts", "consumer confidence")),
     ("earnings", ("results of operations", "item 2.02", "quarterly results", "earnings", "financial results")),
-    ("etf", (" etf", "exchange-traded", "spot bitcoin", "spot ether")),
-    ("crypto_regulation", ("crypto", "digital asset", "mica", "stablecoin", "bitcoin", "token")),
+    ("guidance", ("guidance", "outlook", "raises forecast", "lowers forecast", "profit warning")),
+    ("company_catalyst", ("acquire", "acquisition", "merger", "buyback", "share repurchase", "fda approval",
+                          "spin-off", "item 1.01", "item 8.01")),
+    ("exchange_incident", ("degraded", "outage", "incident", "maintenance", "delayed withdrawals", "delayed deposits",
+                           "elevated error", "investigating", "partial disruption", "offline")),
     ("security_incident", ("hack", "exploit", "breach", "stolen", "vulnerability")),
-    ("listing", ("listing", "delisting", "listed on")),
+    ("etf", (" etf", "exchange-traded", "spot bitcoin", "spot ether")),
+    ("listing", ("listing", "delisting", "listed on", "now available for trading")),
+    ("crypto_regulation", ("crypto", "digital asset", "mica", "stablecoin", "bitcoin", "token")),
+    ("geopolitical", ("tariff", "sanctions on", "ceasefire", "military", "invasion", "war ", "geopolit",
+                      "export ban", "embargo")),
     ("regulation", ("enforcement", "charges", "rule", "regulation", "supervisory", "sanction")),
     ("financial_stability", ("financial stability", "stress test", "bank failure", "liquidity facility")),
     ("speech", ("speech", "remarks", "testimony", "interview")),
 ]
+# Belang en kans zijn verschillende dingen: een renteneslissing is belangrijk, maar alleen een
+# categorie met een bewezen, buiten-steekproef-effect kan een kans zijn (zie ``opportunity``).
 CATEGORY_ASSETS = {
     "crypto_regulation": ("BTC-EUR", "ETH-EUR", "SOL-EUR", "XRP-EUR"),
     "etf": ("BTC-EUR", "ETH-EUR"),
@@ -160,7 +171,8 @@ def fetch(feed: Feed, timeout: float = 20.0) -> str:
 # ── News Reactor: verwante berichten, feiten, relevantie, latenties ───────────────────────
 RELEVANCE = {"rate_decision": 0.9, "inflation": 0.85, "employment": 0.8, "earnings": 0.7, "etf": 0.65,
              "security_incident": 0.7, "listing": 0.55, "crypto_regulation": 0.55, "regulation": 0.45,
-             "financial_stability": 0.6, "speech": 0.3, "other": 0.15}
+             "financial_stability": 0.6, "speech": 0.3, "other": 0.15, "macro_release": 0.7, "guidance": 0.7,
+             "company_catalyst": 0.6, "exchange_incident": 0.6, "geopolitical": 0.65}
 SIGNAL_THRESHOLD = 0.6        # vanaf hier gaat een gebeurtenis naar NEXUS Central (en zo nodig de Council)
 _STOP = {"the", "a", "an", "of", "and", "to", "in", "on", "for", "with", "by", "at", "from", "is", "its", "as",
          "de", "het", "een", "van", "en", "statement", "press", "release"}
@@ -349,6 +361,19 @@ def event_study(db: Database, min_events: int = 8) -> list[dict]:
             row["conclusion"] = f"te weinig gebeurtenissen (minstens {min_events})"
         out.append(row)
     return out
+
+
+def opportunity(category: str, study: list[dict]) -> dict:
+    """Is deze soort nieuws een *kans*? Alleen als de event study een effect toont met genoeg gebeurtenissen
+    en een 95%-interval dat nul niet raakt. Belang (relevance) zegt daar niets over."""
+    rows = [r for r in study if r["category"] == category and r.get("mean_z_ci95")]
+    hits = [r for r in rows if r["mean_z_ci95"][0] > 0 or r["mean_z_ci95"][1] < 0]
+    if not rows:
+        return {"status": "unknown", "reason": "te weinig gemeten gebeurtenissen voor deze soort nieuws"}
+    if not hits:
+        return {"status": "no_edge", "reason": "gemeten, maar geen effect dat van nul verschilt"}
+    return {"status": "candidate", "reason": "effect gemeten; nog te bevestigen op nieuwe data vóór enig gebruik",
+            "symbols": [r["symbol"] for r in hits]}
 
 
 def latest(db: Database, limit: int = 50, category: str | None = None) -> list[dict]:

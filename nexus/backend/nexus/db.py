@@ -689,3 +689,53 @@ def upgrade(url: str) -> None:
     cfg.set_main_option("script_location", str(here / "migrations"))
     cfg.set_main_option("sqlalchemy.url", url)
     command.upgrade(cfg, "head")
+
+
+class ProviderCheck(Base):
+    """Eén echte verbindingstest met een externe bron. Geen sleutel = geen verzoek, en dat staat er ook zo."""
+
+    __tablename__ = "provider_checks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(48), index=True)
+    status: Mapped[str] = mapped_column(String(16))                 # ok, error, not_configured
+    error_class: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    checked_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+class AiCall(Base):
+    """Elke aanroep via de AI Gateway: welke taak, welk model, hoe lang, wat het kostte en of het lukte."""
+
+    __tablename__ = "ai_calls"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task: Mapped[str] = mapped_column(String(48), index=True)
+    provider: Mapped[str] = mapped_column(String(24), index=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16))                 # ok, error, skipped
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+
+
+class Debate(Base):
+    """Gestructureerde review van een onderzoeksbesluit door meerdere modellen plus vaste code."""
+
+    __tablename__ = "debates"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subject: Mapped[str] = mapped_column(String(200))
+    ref: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)   # bv. hypothesis:3
+    status: Mapped[str] = mapped_column(String(16))                 # done, partial, unavailable
+    author_provider: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    challenger_provider: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    independent: Mapped[bool] = mapped_column(Boolean, default=False)
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)

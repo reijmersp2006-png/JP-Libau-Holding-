@@ -31,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 
 from nexus import __version__
 from nexus import agents as agents_mod
-from nexus import evolution_api, jobs, lab, sentinel_api, social
+from nexus import ascension_api, evolution_api, jobs, lab, sentinel_api, social
 from nexus.bridge import HoldingBridge
 from nexus.controls import Controls, LiveTradingDisabled, Mode
 from nexus.db import (DEFAULT_ORG, Backtest, BillingRecord, Database, Organization, RiskEvaluation, StrategyRow,
@@ -485,4 +485,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     evo["ctx"] = (evolution_api.mount(app, db=db, bridge=bridge, settings=settings, paper=paper, controls=controls,
                                    bus=bus, require_admin=require_admin, limiter=limiter, market_db=market_db))
     sentinel_api.mount(app, db=db, ctx=evo["ctx"], settings=settings, require_admin=require_admin, limiter=limiter)
+    ascension_api.mount(app, db=db, ctx=evo["ctx"], require_admin=require_admin, limiter=limiter)
     return app

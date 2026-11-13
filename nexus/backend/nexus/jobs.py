@@ -284,6 +284,14 @@ def job_briefing(ctx: dict) -> dict:
     return {"day": b["day"], "actions": len(b["actions"]), "missing": b["missing"]}
 
 
+def job_providers(ctx: dict) -> dict:
+    """Verbindingstest van alle externe bronnen (zonder sleutel wordt er niets verstuurd)."""
+    from nexus import providers
+    rows = providers.check_all(ctx["db"])
+    return {"ok": sum(r["status"] == "ok" for r in rows), "total": len(rows),
+            "errors": {r["provider"]: r["error_class"] for r in rows if r["status"] != "ok"}}
+
+
 def job_security(ctx: dict) -> dict:
     """Integriteit van het auditlog en de live-poort."""
     v = ctx["db"].verify_audit_chain()
@@ -308,6 +316,7 @@ JOBS: list[Job] = [
     Job("central", "hourly", "NEXUS Central: taken plannen en uitvoeren, escalaties", job_central, uses_ai=True),
     Job("social", "hourly", "Meme-radar: on-chain veiligheid en X-metingen (als verbonden)", job_social),
     Job("briefing", "daily", "CEO-briefing", job_briefing),
+    Job("providers", "hourly", "Verbindingstest van alle externe bronnen en AI-aanbieders", job_providers),
     Job("security", "daily", "Hash-keten van het auditlog controleren", job_security),
     Job("news", "hourly", "Nieuws ophalen en koersreacties bijwerken", job_news),
     Job("market_moves", "hourly", "Grote marktbewegingen signaleren (>3× normale beweeglijkheid)", job_market_moves),
