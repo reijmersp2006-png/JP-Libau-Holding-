@@ -5,6 +5,7 @@ export const NAV: NavItem[] = [
   { href: "/", label: "Command Center", phase: 1, ready: true, group: "Overzicht" },
   { href: "/hq", label: "AI Headquarters", phase: 3, ready: true, group: "Overzicht" },
   { href: "/decisions", label: "Decision Theater", phase: 6, ready: true, group: "Overzicht" },
+  { href: "/research", label: "AI-onderzoek (Genesis)", phase: 7, ready: true, group: "Overzicht" },
   { href: "/news", label: "News Reactor", phase: 3, ready: true, group: "Intelligence" },
   { href: "/social", label: "Social Radar", phase: 3, ready: true, group: "Intelligence" },
   { href: "/pulse", label: "Global Market Pulse", phase: 6, ready: true, group: "Markten" },

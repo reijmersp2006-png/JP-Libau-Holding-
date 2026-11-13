@@ -9,14 +9,22 @@ from __future__ import annotations
 
 import math
 import sqlite3
-from pathlib import Path
 import statistics as stats
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import func, select
 
 from nexus.datasets import periods_per_year, universe
-from nexus.db import AiCall, Database, Debate, EventWorkflow, Hypothesis, NewsEvent, OrchestratorTask
+from nexus.db import (
+    AiCall,
+    Database,
+    Debate,
+    EventWorkflow,
+    Hypothesis,
+    NewsEvent,
+    OrchestratorTask,
+)
 
 INTERVALS = ("1h", "1d")
 FRESH_DAYS = 4                      # zelfde grens als de Market Pulse: daarna HISTORICAL
@@ -296,6 +304,14 @@ def agent(db: Database, key: str) -> dict:
                 if st.get("agent") == key:
                     steps.append({"trace_id": w.trace_id, "workflow_id": w.id, "step": st["step"], "status": st["status"],
                                   "at": st.get("at"), "simulated": w.simulated})
+        from nexus.db import ResearchWorkflow
+        for w in s.scalars(select(ResearchWorkflow).order_by(ResearchWorkflow.id.desc()).limit(100)):
+            for st in w.steps or []:
+                if st.get("agent") == key:
+                    steps.append({"trace_id": w.trace_id, "research": True, "step": st["step"], "status": st["status"],
+                                  "at": st.get("at"), "simulated": w.simulated, "model": st.get("model"),
+                                  "provider": st.get("provider"), "cost_usd": st.get("cost_usd")})
+        steps.sort(key=lambda x: x.get("at") or "", reverse=True)
         debates = []
         if key in ("crypto", "auditor", "quant", "cio"):
             for d in s.scalars(select(Debate).order_by(Debate.id.desc()).limit(10)):
@@ -311,23 +327,52 @@ def agent(db: Database, key: str) -> dict:
 
 
 def handoffs(db: Database, limit: int = 200) -> dict:
-    """Overdrachten tussen rollen, geteld uit de stappenreeks van echte gebeurtenis-sporen."""
-    edges: dict[tuple[str, str], int] = {}
+    """Overdrachten tussen rollen, geteld uit echte gebeurtenis-sporen (stappenreeks) en onderzoeksopdrachten
+    (berichten tussen rollen). Per verbinding: hoe vaak, uit welk soort spoor, en of er een echt model aan te pas kwam."""
+    from nexus.db import AiCall, ProviderCheck, ResearchWorkflow
+    edges: dict[tuple[str, str], dict] = {}
     sim = 0
+
+    def add(a, b, kind, ai, simulated):
+        if a and b and a != b:
+            e = edges.setdefault((a, b), {"n": 0, "kinds": set(), "ai": 0, "simulated": 0})
+            e["n"] += 1
+            e["kinds"].add(kind)
+            e["ai"] += int(ai)
+            e["simulated"] += int(simulated)
+
+    since = datetime.now(tz=UTC) - timedelta(days=7)
     with db.session() as s:
         for w in s.scalars(select(EventWorkflow).order_by(EventWorkflow.id.desc()).limit(limit)):
             sim += bool(w.simulated)
-            agents = [st.get("agent") for st in (w.steps or []) if st.get("status") not in ("skipped", "not_applicable", "unavailable")]
-            for a, b in zip(agents, agents[1:]):
-                if a and b and a != b:
-                    edges[(a, b)] = edges.get((a, b), 0) + 1
+            ok = [st for st in (w.steps or []) if st.get("status") not in ("skipped", "not_applicable", "unavailable")]
+            for x, y in zip(ok, ok[1:]):
+                add(x.get("agent"), y.get("agent"), "event", False, w.simulated)
+        research = s.scalars(select(ResearchWorkflow).order_by(ResearchWorkflow.id.desc()).limit(limit)).all()
+        for w in research:
+            ai = any(st.get("provider") and st.get("status") == "ok" for st in (w.steps or []))
+            sim += bool(w.simulated)
+            for m in w.messages or []:
+                add(m.get("from"), m.get("to"), "research", ai, w.simulated)
+        provider_failures = (s.scalar(select(func.count()).select_from(AiCall).where(
+            AiCall.status == "error", AiCall.created_at >= since)) or 0) + (s.scalar(select(func.count()).select_from(
+                ProviderCheck).where(ProviderCheck.status == "error", ProviderCheck.checked_at >= since)) or 0)
         escalated = s.scalar(select(func.count()).select_from(OrchestratorTask)
                              .where(OrchestratorTask.status == "escalated")) or 0
         disagreements = sum(len((d.summary or {}).get("disagreements", []))
                             for d in s.scalars(select(Debate).order_by(Debate.id.desc()).limit(50)))
-        since = datetime.now(tz=UTC) - timedelta(days=7)
         decided = s.scalar(select(func.count()).select_from(OrchestratorTask).where(
             OrchestratorTask.status == "done", OrchestratorTask.updated_at >= since)) or 0
-    return {"edges": [{"from": a, "to": b, "n": n} for (a, b), n in sorted(edges.items(), key=lambda x: -x[1])],
+        disagreements += sum(len((w.conclusion or {}).get("disagreements", [])) for w in research)
+    return {"edges": [{"from": a, "to": b, "n": e["n"], "kinds": sorted(e["kinds"]), "ai": e["ai"],
+                       "simulated": e["simulated"] == e["n"]}
+                      for (a, b), e in sorted(edges.items(), key=lambda x: -x[1]["n"])],
             "simulated_traces": sim, "escalations_open": escalated, "disagreements": disagreements,
-            "completed_7d": decided}
+            "completed_7d": decided,
+            "research": {"running": sum(w.status == "running" for w in research),
+                         "completed": sum(w.status in ("done", "partial") for w in research),
+                         "blocked": sum(w.status == "blocked" for w in research),
+                         "failed": sum(w.status == "failed" for w in research),
+                         "with_ai": sum(any(st.get("provider") and st.get("status") == "ok" for st in (w.steps or []))
+                                        for w in research)},
+            "provider_failures_7d": provider_failures}

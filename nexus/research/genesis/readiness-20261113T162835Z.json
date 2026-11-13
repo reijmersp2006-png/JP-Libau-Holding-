@@ -1,0 +1,176 @@
+{
+  "keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "ANTHROPIC_AUTH_TOKEN": false,
+    "OPENAI_API_KEY": false,
+    "GEMINI_API_KEY": false,
+    "XAI_API_KEY": false,
+    "NEXUS_X_BEARER_TOKEN": false,
+    "NEXUS_SEC_USER_AGENT": false
+  },
+  "ai": [
+    {
+      "provider": "anthropic",
+      "usable": false,
+      "reason": "geen sleutel (ANTHROPIC_API_KEY of ANTHROPIC_AUTH_TOKEN)",
+      "model": null,
+      "price_per_mtok_usd": {
+        "input": 4.0,
+        "output": 20.0
+      },
+      "max_calls_per_day": 200
+    },
+    {
+      "provider": "openai",
+      "usable": false,
+      "reason": "geen sleutel (OPENAI_API_KEY)",
+      "model": null,
+      "price_per_mtok_usd": null,
+      "max_calls_per_day": 100
+    },
+    {
+      "provider": "gemini",
+      "usable": false,
+      "reason": "geen sleutel (GEMINI_API_KEY)",
+      "model": null,
+      "price_per_mtok_usd": null,
+      "max_calls_per_day": 100
+    },
+    {
+      "provider": "xai",
+      "usable": false,
+      "reason": "geen sleutel (XAI_API_KEY)",
+      "model": null,
+      "price_per_mtok_usd": null,
+      "max_calls_per_day": 100
+    }
+  ],
+  "providers": [
+    {
+      "provider": "anthropic",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "openai",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "gemini",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "xai",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "x_api",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "goplus",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 237
+    },
+    {
+      "provider": "dexscreener",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 255
+    },
+    {
+      "provider": "yahoo",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 221
+    },
+    {
+      "provider": "bitvavo",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 230
+    },
+    {
+      "provider": "news:fed",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 215
+    },
+    {
+      "provider": "news:ecb",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 220
+    },
+    {
+      "provider": "news:bls",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 212
+    },
+    {
+      "provider": "news:sec_press",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "news:edgar_aapl",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "news:edgar_msft",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    },
+    {
+      "provider": "news:kraken_status",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 259
+    },
+    {
+      "provider": "news:coinbase_status",
+      "status": "error",
+      "error_class": "network_blocked",
+      "http_status": null,
+      "latency_ms": 227
+    },
+    {
+      "provider": "news:edgar_nvda",
+      "status": "not_configured",
+      "error_class": "credentials_missing",
+      "http_status": null,
+      "latency_ms": null
+    }
+  ]
+}

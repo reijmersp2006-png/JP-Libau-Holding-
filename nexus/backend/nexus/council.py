@@ -336,10 +336,12 @@ def _call(client, system: str, user: str, schema: dict, effort: str) -> tuple[di
     return out, tin, tout
 
 
-def _call_full(client, system: str, user: str, schema: dict, effort: str) -> tuple[dict, int, int, str | None]:
-    """Als ``_call``, plus het model dat echt antwoordde (bij server-side fallback kan dat afwijken)."""
+def _call_full(client, system: str, user: str, schema: dict, effort: str, model: str | None = None,
+               max_tokens: int = 8000) -> tuple[dict, int, int, str | None]:
+    """Als ``_call``, plus het model dat echt antwoordde (bij server-side fallback kan dat afwijken).
+    ``model`` en ``max_tokens`` komen uit het routeringsbeleid van de gateway; zonder: de Council-standaard."""
     resp = client.beta.messages.create(
-        model=MODEL, max_tokens=8000, system=system,
+        model=model or MODEL, max_tokens=max_tokens, system=system,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
         betas=["server-side-fallback-2026-07-01"], fallbacks="default",
@@ -380,6 +382,9 @@ def convene(db: Database, symbol: str, asset_class: str, candles, research: dict
     status, error = "done", None
     if spent_today(db, now) + est > daily_budget():
         status, error = "budget", f"dagbudget ${daily_budget():.2f} zou overschreden worden (schatting ${est:.2f})"
+    from nexus.ai_gateway import paused  # lokale import: ai_gateway importeert council
+    if status == "done" and paused(db):
+        status, error = "paused", "AI-onderzoek is gepauzeerd door de CEO"
     if status == "done":
         try:
             client = client or _client()

@@ -118,12 +118,23 @@ def model_of(p: str) -> str | None:
     return c.default_model           # bewust geen gegokte modelnaam voor andere aanbieders
 
 
+# Standaardtarieven (USD per miljoen tokens, in/uit) van Anthropic-modellen die NEXUS kan kiezen.
+# Een ander model zonder NEXUS_ANTHROPIC_PRICE_IN/OUT krijgt géén geschatte prijs: kosten "onbekend".
+ANTHROPIC_PRICES = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00),
+                    "claude-haiku-5-5": (0.10, 0.50), "claude-fable-5-2": (8.00, 40.00)}
+
+
 def price_of(p: str) -> tuple[float, float] | None:
     c = CONF.get(p)
     if c is None:
         return None
     if p == "anthropic":
-        return _anthropic_default()[1]
+        if _env("NEXUS_ANTHROPIC_PRICE_IN") and _env("NEXUS_ANTHROPIC_PRICE_OUT"):
+            try:
+                return float(_env("NEXUS_ANTHROPIC_PRICE_IN")), float(_env("NEXUS_ANTHROPIC_PRICE_OUT"))
+            except ValueError:
+                return None
+        return ANTHROPIC_PRICES.get(model_of(p) or "")
     if c.price_env and _env(c.price_env[0]) and _env(c.price_env[1]):
         try:
             return float(_env(c.price_env[0])), float(_env(c.price_env[1]))
@@ -154,6 +165,23 @@ def describe() -> list[dict]:
     return out
 
 
+def max_cost(p: str, system: str, user: str, max_tokens: int) -> float | None:
+    """Bovengrens vóór de aanroep: ~4 tekens per invoertoken plus het volle uitvoerbudget. None = prijs onbekend."""
+    pr = price_of(p)
+    if not pr:
+        return None
+    return ((len(system) + len(user)) / 4 * pr[0] + max_tokens * pr[1]) / 1e6
+
+
+RESEARCH_PAUSE_KEY = "research_pause"
+
+
+def paused(db: Database) -> dict | None:
+    """CEO-pauze voor AI-onderzoek. Los van de noodstop voor handelen; raakt geen auditregels."""
+    st = db.get_state(RESEARCH_PAUSE_KEY) or {}
+    return st if st.get("paused") else None
+
+
 def calls_cap(p: str) -> int:
     if p not in CONF:
         return 1
@@ -176,7 +204,7 @@ def anthropic_adapter(system, user, schema, effort, timeout, max_tokens, model, 
     client = client or council._client()
     if hasattr(client, "with_options"):
         client = client.with_options(timeout=timeout)
-    return council._call_full(client, system, user, schema, effort)
+    return council._call_full(client, system, user, schema, effort, model=model, max_tokens=max_tokens)
 
 
 def _chat_compatible(base: str, key: str, system, user, schema, timeout, max_tokens, model, post):
@@ -260,6 +288,8 @@ class Gateway:
     breaker_failures: int = 3
     breaker_minutes: int = 15
     budget_override: float | None = None          # alleen voor de budgettest van de activatie
+    run_cap_usd: float | None = None              # harde grens voor één run (activatie, evaluatie)
+    run_spent: float = 0.0
 
     @classmethod
     def from_env(cls, db: Database) -> Gateway:
@@ -301,7 +331,10 @@ class Gateway:
         if self.budget_override is not None:
             return self.budget_override
         from nexus import council
-        return council.daily_budget() - council.spent_today(self.db, now) - self.spent_today(now)
+        left = council.daily_budget() - council.spent_today(self.db, now) - self.spent_today(now)
+        if self.run_cap_usd is not None:
+            left = min(left, self.run_cap_usd - self.run_spent)
+        return left
 
     def route(self, task: str, exclude: tuple[str, ...] = (), prefer_not: tuple[str, ...] = ()) -> list[tuple[str, str]]:
         """Volgorde van providers met reden waarom een provider wel/niet in aanmerking komt (zonder aanroep)."""
@@ -329,35 +362,50 @@ class Gateway:
         pol = self.policies.get(task) if task not in DETERMINISTIC_ONLY else None
         trail: list[dict] = []
         h = hashlib.sha256(f"{system}\n{user}".encode()).hexdigest()
+        if task not in DETERMINISTIC_ONLY and paused(self.db):
+            trail.append({"provider": "-", "status": "skipped", "reason": "AI-onderzoek gepauzeerd door de CEO"})
+            raise NoProvider(task, trail)
         for p, why in self.route(task, exclude, prefer_not):
             if why != "ok":
                 trail.append({"provider": p, "status": "skipped", "reason": why})
                 continue
-            if self.budget_left(now) <= 0:
+            left = self.budget_left(now)
+            worst = max_cost(p, system, user, pol.max_tokens)
+            if left <= 0:
                 trail.append({"provider": p, "status": "skipped", "reason": "dagbudget AI op"})
                 break
+            if worst is not None and worst > left:
+                trail.append({"provider": p, "status": "skipped",
+                              "reason": f"maximale kosten ${worst:.4f} boven resterend budget ${left:.4f}"})
+                continue
             model = model_of(p)
             t0 = time.monotonic()
+            tin = tout = 0
+            cost: float | None = 0.0
+            pr = price_of(p)
             try:
                 res = self.adapters[p](system, user, schema, pol.effort, pol.timeout_s, pol.max_tokens, model)
                 out, tin, tout = res[0], res[1], res[2]
                 served = (res[3] if len(res) > 3 else None) or model      # het model dat echt antwoordde
+                cost = (tin * pr[0] + tout * pr[1]) / 1e6 if pr else None
                 errs = validate(out, schema)
                 if errs:
                     raise ValueError("antwoord volgt het schema niet: " + "; ".join(errs[:3]))
                 ms = int((time.monotonic() - t0) * 1000)
-                pr = price_of(p)
-                cost = (tin * pr[0] + tout * pr[1]) / 1e6 if pr else None
                 self._log(task, p, served, "ok", ms, tin, tout, cost, None, ref, h)
+                self.run_spent += float(cost if cost is not None else (worst or 0))
                 trail.append({"provider": p, "status": "ok", "latency_ms": ms})
                 return {"output": out, "provider": p, "model": served, "requested_model": model, "latency_ms": ms,
-                        "tokens_in": tin,
+                        "max_cost_usd": worst, "tokens_in": tin,
                         "tokens_out": tout, "cost_usd": cost, "cost_known": pr is not None, "trail": trail}
             except Exception as e:  # noqa: BLE001 - volgende provider proberen, fout vastleggen
                 ms = int((time.monotonic() - t0) * 1000)
                 msg = _short(e)
-                self._log(task, p, model, "error", ms, 0, 0, 0.0, msg, ref, h)
-                trail.append({"provider": p, "status": "error", "reason": msg, "latency_ms": ms})
+                # Een ongeldig antwoord kostte wél tokens: die tellen mee in kosten en budget.
+                self._log(task, p, model, "error", ms, tin, tout, cost, msg, ref, h)
+                self.run_spent += float(cost if cost is not None else (worst or 0) if tin or tout else 0)
+                trail.append({"provider": p, "status": "error", "reason": msg, "latency_ms": ms,
+                              "cost_usd": cost if (tin or tout) else 0.0})
         raise NoProvider(task, trail)
 
     def _log(self, task, provider, model, status, ms, tin, tout, cost, error, ref, h):

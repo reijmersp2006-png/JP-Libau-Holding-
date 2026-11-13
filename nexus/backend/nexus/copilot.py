@@ -9,17 +9,31 @@ sleutel geeft de Copilot het feitelijke antwoord zelf. De Copilot kan acties voo
 from __future__ import annotations
 
 import json
-import os
 import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from nexus import central, council, news
-from nexus.db import (CouncilRun, Database, DecisionRecord, ExternalBatch, Hypothesis, ModelVersion, NewsEvent,
-                      OrchestratorTask, ResearchRun, RiskEvaluation, TradeProposal)
+from nexus.db import (
+    CouncilRun,
+    Database,
+    DecisionRecord,
+    ExternalBatch,
+    Hypothesis,
+    ModelVersion,
+    NewsEvent,
+    OrchestratorTask,
+    ResearchRun,
+    RiskEvaluation,
+    TradeProposal,
+)
 
 TOPICS = [
+    ("disagreement", r"oneens|disagre|meningsverschil|tegenspraak"),
+    ("evidence", r"bewijs|evidence|onderbouw|waarop (is|berust)"),
+    ("failures", r"mislukt|gefaald|faalde|failed|fail|geblokkeerd|blocked"),
+    ("predictions", r"voorspelling|prediction|forecast|ledger"),
     ("providers", r"provider|aanbieder|offline|verbind|connect|bron(nen)? (uit|plat)"),
     ("agents", r"agent|onderzoeken (de|ze)|researching|wat doen de"),
     ("approvals", r"(gebeurtenis|event|zaken|punten).*(aandacht|attention)|goedkeur|approv|wacht op"),
@@ -33,7 +47,7 @@ TOPICS = [
     ("approvals", r"wacht"),
 ]
 SYMBOL = re.compile(r"\b(bitcoin|btc|ethereum|eth|solana|sol|xrp|doge|dogecoin|shib|pepe|iwda|asml|aapl|apple|msft|"
-                    r"microsoft|nvda|nvidia|goud|gold|zilver|silver)\b", re.I)
+                    r"microsoft|nvda|nvidia|goud|gold|zilver|silver)\b", re.IGNORECASE)
 ALIAS = {"bitcoin": "BTC-EUR", "btc": "BTC-EUR", "ethereum": "ETH-EUR", "eth": "ETH-EUR", "solana": "SOL-EUR",
          "sol": "SOL-EUR", "xrp": "XRP-EUR", "doge": "DOGE-EUR", "dogecoin": "DOGE-EUR", "shib": "SHIB-EUR",
          "pepe": "PEPE-EUR", "iwda": "IWDA.AS", "asml": "ASML.AS", "aapl": "AAPL", "apple": "AAPL", "msft": "MSFT",
@@ -181,8 +195,16 @@ def facts(db: Database, topic: str, q: str, ctx: dict | None = None) -> dict:
                     f"workflow:{w.id}", f"/decisions?trace={w.id}")
             for h in s.scalars(select(Hypothesis).where(Hypothesis.status == "open").order_by(Hypothesis.id.desc()).limit(3)):
                 add(f"Open hypothese: {h.title}", f"hypothesis:{h.id}", "/evolution")
+            from nexus.db import ResearchWorkflow
+            for w in s.scalars(select(ResearchWorkflow).where(ResearchWorkflow.eval_run.is_(None))
+                               .order_by(ResearchWorkflow.id.desc()).limit(4)):
+                add(f"Onderzoeksopdracht {w.trace_id} ({w.subject}, variant {w.mode}): {w.status}"
+                    f"{' — ' + (w.conclusion or {}).get('recommendation', '') if w.conclusion else ''}.",
+                    f"research:{w.trace_id}", f"/research?trace={w.trace_id}")
             if not F:
                 gaps.append("geen open taken, sporen of hypothesen: de agenten onderzoeken nu niets")
+        elif topic in ("disagreement", "evidence", "failures", "predictions"):
+            _genesis_facts(s, db, topic, add, gaps)
         elif topic == "approvals":
             for t in s.scalars(select(OrchestratorTask).where(OrchestratorTask.status == "escalated")
                                .order_by(OrchestratorTask.priority.desc()).limit(8)):
@@ -195,6 +217,54 @@ def facts(db: Database, topic: str, q: str, ctx: dict | None = None) -> dict:
                 f"{b['trading']['fills']} paper-vullingen in 24 uur; {len(b['actions'])} acties open.", "briefing", "/hq")
             gaps += b["missing"]
     return {"facts": F, "gaps": gaps}
+
+
+def _genesis_facts(s, db: Database, topic: str, add, gaps: list[str]) -> None:
+    """Feiten uit onderzoeksopdrachten en de Prediction Ledger (Genesis)."""
+    from nexus import ledger
+    from nexus.db import ResearchWorkflow
+    ws = s.scalars(select(ResearchWorkflow).where(ResearchWorkflow.eval_run.is_(None))
+                   .order_by(ResearchWorkflow.id.desc()).limit(10)).all()
+    if topic == "disagreement":
+        for w in ws:
+            for d in (w.conclusion or {}).get("disagreements", [])[:3]:
+                add(f"{w.subject} ({w.trace_id}): {' tegen '.join(d.get('between', []))} — {d.get('topic')}"[:300],
+                    f"research:{w.trace_id}", f"/research?trace={w.trace_id}")
+        if not any((w.conclusion or {}).get("disagreements") for w in ws):
+            gaps.append("geen meningsverschillen vastgelegd: zonder AI-aanbieder draait alleen variant A (geen uitdager-model)")
+    elif topic == "evidence":
+        w = next((w for w in ws if w.conclusion), None)
+        if w is None:
+            gaps.append("nog geen afgeronde onderzoeksopdracht")
+            return
+        for e in (w.conclusion.get("supporting_evidence") or [])[:6]:
+            add(f"{w.subject}: {e.get('text')} (bronnen: {', '.join(e.get('evidence', []))})"[:300],
+                f"research:{w.trace_id}", f"/research?trace={w.trace_id}")
+        for c in (w.conclusion.get("counterarguments") or [])[:3]:
+            add(f"Tegenargument: {c}"[:300], f"research:{w.trace_id}", f"/research?trace={w.trace_id}")
+    elif topic == "failures":
+        n = 0
+        for w in ws:
+            bad = [st for st in (w.steps or []) if st.get("status") in ("blocked", "failed", "skipped")]
+            if w.status in ("failed", "blocked", "partial") or bad:
+                add(f"{w.trace_id} ({w.subject}): {w.status}; " + "; ".join(
+                    f"{st['step']}: {(st.get('detail') or {}).get('reason') or st['status']}" for st in bad[:3]),
+                    f"research:{w.trace_id}", f"/research?trace={w.trace_id}")
+                n += 1
+        for t in s.scalars(select(OrchestratorTask).where(OrchestratorTask.status == "failed").limit(5)):
+            add(f"Taak {t.kind} van {t.agent} mislukt: {t.error or t.reason}"[:300], f"task:{t.id}", "/hq")
+            n += 1
+        if not n:
+            gaps.append("geen mislukte of geblokkeerde onderzoeksopdrachten")
+    elif topic == "predictions":
+        sm = ledger.summary(db)
+        add(f"Prediction Ledger: {sm['total']} voorspellingen, {sm['resolved']} afgerekend, {sm['open']} open; "
+            f"hash-keten {'in orde' if sm['chain']['ok'] else 'GEBROKEN'}.", "ledger", "/research#ledger")
+        for a, sc in sm["agents"].items():
+            add(f"{a}: n={sc['n']}, Brier {sc.get('brier')}, richting goed {sc.get('directional_accuracy')}"
+                f"{'' if sc.get('calibration') else ' (te weinig voor kalibratie)'}.", f"ledger:{a}", "/research#ledger")
+        if not sm["resolved"]:
+            gaps.append("nog geen afgerekende voorspellingen: er is nog niets uit voorspellingen geleerd")
 
 
 def ask(db: Database, question: str, ctx: dict | None = None, client=None) -> dict:

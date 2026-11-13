@@ -22,20 +22,48 @@ import time
 from collections import defaultdict, deque
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from nexus import __version__
+from nexus import (
+    __version__,
+    apex_api,
+    ascension_api,
+    evolution_api,
+    genesis_api,
+    jobs,
+    lab,
+    sentinel_api,
+    social,
+)
 from nexus import agents as agents_mod
-from nexus import apex_api, ascension_api, evolution_api, jobs, lab, sentinel_api, social
 from nexus.bridge import HoldingBridge
 from nexus.controls import Controls, LiveTradingDisabled, Mode
-from nexus.db import (DEFAULT_ORG, Backtest, BillingRecord, Database, Organization, RiskEvaluation, StrategyRow,
-                      StrategyVersion, SubscriptionPlan, TradeProposal, User, iso)
+from nexus.db import (
+    DEFAULT_ORG,
+    Backtest,
+    BillingRecord,
+    Database,
+    Organization,
+    RiskEvaluation,
+    StrategyRow,
+    StrategyVersion,
+    SubscriptionPlan,
+    TradeProposal,
+    User,
+    iso,
+)
 from nexus.events import EventBus
 from nexus.guardian import Check, RiskGuardian, limits_from_env
 from nexus.marketdata import REGISTRY, MarketData
@@ -150,6 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings, app.state.db, app.state.bridge = settings, db, bridge
     app.state.controls, app.state.guardian, app.state.paper, app.state.market = controls, guardian, paper, market
     app.state.bus = bus
+    app.state.ctx = None                                 # na het mounten gezet: gedeelde context voor CLI-runs
 
     @app.middleware("http")
     async def count(request: Request, call_next):
@@ -487,4 +516,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     sentinel_api.mount(app, db=db, ctx=evo["ctx"], settings=settings, require_admin=require_admin, limiter=limiter)
     ascension_api.mount(app, db=db, ctx=evo["ctx"], require_admin=require_admin, limiter=limiter)
     apex_api.mount(app, db=db, ctx=evo["ctx"], demo=settings.demo)
+    genesis_api.mount(app, db=db, ctx=evo["ctx"], require_admin=require_admin, limiter=limiter)
+    app.state.ctx = evo["ctx"]
     return app

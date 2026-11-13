@@ -17,10 +17,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import (
+    DDL,
     JSON,
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -29,6 +31,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    event,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -780,3 +783,107 @@ class EventWorkflow(Base):
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+# ── Genesis (Milestone E): collectief onderzoek, Prediction Ledger, blinde beoordelingen ─────────
+class ResearchWorkflow(Base):
+    """Eén onderzoeksopdracht door de organisatie (NEXUS Central): stappen, berichten tussen rollen,
+    conclusie met bewaarde meningsverschillen. Begrensd in stappen, tijd en kosten."""
+
+    __tablename__ = "research_workflows"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trace_id: Mapped[str] = mapped_column(String(40), unique=True)
+    subject: Mapped[str] = mapped_column(String(32), index=True)
+    question: Mapped[str] = mapped_column(Text)
+    mode: Mapped[str] = mapped_column(String(16))                   # deterministic, single, challenger, council
+    requested_by: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16), index=True)     # running, done, partial, blocked, failed
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    messages: Mapped[list] = mapped_column(JSON, default=list)
+    conclusion: Mapped[dict] = mapped_column(JSON, default=dict)
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    max_cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    eval_run: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class Prediction(Base):
+    """Prediction Ledger: één falsifieerbare voorspelling. Na registratie onveranderbaar (ORM én database-trigger);
+    correcties gaan via ``PredictionAmendment``, uitkomsten via ``PredictionOutcome``. Hash-keten over alle regels."""
+
+    __tablename__ = "predictions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pid: Mapped[str] = mapped_column(String(40), unique=True)
+    agent: Mapped[str] = mapped_column(String(32), index=True)
+    provider: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    subject: Mapped[str] = mapped_column(String(32), index=True)
+    outcome_def: Mapped[dict] = mapped_column(JSON)                  # exacte, machinaal toetsbare definitie
+    probability: Mapped[float] = mapped_column(Float)
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    data_asof: Mapped[datetime] = mapped_column(TS)
+    market_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    horizon_end: Mapped[datetime] = mapped_column(TS, index=True)
+    workflow_trace: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow, index=True)
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    hash: Mapped[str] = mapped_column(String(64))
+
+
+class PredictionAmendment(Base):
+    """Correctie op een voorspelling: alleen toevoegen. Na het einde van de horizon is geen correctie meer mogelijk."""
+
+    __tablename__ = "prediction_amendments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prediction_id: Mapped[int] = mapped_column(ForeignKey("predictions.id"), index=True)
+    actor: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str] = mapped_column(Text)
+    change: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    hash: Mapped[str] = mapped_column(String(64))
+
+
+class PredictionOutcome(Base):
+    __tablename__ = "prediction_outcomes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prediction_id: Mapped[int] = mapped_column(ForeignKey("predictions.id"), unique=True)
+    outcome: Mapped[int] = mapped_column(Integer)                    # 1 = gebeurd, 0 = niet
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    evaluator: Mapped[str] = mapped_column(String(32))
+    evaluated_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+
+
+class ResearchReview(Base):
+    """Blinde beoordeling door een mens (CEO/operator) van een onderzoeksuitkomst: de variant (A–D) is verborgen."""
+
+    __tablename__ = "research_reviews"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("research_workflows.id"), index=True)
+    reviewer: Mapped[str] = mapped_column(String(32))
+    usefulness: Mapped[int] = mapped_column(Integer)                 # 1–5
+    errors_found: Mapped[int] = mapped_column(Integer, default=0)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    __table_args__ = (UniqueConstraint("workflow_id", "reviewer", name="uq_research_review"),)
+
+
+def _append_only(model, what: str) -> None:
+    def block(mapper, connection, target):
+        raise PermissionError(f"{what} zijn alleen-toevoegen: wijzigen of verwijderen kan niet")
+    event.listen(model, "before_update", block)
+    event.listen(model, "before_delete", block)
+
+
+for _m, _w in ((Prediction, "voorspellingen"), (PredictionAmendment, "amendementen"), (PredictionOutcome, "uitkomsten")):
+    _append_only(_m, _w)
+
+# Ook op databaseniveau (SQLite: tests en ontwikkeling; de migratie doet hetzelfde voor SQLite en PostgreSQL).
+APPEND_ONLY_TABLES = ("predictions", "prediction_amendments", "prediction_outcomes")
+for _t in APPEND_ONLY_TABLES:
+    for _op in ("UPDATE", "DELETE"):
+        event.listen(Base.metadata.tables[_t], "after_create", DDL(
+            f"CREATE TRIGGER {_t}_no_{_op.lower()} BEFORE {_op} ON {_t} "
+            f"BEGIN SELECT RAISE(ABORT, '{_t} is append-only'); END").execute_if(dialect="sqlite"))

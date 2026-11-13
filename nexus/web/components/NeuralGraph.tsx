@@ -8,10 +8,13 @@ import { Drawer, Provenance, Tabs } from "./ds";
 import type { Org, OrgRole } from "./NeuralCore";
 import { DataBadge, Empty, Skeleton, StatusDot } from "./ui";
 
-interface Handoffs { edges: { from: string; to: string; n: number }[]; simulated_traces: number; escalations_open: number; disagreements: number; completed_7d: number }
+interface Handoffs {
+  edges: { from: string; to: string; n: number; kinds?: string[]; ai?: number; simulated?: boolean }[]; simulated_traces: number; escalations_open: number; disagreements: number; completed_7d: number;
+  research?: { running: number; completed: number; blocked: number; failed: number; with_ai: number }; provider_failures_7d?: number;
+}
 interface Dossier extends OrgRole {
   task_counts: Record<string, number>; cost_usd: number; pending: OrgRole["open_tasks"];
-  workflow_steps: { trace_id: string; workflow_id: number; step: string; status: string; at: string; simulated: boolean }[];
+  workflow_steps: { trace_id: string; workflow_id: number; step: string; status: string; at: string; simulated: boolean; research?: boolean; model?: string | null; provider?: string | null }[];
   debates: { id: number; subject: string; status: string; author: string | null; challenger: string | null; recommendation: string | null }[];
   ai_usage: { provider: string; calls: number; cost_usd: number }[]; note: string;
 }
@@ -83,6 +86,8 @@ export function NeuralGraph() {
         <span className="text-slate-400"><b className="num font-medium text-slate-100">{hand.data?.disagreements ?? 0}</b> meningsverschillen</span>
         <span className="text-slate-400"><b className="num font-medium text-amber-200">{hand.data?.escalations_open ?? 0}</b> escalaties open</span>
         <span className="text-slate-400"><b className="num font-medium text-slate-100">{hand.data?.completed_7d ?? 0}</b> taken afgerond (7 d)</span>
+        {hand.data?.research && <Link href="/research" className="text-slate-400 hover:text-white"><b className="num font-medium text-slate-100">{hand.data.research.running}</b> onderzoek bezig · <b className="num font-medium text-slate-100">{hand.data.research.completed}</b> afgerond ({hand.data.research.with_ai} met AI) · <b className="num font-medium text-slate-100">{hand.data.research.blocked + hand.data.research.failed}</b> geblokkeerd/mislukt</Link>}
+        {hand.data?.provider_failures_7d != null && <Link href="/research#kosten" className="text-slate-400 hover:text-white"><b className={`num font-medium ${hand.data.provider_failures_7d ? "text-rose-300" : "text-slate-100"}`}>{hand.data.provider_failures_7d}</b> aanbiederfouten (7 d)</Link>}
         {simOnly && <span className="flex items-center gap-1.5 text-slate-500"><DataBadge label="SIMULATED" />{hand.data!.simulated_traces} spoor gebaseerd op een fixture</span>}
       </div>
 
@@ -118,11 +123,13 @@ export function NeuralGraph() {
               const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
               const cx = mx + (CX - mx) * 0.55, cy = my + (CY - my) * 0.55;
               const on = !focus || e.from === focus || e.to === focus;
+              const sim = e.simulated ?? simOnly;
+              const ai = (e.ai ?? 0) > 0;
               return (
                 <path key={`${e.from}-${e.to}`} d={`M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`} fill="none"
-                  stroke={simOnly ? "#BEB4F0" : "#8CCBF2"} strokeOpacity={on ? 0.75 : 0.12} strokeWidth={1 + (e.n / maxN) * 2.5}
-                  strokeDasharray={simOnly ? "4 4" : undefined} style={{ transition: "stroke-opacity 240ms" }}>
-                  <title>{`${e.from} → ${e.to}: ${e.n}×`}</title>
+                  stroke={sim ? "#BEB4F0" : ai ? "#E8C47A" : "#8CCBF2"} strokeOpacity={on ? 0.75 : 0.12} strokeWidth={1 + (e.n / maxN) * 2.5}
+                  strokeDasharray={sim ? "4 4" : undefined} style={{ transition: "stroke-opacity 240ms" }}>
+                  <title>{`${e.from} → ${e.to}: ${e.n}× (${(e.kinds ?? ["event"]).join(", ")})${ai ? `, ${e.ai}× met AI` : ""}`}</title>
                 </path>
               );
             })}
@@ -164,7 +171,8 @@ export function NeuralGraph() {
                 <li className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full border border-slate-500" />geen recente activiteit</li>
                 <li className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-400" />open taak</li>
                 <li className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full border border-rose-500" />fout in een recente taak</li>
-                <li className="flex items-center gap-2"><span className="h-0.5 w-5 bg-cyan-300" />overdracht in een gebeurtenis-spoor (dikte = aantal)</li>
+                <li className="flex items-center gap-2"><span className="h-0.5 w-5 bg-cyan-300" />overdracht in een gebeurtenis- of onderzoeksspoor (dikte = aantal)</li>
+                <li className="flex items-center gap-2"><span className="h-0.5 w-5 bg-amber-300" />overdracht met een echte AI-stap</li>
                 <li className="flex items-center gap-2"><span className="h-0 w-5 border-t border-dashed border-violet-300" />alleen uit een gesimuleerd spoor</li>
               </ul>
             </div>
@@ -222,7 +230,7 @@ function AgentDrawer({ roleKey, onClose }: { roleKey: string | null; onClose: ()
             {d.workflow_steps.length ? d.workflow_steps.map((s, i) => (
               <div key={i} className="flex items-center justify-between gap-2 py-1">
                 <span className="text-slate-300">{s.step} · {s.status}{s.simulated && <span className="ml-2"><DataBadge label="SIMULATED" /></span>}</span>
-                <Link href={`/decisions?trace=${s.workflow_id}`} className="font-mono text-[11px] text-cyan-300">{s.trace_id}</Link>
+                <Link href={s.research ? `/research?trace=${s.trace_id}` : `/decisions?trace=${s.workflow_id}`} className="font-mono text-[11px] text-cyan-300">{s.trace_id}</Link>
               </div>)) : <None>Geen stappen in sporen.</None>}
           </Section>
           {d.debates.length > 0 && (

@@ -87,7 +87,7 @@ def test_agent_dossier_and_handoffs_come_from_real_traces(data):
     assert workstation.handoffs(db)["edges"] == []
     workflow.run(db, {}, nid, now=NOW)
     h = workstation.handoffs(db)
-    assert {"from": "quant", "to": "risk", "n": 1} in h["edges"]
+    assert any(e["from"] == "quant" and e["to"] == "risk" and e["n"] == 1 for e in h["edges"])
     assert all(e["from"] != "crypto" for e in h["edges"])          # overgeslagen AI-stap is geen overdracht
     d = workstation.agent(db, "news")
     assert d["workflow_steps"] and d["cost_usd"] == 0
