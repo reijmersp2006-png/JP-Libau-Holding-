@@ -130,7 +130,8 @@ def mount(app: FastAPI, *, db, ctx: dict, require_admin, limiter) -> None:
         today = datetime.now(tz=UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         with db.session() as s:
             n = s.scalar(select(func.count()).select_from(ResearchWorkflow).where(
-                ResearchWorkflow.created_at >= today, ResearchWorkflow.eval_run.is_(None))) or 0
+                ResearchWorkflow.created_at >= today, ResearchWorkflow.eval_run.is_(None),
+                ResearchWorkflow.mode != "operations")) or 0
         if n >= per_day():
             raise HTTPException(429, f"daglimiet van {per_day()} onderzoeksopdrachten bereikt")
         g = genesis.with_run_cap(gateway(), max_run_usd())
@@ -199,7 +200,8 @@ def mount(app: FastAPI, *, db, ctx: dict, require_admin, limiter) -> None:
     @app.get("/api/genesis/costs")
     def costs() -> dict:
         with db.session() as s:
-            ws = s.scalars(select(ResearchWorkflow).order_by(ResearchWorkflow.id.desc()).limit(500)).all()
+            ws = s.scalars(select(ResearchWorkflow).where(ResearchWorkflow.mode != "operations")
+                           .order_by(ResearchWorkflow.id.desc()).limit(500)).all()
             retries = s.scalar(select(func.coalesce(func.sum(AiCall.cost_usd), 0)).where(AiCall.status == "error")) or 0
             n_err = s.scalar(select(func.count()).select_from(AiCall).where(AiCall.status == "error")) or 0
         done = [w for w in ws if w.status in ("done", "partial")]

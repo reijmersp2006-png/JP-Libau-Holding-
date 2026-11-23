@@ -44,6 +44,7 @@ from nexus import (
     genesis_api,
     jobs,
     lab,
+    operations_api,
     sentinel_api,
     social,
 )
@@ -517,5 +518,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ascension_api.mount(app, db=db, ctx=evo["ctx"], require_admin=require_admin, limiter=limiter)
     apex_api.mount(app, db=db, ctx=evo["ctx"], demo=settings.demo)
     genesis_api.mount(app, db=db, ctx=evo["ctx"], require_admin=require_admin, limiter=limiter)
+    operations_api.mount(app, db=db, settings=settings, require_admin=require_admin, limiter=limiter,
+                         gateway=lambda: evo["ctx"].get("gateway"))
     app.state.ctx = evo["ctx"]
     return app

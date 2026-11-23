@@ -15,6 +15,7 @@ from importlib import resources
 from pathlib import Path
 
 from jplh.config import HoldingConfig
+from jplh.contract import operational_snapshot
 from jplh.jarvis import briefing, health
 from jplh.desks import DESK_ORDER, Desk, benchmark_equity
 from jplh.academy import for_dashboard as academy_view
@@ -294,4 +295,7 @@ def write_site(state: dict, out: Path) -> Path:
         with resources.as_file(src.joinpath(name)) as p:
             shutil.copyfile(p, out / name)
     (out / "state.json").write_text(json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")
+    # Alleen-lezen contract voor NEXUS en Jarvis (jplh.snapshot/v1); dezelfde gegevens als state.json.
+    snap = operational_snapshot(json.loads(json.dumps(state, default=str)))
+    (out / "snapshot.json").write_text(json.dumps(snap, ensure_ascii=False, default=str), encoding="utf-8")
     return out / "index.html"
