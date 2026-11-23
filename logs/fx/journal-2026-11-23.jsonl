@@ -1,1 +1,2 @@
 {"ts": "2026-11-23T16:09:25.542846+00:00", "kind": "weekreport", "desk": "fx", "week_return": 0.00517281557375715, "trades": 0, "reviewed": 0, "best": null, "worst": null, "adjustments": {}, "reason": "weekrapport: Week 23-11: potje +0,75 euro (+0,5%), 0 trades; nog geen afgeronde trades om van te leren"}
+{"ts": "2026-11-23T17:09:32.392606+00:00", "kind": "selection", "desk": "fx", "selection": {"EURUSD=X": "koop_en_houd", "EURGBP=X": "koop_en_houd", "EURJPY=X": "koop_en_houd", "EURCHF=X": "koop_en_houd"}, "changes": [], "reason": "weekkeuze strategieën: geen wijzigingen"}
