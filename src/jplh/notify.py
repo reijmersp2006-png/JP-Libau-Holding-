@@ -207,6 +207,33 @@ def messages(state: dict, memory: dict, now: datetime) -> list[str]:
     return out
 
 
+def resolve_chat(memory: dict, log=print) -> tuple[str | None, str]:
+    """Welke chat is van Phil? Het geheim TELEGRAM_CHAT_ID wint, behalve als er al een andere chat
+    gekoppeld is: dan is het geheim waarschijnlijk verkeerd ingevuld en blijft de gekoppelde chat
+    gelden (anders zou één typefout Phil buitensluiten). Logt nooit een waarde."""
+    env = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+    stored = memory.get("chat")
+    if env and stored and str(stored) != env:
+        log("Telegram: TELEGRAM_CHAT_ID wijkt af van de gekoppelde chat; geheim genegeerd")
+        return str(stored), "stored"
+    if env:
+        return env, "secret"
+    return (str(stored), "stored") if stored else (None, "none")
+
+
+def chat_status(memory: dict) -> str:
+    """Zonder waarden: hoe staat de koppeling ervoor?"""
+    env = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+    stored = memory.get("chat")
+    if env and stored:
+        return "geheim klopt met gekoppelde chat" if str(stored) == env else "GEHEIM WIJKT AF (genegeerd)"
+    if env:
+        return "uit het geheim"
+    if stored:
+        return "alleen in de stand (geheim nog niet gezet)"
+    return "geen chat gekoppeld"
+
+
 def notify(state: dict, market: Store, now: datetime, log=print, token: str | None = None,
            client: Telegram | None = None) -> int:
     """Stuurt de meldingen van deze ronde. Geeft het aantal verstuurde berichten terug."""
@@ -218,8 +245,7 @@ def notify(state: dict, market: Store, now: datetime, log=print, token: str | No
     tg = client or Telegram(token)
     memory = market.get_state("telegram", {})
     try:
-        from_env = os.environ.get("TELEGRAM_CHAT_ID")
-        chat = from_env or memory.get("chat")
+        chat, source = resolve_chat(memory, log)
         if not chat and memory.get("connected"):
             # Eerder al verbonden maar de chat-id ontbreekt (geheim weg?): nooit zomaar de laatste
             # afzender als eigenaar aannemen.
@@ -231,9 +257,9 @@ def notify(state: dict, market: Store, now: datetime, log=print, token: str | No
             return 0
         first = "chat" not in memory and not memory.get("connected")
         memory["connected"] = True
-        if from_env:
-            # 9.1: staat de chat-id als geheim klaar, dan bewaren we hem niet meer in de stand
-            # (die staat op de publieke branch paper-data).
+        if source == "secret":
+            # 9.1: het geheim klopt met de gekoppelde chat (of er is niets gekoppeld): dan bewaren we
+            # hem niet meer in de stand (die kan op de publieke branch paper-data staan).
             memory.pop("chat", None)
         else:
             memory["chat"] = chat

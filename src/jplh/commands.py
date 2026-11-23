@@ -458,7 +458,8 @@ def listen(config: HoldingConfig, home: Path, client, log=print, now: datetime |
         from jplh.data import live_sources
         sources = live_sources()
     market = Store(home / "data" / "holding.sqlite3")
-    chat = os.environ.get("TELEGRAM_CHAT_ID") or market.get_state("telegram", {}).get("chat")
+    from jplh.notify import resolve_chat
+    chat, _ = resolve_chat(market.get_state("telegram", {}), log)
     if not chat:
         log("Jarvis: nog geen chat verbonden")
         return 0

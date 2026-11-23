@@ -276,6 +276,45 @@ def cmd_secret_scan(args) -> int:
     return 1 if found else 0
 
 
+def cmd_state_check(args) -> int:
+    """Vingerafdruk van de stand (hashes, integriteit, vermogen, pauzes). Alleen-lezen."""
+    import json
+
+    from jplh.statecheck import compare, fingerprint
+    fp = fingerprint(args.home)
+    if args.out:
+        args.out.write_text(json.dumps(fp, indent=1, sort_keys=True))
+    if args.against:
+        other = json.loads(args.against.read_text())
+        diff = compare(other, fp)
+        for d in diff:
+            print(f"VERSCHIL  {d}")
+        print(f"Vergelijking: {'IDENTIEK' if not diff else 'NIET GELIJK'}")
+        return 1 if diff else 0
+    print(json.dumps({k: v for k, v in fp.items() if k != "integrity"}, indent=1, sort_keys=True))
+    return 0 if fp["integrity_ok"] and fp["has_data"] else 1
+
+
+def cmd_config_check(args) -> int:
+    """Welke beveiligingsinstellingen staan aan? Toont alleen ja/nee, nooit een waarde."""
+    import os
+
+    from jplh.notify import chat_status
+    st = Store(_paths(args.home)[1]) if _paths(args.home)[1].exists() else None
+    memory = st.get_state("telegram", {}) if st else {}
+    rows = {
+        "TELEGRAM_TOKEN aanwezig": bool(os.environ.get("TELEGRAM_TOKEN")),
+        "TELEGRAM_CHAT_ID aanwezig": bool(os.environ.get("TELEGRAM_CHAT_ID")),
+        "chat-id": chat_status(memory),
+        "chat-id nog in de stand": "chat" in memory,
+        "STATE_REPO ingesteld": bool(os.environ.get("STATE_REPO")),
+        "STATE_TOKEN aanwezig": bool(os.environ.get("STATE_TOKEN")),
+    }
+    for k, v in rows.items():
+        print(f"{k:<28} {('ja' if v else 'nee') if isinstance(v, bool) else v}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jplh", description="JP-libau Holding: trading- en onderzoeksbot (paper)")
     p.add_argument("--version", action="version", version=f"jplh {__version__}")
@@ -314,6 +353,12 @@ def build_parser() -> argparse.ArgumentParser:
     pc = sub.add_parser("publish-check", help="controleer of het dashboard veilig publiek kan")
     pc.add_argument("--site", type=Path, default=None, help="map met de site (standaard <home>/site)")
     pc.set_defaults(fn=cmd_publish_check)
+    sc = sub.add_parser("state-check", help="vingerafdruk van de stand: hashes, integriteit, vermogen")
+    sc.add_argument("--out", type=Path, help="vingerafdruk als JSON bewaren")
+    sc.add_argument("--against", type=Path, help="vergelijk met een eerder bewaarde vingerafdruk")
+    sc.set_defaults(fn=cmd_state_check)
+    sub.add_parser("config-check", help="welke beveiligingsinstellingen staan aan (alleen ja/nee)").set_defaults(
+        fn=cmd_config_check)
     ss = sub.add_parser("secret-scan", help="zoek naar tokens en sleutels in bestanden")
     ss.add_argument("paths", nargs="*", help="bestanden om te scannen")
     ss.set_defaults(fn=cmd_secret_scan)
