@@ -31,8 +31,17 @@ jobs:
       - name: Stand ophalen
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATE_REPO: ${{ vars.STATE_REPO }}
+          STATE_TOKEN: ${{ secrets.STATE_TOKEN }}
         run: |
-          url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # 9.1: staat er een privé-opslag klaar (variabele STATE_REPO + geheim STATE_TOKEN), dan komt
+          # de stand daarvandaan en nooit meer van de publieke branch. Zonder die instelling: als vroeger.
+          if [ -n "$STATE_REPO" ]; then
+            url="https://x-access-token:${STATE_TOKEN}@github.com/${STATE_REPO}.git"
+            git ls-remote --exit-code --heads "$url" paper-data >/dev/null || { echo "Privé-opslag onbereikbaar of leeg: ronde gestopt"; exit 1; }
+          else
+            url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
           git clone --depth 30 --branch paper-data "$url" state
           mkdir -p data
           cp -r state/data/. data/
@@ -43,6 +52,7 @@ jobs:
         run: jplh jarvis
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: Noodstop en geheugen bewaren
         run: |

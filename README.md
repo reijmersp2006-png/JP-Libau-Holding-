@@ -12,6 +12,8 @@ Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 
 **NEXUS AI** (het Command Center boven op alle bots) staat in [nexus/](nexus/README.md).
 Het dashboard opent op het **Command Center** (Overview, Trading, NEXUS Intelligence, Academy, CEO Control; zie [docs/OVERMIND-9.0.md](docs/OVERMIND-9.0.md)); de pixelstad staat op `stad.html`.
+
+Beveiliging (9.1): alleen bestanden van een vaste allowlist gaan publiek, gecontroleerd door `jplh publish-check`; `jplh secret-scan` zoekt naar tokens. De stand kan naar een privé-repo (`STATE_REPO` + `STATE_TOKEN`) en de chat-id naar het geheim `TELEGRAM_CHAT_ID`; zie [docs/SECURITY-9.1.md](docs/SECURITY-9.1.md).
 NEXUS leest de holding alleen via het contract `jplh.snapshot/v1` (`site/snapshot.json`, of de databases alleen-lezen) en kan niets aan de handel veranderen: zie [docs/UNIFICATION-8.0.md](docs/UNIFICATION-8.0.md) en `nexus-ops research --home <paper-data>`.
 
 ## Status: fase 1 tot en met 4

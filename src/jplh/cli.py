@@ -255,6 +255,27 @@ def cmd_selftest(args) -> int:
     return 0
 
 
+def cmd_publish_check(args) -> int:
+    """Poortwachter voor GitHub Pages: alleen de allowlist, geen geheimen, geen lokale paden."""
+    from jplh.security import check_site, known_secrets
+    site = args.site or args.home / "site"
+    found = check_site(site, known_secrets(args.home))
+    for f in found:
+        print(f"NIET PUBLICEREN  {f}")
+    print(f"Publieke export: {'GEBLOKKEERD' if found else 'veilig'} ({site.name}, {len(found)} bevinding(en))")
+    return 1 if found else 0
+
+
+def cmd_secret_scan(args) -> int:
+    """Zoekt patronen van echte geheimen (tokens, sleutels) in bestanden. Toont nooit de waarde."""
+    from jplh.security import known_secrets, scan_paths
+    found = scan_paths([Path(p) for p in args.paths], known_secrets(None))
+    for f in found:
+        print(f"GEHEIM?  {f}")
+    print(f"Geheimenscan: {len(args.paths)} bestand(en), {len(found)} bevinding(en)")
+    return 1 if found else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jplh", description="JP-libau Holding: trading- en onderzoeksbot (paper)")
     p.add_argument("--version", action="version", version=f"jplh {__version__}")
@@ -290,6 +311,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("unkill", help="noodstop opheffen").set_defaults(fn=cmd_unkill)
     sub.add_parser("resume", help="pauze na een drawdown opheffen").set_defaults(fn=cmd_resume)
     sub.add_parser("selftest", help="hele keten testen met nep-koersen").set_defaults(fn=cmd_selftest)
+    pc = sub.add_parser("publish-check", help="controleer of het dashboard veilig publiek kan")
+    pc.add_argument("--site", type=Path, default=None, help="map met de site (standaard <home>/site)")
+    pc.set_defaults(fn=cmd_publish_check)
+    ss = sub.add_parser("secret-scan", help="zoek naar tokens en sleutels in bestanden")
+    ss.add_argument("paths", nargs="*", help="bestanden om te scannen")
+    ss.set_defaults(fn=cmd_secret_scan)
     return p
 
 

@@ -34,8 +34,17 @@ jobs:
       - name: Stand van de vorige ronde ophalen
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATE_REPO: ${{ vars.STATE_REPO }}
+          STATE_TOKEN: ${{ secrets.STATE_TOKEN }}
         run: |
-          url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # 9.1: staat er een privé-opslag klaar (variabele STATE_REPO + geheim STATE_TOKEN), dan komt
+          # de stand daarvandaan en nooit meer van de publieke branch. Zonder die instelling: als vroeger.
+          if [ -n "$STATE_REPO" ]; then
+            url="https://x-access-token:${STATE_TOKEN}@github.com/${STATE_REPO}.git"
+            git ls-remote --exit-code --heads "$url" paper-data >/dev/null || { echo "Privé-opslag onbereikbaar of leeg: ronde gestopt"; exit 1; }
+          else
+            url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
           if git ls-remote --exit-code --heads "$url" paper-data >/dev/null; then
             git clone --depth 1 --branch paper-data "$url" state
           else
@@ -51,11 +60,13 @@ jobs:
         run: jplh jarvis || true
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: Paper-ronde
         run: jplh run
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: Stand bewaren
         run: |
@@ -71,6 +82,13 @@ jobs:
           # Jarvis kan tussendoor iets bewaard hebben: dan eerst bijwerken en opnieuw proberen.
           for i in 1 2 3; do git push origin paper-data && break; git pull --rebase origin paper-data; done
 
+      - name: Poortwachter - alleen veilige bestanden publiek
+        # 9.1: allowlist, geen geheimen, geen lokale paden. Faalt dit, dan gaat het dashboard niet
+        # online; de ronde en de opgeslagen stand hierboven zijn dan al klaar.
+        run: jplh publish-check
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
       - uses: actions/configure-pages@v5
         continue-on-error: true
       - uses: actions/upload-pages-artifact@v3
@@ -83,6 +101,7 @@ jobs:
         if: failure()
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python - <<'PY'
@@ -93,7 +112,8 @@ jobs:
           from jplh.store import Store
           token = os.environ.get("TELEGRAM_TOKEN")
           db = Path("data/holding.sqlite3")
-          chat = Store(db).get_state("telegram", {}).get("chat") if db.exists() else None
+          chat = os.environ.get("TELEGRAM_CHAT_ID") or (
+              Store(db).get_state("telegram", {}).get("chat") if db.exists() else None)
           if token and chat:
               Telegram(token).send(chat, "🚨 Jarvis: de paper-ronde van "
                                    f"{datetime.now(tz=UTC):%H:%M} UTC is mislukt. Details: {os.environ['RUN_URL']}")
