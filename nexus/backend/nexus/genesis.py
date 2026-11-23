@@ -699,7 +699,7 @@ def register_predictions(db, symbol, analysis, meta, trace, mode, role, steps, f
 # ── Lezen ──────────────────────────────────────────────────────────────────────────────────
 def _as_dict(w: ResearchWorkflow, full: bool = True) -> dict:
     d = {"id": w.id, "trace_id": w.trace_id, "subject": w.subject, "question": w.question, "mode": w.mode,
-         "variant": MODES.get(w.mode), "requested_by": w.requested_by, "status": w.status, "simulated": w.simulated,
+         "variant": MODES.get(w.mode, w.mode), "requested_by": w.requested_by, "status": w.status, "simulated": w.simulated,
          "cost_usd": float(w.cost_usd) if w.cost_usd is not None else None,
          "max_cost_usd": float(w.max_cost_usd) if w.max_cost_usd is not None else None, "eval_run": w.eval_run,
          "created_at": _utc(w.created_at).isoformat(), "finished_at": _utc(w.finished_at).isoformat() if w.finished_at else None,

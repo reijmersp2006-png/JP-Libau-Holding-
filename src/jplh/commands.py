@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from jplh.config import HoldingConfig
+from jplh.contract import validate_records
 from jplh.desks import DESK_NAMES, DESK_ORDER, open_desks
 from jplh.jarvis import _eur, _pct, briefing, health
 from jplh.site import build_state
@@ -28,6 +29,7 @@ HELP = ("Commando's:\n"
         "/leren - wat de Academie weet: voorspellingen, scores en de toeval-toets\n"
         "/coach meme - wat de coach van een afdeling weet, getoetst op onze koersen\n"
         "/maand - de maandafsluiting (of /maand oktober)\n"
+        "/onderzoek - de laatste onderzoeksrecords van NEXUS (alleen lezen)\n"
         "/alarm BTC 80000 - seintje zodra BTC die koers raakt\n"
         "/alarmen - je alarmen bekijken\n"
         "/alarm weg BTC - alarmen voor BTC weghalen (/alarm weg alles: allemaal)\n"
@@ -297,6 +299,43 @@ def month_text(state: dict, now: datetime, want: str | None = None) -> str:
     return text
 
 
+RECORDS_FILE = Path("intelligence") / "records.json"
+RECORDS_MAX_AGE_H = 48
+
+
+def intelligence_text(home: Path, now: datetime) -> str:
+    """Wat NEXUS onderzocht, uit het geëxporteerde ``nexus.records/v1``-bestand. Alleen lezen.
+    Geen bestand of een ongeldig bestand: dat zeggen we eerlijk, we verzinnen niets."""
+    path = home / RECORDS_FILE
+    if not path.exists():
+        return ("🧠 NEXUS: NIET VERBONDEN. Er staan nog geen onderzoeksrecords bij de holding. "
+                "De handel draait gewoon door; NEXUS leest alleen mee zodra het is ingericht.")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "🧠 NEXUS: het onderzoeksbestand is onleesbaar, dus ik laat niets zien."
+    errs = validate_records(data)
+    if errs:
+        return f"🧠 NEXUS: onderzoeksbestand afgekeurd ({errs[0]}), dus ik laat niets zien."
+    items = data.get("items") or []
+    if not items:
+        return "🧠 NEXUS is verbonden, maar heeft nog geen onderzoek gedaan."
+    lines = ["🧠 NEXUS-onderzoek (alleen lezen, geen handelsadvies)"]
+    try:
+        age = (now - datetime.fromisoformat(data["exported_at"])).total_seconds() / 3600
+        if age > RECORDS_MAX_AGE_H:
+            lines.append(f"⚠️ Verouderd: laatste export {age:.0f} uur geleden.")
+    except (KeyError, ValueError, TypeError):
+        lines.append("⚠️ Exportmoment onbekend.")
+    for r in items[:3]:
+        label = "vaste code" if str(r["generator"]).startswith("deterministic") else r["generator"]
+        lines.append(f"• {r['subject']} ({str(r['created_at'])[:16].replace('T', ' ')}, {label}): {r['summary']}")
+        ai = r.get("ai_status")
+        if ai and ai != "used":
+            lines.append(f"  AI: {ai}")
+    return "\n".join(lines)
+
+
 def _state(config: HoldingConfig, home: Path, market: Store, now: datetime) -> dict:
     desks = open_desks(config, home, market)
     return build_state(config, desks, market, home, now)
@@ -320,6 +359,8 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
         was = kill.exists()
         kill.unlink(missing_ok=True)
         return "✅ Noodstop is uit. De volgende ronde handelt weer." if was else "De noodstop stond al uit."
+    if cmd == "/onderzoek":
+        return intelligence_text(home, now)
     if cmd in ("/stand", "/briefing"):
         st = _state(config, home, market, now)
         h = health(st)

@@ -11,6 +11,7 @@ welke strategieën na kosten echt iets opleveren, en de rest uit te zetten.
 Het volledige plan staat in [docs/PLAN.md](docs/PLAN.md).
 
 **NEXUS AI** (het Command Center boven op alle bots) staat in [nexus/](nexus/README.md).
+NEXUS leest de holding alleen via het contract `jplh.snapshot/v1` (`site/snapshot.json`, of de databases alleen-lezen) en kan niets aan de handel veranderen: zie [docs/UNIFICATION-8.0.md](docs/UNIFICATION-8.0.md) en `nexus-ops research --home <paper-data>`.
 
 ## Status: fase 1 tot en met 4
 
@@ -118,7 +119,7 @@ jplh jarvis          # Telegram-berichten van Phil beantwoorden en alarmen nalop
 pytest               # alle tests
 ```
 
-Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/leren`, `/coach meme`, `/maand`,
+Jarvis op Telegram (elke 10 minuten): `/stand`, `/briefing`, `/waarom BTC`, `/afdeling crypto`, `/stress`, `/lessen`, `/leren`, `/coach meme`, `/maand`, `/onderzoek`,
 `/alarm BTC 80000` (seintje bij die koers, koopt of verkoopt nooit iets), `/alarmen`,
 `/alarm weg BTC`, `/noodstop` en `/hervat`. Elke zondagavond stuurt Jarvis een weekrapport.
 
