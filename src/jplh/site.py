@@ -288,14 +288,29 @@ def build_state(config: HoldingConfig, desks: dict[str, Desk], market: Store, ho
     return state
 
 
-def write_site(state: dict, out: Path) -> Path:
+def write_site(state: dict, out: Path, overmind: dict | None = None) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     src = resources.files("jplh").joinpath("hq")
-    for name in ("index.html", "factsheet.html", "jarvis.html"):
+    for name in ("index.html", "stad.html", "factsheet.html", "jarvis.html"):
         with resources.as_file(src.joinpath(name)) as p:
             shutil.copyfile(p, out / name)
     (out / "state.json").write_text(json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")
     # Alleen-lezen contract voor NEXUS en Jarvis (jplh.snapshot/v1); dezelfde gegevens als state.json.
     snap = operational_snapshot(json.loads(json.dumps(state, default=str)))
     (out / "snapshot.json").write_text(json.dumps(snap, ensure_ascii=False, default=str), encoding="utf-8")
+    if overmind is not None:
+        (out / "overmind.json").write_text(json.dumps(overmind, ensure_ascii=False, default=str), encoding="utf-8")
     return out / "index.html"
+
+
+def build_overmind(state: dict, config: HoldingConfig, desks: dict[str, Desk], market: Store, home: Path,
+                   now: datetime | None = None, problems: list[str] | None = None) -> dict | None:
+    """Command Center-gegevens (jplh.overmind/v1). Een fout hier mag de handelsronde nooit stoppen:
+    dan is er geen overmind.json en toont het dashboard dat eerlijk."""
+    from jplh.overmind import build
+    try:
+        return build(json.loads(json.dumps(state, default=str)), config, desks, market, now, home)
+    except Exception as e:                       # noqa: BLE001 - dashboardextra, nooit fataal
+        if problems is not None:
+            problems.append(f"overmind: {type(e).__name__}: {e}")
+        return None
