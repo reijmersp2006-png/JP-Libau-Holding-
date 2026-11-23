@@ -143,7 +143,7 @@ def cmd_dashboard(args) -> int:
 
     from jplh.desks import open_desks
     from jplh.paper import build_demo
-    from jplh.site import build_state, write_site
+    from jplh.site import build_overmind, build_state, write_site
 
     config = load_config(_paths(args.home)[0])
     if args.demo:
@@ -151,7 +151,9 @@ def cmd_dashboard(args) -> int:
     else:
         market = Store(_paths(args.home)[1])
         desks = open_desks(config, args.home, market)
-        site = write_site(build_state(config, desks, market, args.home), args.home / "site").parent
+        state = build_state(config, desks, market, args.home)
+        site = write_site(state, args.home / "site",
+                          build_overmind(state, config, desks, market, args.home)).parent
     print(f"Dashboard staat in {site}")
     if args.no_serve:
         return 0

@@ -1,1468 +1,582 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JP-libau HQ</title>
+<meta name="color-scheme" content="dark">
+<title>JP-Libau Holding · Command Center</title>
 <style>
-:root{
-  --ink:#f4ecd8; --dim:#b9ad93; --bg:#141022; --panel:#1f1934; --panel2:#2a2245; --edge:#4b3f7a;
-  --gold:#ffcc4d; --good:#5fe08a; --bad:#ff5d6c; --warn:#ffb347; --blue:#5ab8ff; --purple:#b07cff;
+/* ── Institutional 2.0: design tokens ───────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --page: #0a0c10; --surface-1: #0e1116; --surface-2: #141821; --surface-3: #1b2030;
+  --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.14);
+  --ink-1: #eef0f3; --ink-2: #b9bec8; --ink-3: #8a909c;
+  --accent: #c9a961;                     /* merkgoud: alleen voor identiteit en focus */
+  --grid: #222734; --axis: #383d4a;
+  /* afdelingen = categorische slots 1-5 (gevalideerd, donker, oppervlak #0e1116) */
+  --d-crypto: #3987e5; --d-meme: #d95926; --d-stocks: #199e70; --d-metals: #c98500; --d-fx: #d55181;
+  /* status: altijd met icoon + label */
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b; --unknown: #8a909c;
+  --up: #0ca30c; --down: #e66767;
+  --r: 10px; --gap: 14px;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
-  font-family:"Courier New",ui-monospace,monospace;font-size:14px;overflow:hidden}
-.px{font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-#app{display:grid;grid-template-rows:auto auto 1fr auto;height:100vh}
-/* koersband */
-#tape{overflow:hidden;white-space:nowrap;background:#0b0816;border-bottom:2px solid #3a2f63;height:26px;position:relative}
-#tape .run{display:inline-flex;gap:26px;padding-left:26px;animation:tape var(--dur,80s) linear infinite;line-height:26px}
-#tape:hover .run{animation-play-state:paused}
-#tape .tk{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
-#tape .tk b{color:var(--ink)} #tape .tk .p{color:var(--dim)} #tape .tk.closed{opacity:.55}
-#tape .tk svg{width:42px;height:14px}
-#tape .dot{width:6px;height:6px;display:inline-block}
-@keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--page); color: var(--ink-1); font: 14px/1.45 var(--sans); }
+a { color: var(--ink-1); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-3); } .sub { color: var(--ink-2); }
+.up { color: var(--up); } .down { color: var(--down); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-/* HUD */
-#hud{display:flex;align-items:center;gap:18px;padding:10px 16px;background:linear-gradient(#2a2245,#1f1934);
-  border-bottom:4px solid #0b0816;box-shadow:0 4px 0 #3a2f63 inset}
-#logo{display:flex;align-items:center;gap:10px}
-#logo .crest{width:36px;height:36px;background:var(--gold);color:#2a1a00;display:grid;place-items:center;
-  font-weight:900;font-size:15px;box-shadow:0 0 0 3px #2a1a00,0 0 0 6px var(--gold);image-rendering:pixelated}
-#logo .t1{font-size:16px} #logo .t2{font-size:11px;color:var(--dim)}
-.stat{display:flex;flex-direction:column;gap:4px;min-width:150px}
-.stat .lbl{font-size:10px;color:var(--dim)}
-.stat .val{font-size:20px}
-.bar{height:14px;background:#0b0816;border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge);position:relative}
-.bar>i{position:absolute;inset:0 auto 0 0;display:block;background:var(--good);
-  background-image:repeating-linear-gradient(90deg,transparent 0 6px,rgba(0,0,0,.18) 6px 8px)}
-.bar.en>i{background-color:var(--blue)} .bar.xp>i{background-color:var(--purple)}
-.badge{padding:5px 9px;border:2px solid currentColor;font-size:11px}
-.badge.paper{color:var(--blue)} .badge.kill{color:var(--bad);animation:blink 1s steps(2) infinite}
-.badge.demo{color:var(--warn)}
-.badge.fact{color:var(--gold);text-decoration:none}
-.badge.brain{color:#53d8ff;text-decoration:none;border-color:#53d8ff}
-.badge.auto{color:var(--good);cursor:pointer} .badge.auto.warn{color:var(--warn)} .badge.auto.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
-#hud .spacer{flex:1}
-.badge.jarvis{color:#5ee7ff;cursor:pointer} .badge.jarvis.warn{color:var(--warn)} .badge.jarvis.alarm{color:var(--bad);animation:blink 1s steps(2) infinite}
-/* Jarvis */
-.jarvis-card{border:2px solid #5ee7ff;background:linear-gradient(160deg,#0b2233,#0b0816);box-shadow:0 0 14px rgba(94,231,255,.25);
-  padding:12px;margin:10px 0;position:relative}
-.jarvis-card .head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.arc{width:26px;height:26px;border-radius:50%;border:3px solid #5ee7ff;box-shadow:0 0 10px #5ee7ff,inset 0 0 8px #5ee7ff;
-  animation:pulse 2.4s ease-in-out infinite;flex:none}
-.arc.warn{border-color:var(--warn);box-shadow:0 0 10px var(--warn),inset 0 0 8px var(--warn)}
-.arc.alarm{border-color:var(--bad);box-shadow:0 0 10px var(--bad),inset 0 0 8px var(--bad)}
-@keyframes pulse{50%{transform:scale(.85);opacity:.7}}
-.jarvis-card ul{margin:4px 0 8px 16px;padding:0} .jarvis-card li{margin:3px 0;line-height:1.35}
-.jarvis-card button{background:#0b0816;color:#5ee7ff;border:2px solid #5ee7ff;padding:4px 10px;font:inherit;cursor:pointer}
-@keyframes blink{50%{opacity:.25}}
+/* ── shell ── */
+header.top { position: sticky; top: 0; z-index: 20; background: rgba(10,12,16,.92); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line); }
+.bar { display: flex; align-items: center; gap: 16px; padding: 10px 20px; max-width: 1440px; margin: 0 auto; }
+.brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.brand b { font-size: 15px; letter-spacing: .02em; }
+.brand b i { font-style: normal; color: var(--accent); }
+.brand span { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .12em; }
+nav.main { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; flex: 1; }
+nav.main a { padding: 7px 12px; border-radius: 8px; text-decoration: none; color: var(--ink-2); white-space: nowrap; font-size: 13px; }
+nav.main a[aria-current="page"] { background: var(--surface-3); color: var(--ink-1); box-shadow: inset 0 -2px 0 var(--accent); }
+nav.main a:hover { color: var(--ink-1); }
+.fresh { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.links { display: flex; gap: 10px; font-size: 12px; } .links a { color: var(--ink-3); }
+main { max-width: 1440px; margin: 0 auto; padding: 18px 20px 60px; }
+h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; letter-spacing: -.01em; }
+h2 { font-size: 13px; margin: 0 0 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+h3 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
+.lead { color: var(--ink-2); margin: 0 0 16px; max-width: 80ch; }
 
-/* Wereld */
-#main{display:grid;grid-template-columns:1fr 380px;min-height:0}
-#world{position:relative;min-height:0;overflow:hidden;background:#123a5c}
-#world canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;cursor:pointer}
-#labels,#bubbles{position:absolute;inset:0;pointer-events:none}
-.sign{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;
-  background:#1f1934ee;border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge);padding:4px 7px;
-  font-size:11px;white-space:nowrap;text-align:center}
-.sign b{display:block;font-size:12px}
-.sign.shadow{opacity:.85;border-style:dashed;box-shadow:0 0 0 2px #c9a36b;font-size:10px}
-.sign.shadow b{font-size:10px;color:#ffcc4d}
-.sign .lv{color:var(--purple)} .sign .up{color:var(--good)} .sign .dn{color:var(--bad)}
-.sign.sel{box-shadow:0 0 0 2px var(--gold)}
-.sign.alarm{box-shadow:0 0 0 2px var(--bad);animation:blink .8s steps(2) infinite}
-#weather{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--dim);background:#0b0816aa;padding:4px 8px}
-
-/* Zijpaneel */
-#side{background:var(--panel);border-left:4px solid #0b0816;overflow:auto;padding:14px}
-#side h2{margin:0 0 4px;font-size:18px} #side h3{margin:16px 0 6px;font-size:12px;color:var(--dim)}
-.row{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
-.card{background:var(--panel2);border:2px solid #0b0816;box-shadow:0 0 0 2px var(--edge) inset;padding:10px;margin:8px 0}
-.big{font-size:24px}
-.up{color:var(--good)} .dn{color:var(--bad)} .mute{color:var(--dim)}
-table{width:100%;border-collapse:collapse;font-size:12px}
-td,th{padding:4px 3px;text-align:left;border-bottom:1px dashed #3a2f63} th{color:var(--dim);font-weight:400}
-td.r,th.r{text-align:right}
-.pill{display:inline-block;padding:1px 5px;border:1px solid var(--edge);font-size:10px;color:var(--dim)}
-.pill.in{color:var(--good);border-color:var(--good)}
-canvas.spark{width:100%;height:90px;image-rendering:pixelated;display:block}
-.whatif select,.whatif input[type=number]{background:#0b0816;color:inherit;border:1px solid #3a2f63;font:inherit;padding:3px 5px;max-width:100%}
-.whatif input[type=range]{width:100%;accent-color:#d9a521}
-.whatif .legend i{display:inline-block;width:10px;height:3px;margin:0 4px 2px 8px;vertical-align:middle}
-.org{font-size:11px}
-.org .lvl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;position:relative;padding-top:10px}
-.org .lvl:first-child{padding-top:0}
-.org .lvl:not(:first-child)::before{content:"";position:absolute;top:1px;left:50%;height:8px;border-left:2px solid var(--edge)}
-.org .who{background:#0b0816;border:2px solid var(--edge);padding:4px 6px;text-align:center;min-width:72px;cursor:pointer}
-.org .who b{display:block;font-size:11px} .org .who span{color:var(--dim);font-size:10px}
-.org .who.ceo{border-color:var(--gold)} .org .who.ghost{border-style:dashed;opacity:.8;cursor:default}
-.tabs{display:flex;gap:6px;margin-bottom:6px}
-.tabs button{flex:1;background:#0b0816;color:var(--ink);border:2px solid var(--edge);padding:6px;font:inherit;
-  font-size:11px;cursor:pointer}
-.tabs button.on{border-color:var(--gold);color:var(--gold)}
-
-/* Onderbalk */
-#bottom{display:grid;grid-template-columns:1fr 380px;height:210px;border-top:4px solid #0b0816}
-#feed{background:#0e0b1a;overflow:auto;padding:8px 14px;font-size:12px}
-#feed .msg{padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
-#feed .t{color:var(--dim)} #feed .who{font-weight:700}
-#feed .trade .txt{color:var(--good)} #feed .refused .txt{color:var(--warn)}
-#feed .pause .txt{color:var(--bad)} #feed .selection .txt{color:var(--purple)}
-#feed .reflection .txt{color:var(--blue)} #feed .weekreport .txt{color:var(--gold)} #feed .alert .txt{color:#ff9de2}
-#feed .msg{cursor:pointer} #feed .msg .det{display:none;white-space:normal;color:var(--dim);padding:2px 0 4px 16px}
-#feed .msg.open{white-space:normal} #feed .msg.open .det{display:block}
-.lvl-groot{color:var(--bad)} .lvl-let_op{color:var(--warn)} .lvl-info{color:var(--blue)}
-.lesson{margin:2px 0 0 10px;color:var(--dim);font-size:11px}
-#quests{background:var(--panel);border-left:4px solid #0b0816;overflow:auto;padding:8px 14px}
-.quest{margin:6px 0} .quest .qt{display:flex;justify-content:space-between;font-size:12px}
-.quest .bar{height:10px;margin-top:3px} .quest.done .qt{color:var(--good)}
-.quest.locked{opacity:.65}
-.hint{font-size:10px;color:var(--dim)}
-.bubble{position:absolute;transform:translate(-50%,-100%);background:#f4ecd8;color:#1f1934;font-size:11px;
-  padding:4px 7px;border:2px solid #0b0816;max-width:190px;white-space:normal;pointer-events:none;
-  animation:pop .25s steps(3)}
-.bubble:after{content:"";position:absolute;left:50%;bottom:-8px;border:4px solid transparent;border-top-color:#0b0816}
-@keyframes pop{from{transform:translate(-50%,-80%) scale(.6);opacity:0}}
-#toast{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:var(--gold);color:#2a1a00;padding:10px 16px;
-  border:3px solid #2a1a00;box-shadow:0 0 0 3px var(--gold);font-weight:700;display:none;z-index:9;text-align:center}
-#toast.show{display:block;animation:pop .3s steps(3)}
-.badges{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
-.bdg{width:30px;height:30px;display:grid;place-items:center;font-size:16px;background:#0b0816;border:2px solid var(--edge);
-  filter:grayscale(1);opacity:.35} .bdg.got{filter:none;opacity:1;border-color:var(--gold)}
-@media (max-width: 900px){
-  html,body{overflow:visible;height:auto}
-  #app{height:auto}
-  #hud{flex-wrap:wrap;gap:10px} .stat{min-width:120px} #hud .spacer{display:none}
-  #main{grid-template-columns:1fr} #world{height:56vh}
-  #side{border-left:0;border-top:4px solid #0b0816;overflow:visible}
-  #bottom{grid-template-columns:1fr;height:auto} #feed{max-height:260px} #quests{border-left:0}
-  .sign{font-size:9px;padding:2px 4px} .sign b{font-size:9px} .sign .lv,.sign .up,.sign .dn{font-size:8px}
-  .bubble{font-size:9px;max-width:140px}
+/* ── layout primitives ── */
+.grid { display: grid; gap: var(--gap); }
+.g2 { grid-template-columns: repeat(2, minmax(0,1fr)); } .g3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.g-main { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+.card { background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; overflow-x: auto; }
+.card.flat { background: transparent; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+@media (max-width: 1000px) { .g-main, .g3 { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 700px) {
+  .g2 { grid-template-columns: minmax(0,1fr); }
+  .bar { flex-wrap: wrap; padding: 8px 12px; gap: 8px; } nav.main { order: 3; flex-basis: 100%; }
+  .links { display: none; } main { padding: 12px 12px 48px; }
 }
-@media (max-width: 600px){
-  .sign{padding:1px 3px;line-height:1.15} .sign b{font-size:8px} .sign .up,.sign .dn,.sign .mute{font-size:8px}
-}
-#err{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:#0b0816;padding:16px;
-  border:2px solid var(--bad);display:none;max-width:420px}
+
+/* ── components ── */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.kpi { background: var(--surface-1); padding: 12px 14px; }
+.kpi .l { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
+.kpi .v { font: 600 22px/1.2 var(--mono); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi .s { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.kpi.hero .v { font-size: 30px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; text-transform: uppercase; }
+.status::before { content: attr(data-i); font-size: 10px; }
+.s-good { color: var(--good); } .s-warn { color: var(--warn); } .s-serious { color: var(--serious); }
+.s-crit { color: #f27b7b; border-color: var(--crit); }   /* tekst lichter voor 4.5:1, rand houdt de statuskleur */ .s-unknown { color: var(--unknown); }
+.label { font: 600 10px/1 var(--mono); letter-spacing: .08em; padding: 3px 6px; border-radius: 4px; background: var(--surface-3);
+  color: var(--ink-2); text-transform: uppercase; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  padding: 6px 8px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.r, th.r { text-align: right; }
+.scroll { overflow-x: auto; }
+button, .btn { font: inherit; font-size: 13px; color: var(--ink-1); background: var(--surface-3); border: 1px solid var(--line-2);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+button:hover { background: #232a3c; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.empty { border: 1px dashed var(--line-2); border-radius: var(--r); padding: 18px; color: var(--ink-2); }
+.empty b { color: var(--ink-1); }
+.att { display: grid; grid-template-columns: 4px 1fr auto; gap: 12px; padding: 11px 12px; border-radius: 8px; background: var(--surface-2); align-items: center; }
+.att + .att { margin-top: 6px; }
+.att .bar-l { align-self: stretch; border-radius: 2px; }
+.att .t { font-weight: 600; } .att .d { color: var(--ink-2); font-size: 13px; }
+.att a.go { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.meter { height: 6px; background: var(--surface-3); border-radius: 3px; position: relative; overflow: hidden; }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.meter.lim::after { content: ""; position: absolute; right: 0; top: -2px; bottom: -2px; width: 2px; background: var(--crit); }
+details > summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.layer { border-left: 3px solid var(--line-2); padding: 8px 12px; margin: 10px 0; background: var(--surface-2); border-radius: 0 8px 8px 0; }
+.layer.rec { border-color: var(--d-crypto); } .layer.rcn { border-color: var(--d-metals); } .layer.post { border-color: var(--d-fx); }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--surface-3); color: var(--ink-2); }
+.tip { position: fixed; pointer-events: none; z-index: 50; background: #050608; border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; color: var(--ink-1); display: none; max-width: 280px; }
+svg text { fill: var(--ink-3); font: 11px var(--sans); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.foot { margin-top: 28px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 12px; }
+@media (prefers-reduced-motion: no-preference) { .changed { animation: flash 1.2s ease-out; } }
+@keyframes flash { from { background: rgba(201,169,97,.18); } to { background: transparent; } }
 </style>
 </head>
 <body>
-<div id="toast"></div>
-<div id="app">
-  <header id="hud">
-    <div id="logo"><div class="crest px">JP</div><div><div class="t1 px">JP-libau Holding</div><div class="t2">Hoofdkwartier</div></div></div>
-    <div class="stat"><span class="lbl px">Schatkist</span><span class="val" id="h-eq">…</span><span class="hint" id="h-pnl"></span></div>
-    <div class="stat"><span class="lbl px">Risicoruimte</span><div class="bar hp"><i id="h-hp"></i></div><span class="hint" id="h-hpt"></span></div>
-    <div class="stat"><span class="lbl px">Dagbudget</span><div class="bar en"><i id="h-en"></i></div><span class="hint" id="h-ent"></span></div>
-    <div class="stat"><span class="lbl px">Demofase</span><div class="bar xp"><i id="h-day"></i></div><span class="hint" id="h-dayt"></span></div>
-    <div class="spacer"></div>
-    <span class="badge px demo" id="b-demo" hidden>Nep-data</span>
-    <span class="badge px jarvis" id="b-jarvis" onclick="select('hq')" title="Jarvis bewaakt de holding">JARVIS</span>
-    <span class="badge px auto" id="b-auto" onclick="select('risk')" title="Autopiloot: elk uur een ronde, Jarvis kijkt elke 10 minuten">AUTO</span>
-    <a class="badge px fact" href="factsheet.html" title="Maandfactsheet: één pagina met alle cijfers, ook als pdf">Factsheet</a>
-    <a class="badge px brain" href="jarvis.html" title="Jarvis-cockpit: het digitale brein dat alles aanstuurt (concept)">Brein</a>
-    <span class="badge px paper">Paper</span>
-    <span class="badge px kill" id="b-kill" hidden>Noodstop</span>
-    <div class="stat" style="min-width:110px;text-align:right"><span class="lbl px">Laatste ronde</span><span id="h-time" class="hint"></span></div>
-  </header>
-
-  <div id="tape" title="Koersen van het laatste uur. Beweging over 24 uur."><div class="run" id="tape-run"></div></div>
-
-  <div id="main">
-    <div id="world"><canvas id="cv"></canvas><div id="labels"></div><div id="bubbles"></div><div id="weather"></div><div id="err"></div></div>
-    <aside id="side"></aside>
+<header class="top">
+  <div class="bar">
+    <div class="brand"><b>JP-Libau <i>Holding</i></b><span>Command Center</span></div>
+    <nav class="main" aria-label="Hoofdnavigatie">
+      <a href="#overview">Overview</a><a href="#trading">Trading</a><a href="#intelligence">NEXUS Intelligence</a>
+      <a href="#academy">Academy</a><a href="#control">CEO Control</a>
+    </nav>
+    <div class="fresh" id="fresh" aria-live="polite">gegevens laden…</div>
+    <div class="links"><a href="stad.html">Stad</a><a href="factsheet.html">Factsheet</a><a href="jarvis.html">Brein</a></div>
   </div>
-
-  <div id="bottom">
-    <div id="feed"></div>
-    <div id="quests"></div>
-  </div>
-</div>
-
+</header>
+<main id="app" tabindex="-1"><p class="muted">Laden…</p></main>
+<div class="tip" id="tip" role="tooltip"></div>
 <script>
 "use strict";
-const W = 320, H = 180;           // wereld in "pixels"; wordt opgeschaald
-const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
-let S = null, selected = "hq", tick = 0, scale = 3, offX = 0, offY = 0;
-
-const eur = (v, d = 2) => v == null ? "–" : "€" + Number(v).toLocaleString("nl-NL", {minimumFractionDigits: d, maximumFractionDigits: d});
-const pct = (v, d = 1) => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d).replace(".", ",") + "%";
-const cls = v => v == null ? "mute" : v >= 0 ? "up" : "dn";
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-// "trend(fast=50, slow=100, band=0.01)" -> "trend 50/100"
-const strat = t => String(t ?? "")
-  .replace(/koop_en_houd/g, "koop-en-houd")
-  .replace(/trend\(fast=(\d+), slow=(\d+)[^)]*\)/g, "trend $1/$2")
-  .replace(/momentum\(lookback=(\d+)[^)]*\)/g, "momentum $1d")
-  .replace(/uitbraak\(entry=(\d+), exit=(\d+)\)/g, "uitbraak $1/$2")
-  .replace(/terugkeer\(period=\d+, low=(\d+), high=(\d+)\)/g, "terugkeer $1/$2")
-  .replace(/ \(Sharpe [^)]*\)/g, "").replace(/weekkeuze strategieën: /, "nieuwe keuze: ");
-const tiny = v => v == null ? "–" : v < 0.01 ? v.toPrecision(3) : v.toLocaleString("nl-NL", {maximumFractionDigits: 2});
-const when = iso => { const d = new Date(iso); return d.toLocaleString("nl-NL", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}); };
-
-// ------------------------------------------------------------------ gebouwen
-// x,y = linksonder in wereldpixels; w,h = maat van de gevel
-const B = {
-  crypto: {x: 62, y: 86, w: 34, h: 26, wall: "#2bb3a3", roof: "#16675e", label: "Crypto Lab"},
-  meme:   {x: 112, y: 64, w: 30, h: 22, wall: "#8b4fd8", roof: "#4b2585", label: "Meme Arcade"},
-  stocks: {x: 196, y: 70, w: 22, h: 46, wall: "#8a95ad", roof: "#4a536a", label: "Beurstoren"},
-  metals: {x: 230, y: 112, w: 32, h: 22, wall: "#d9a521", roof: "#7a5a0c", label: "De Kluis"},
-  fx:     {x: 46, y: 138, w: 38, h: 18, wall: "#3f7fd6", roof: "#1f4a86", label: "Wisselhaven"},
-  risk:   {x: 262, y: 74, w: 12, h: 40, wall: "#b84a4a", roof: "#5e1f1f", label: "Wachttoren"},
-  lab:    {x: 150, y: 120, w: 30, h: 18, wall: "#e8e4f0", roof: "#9c95b5", label: "Onderzoekslab"},
-  academy: {x: 238, y: 88, w: 20, h: 14, wall: "#efe3c8", roof: "#8a5a2b", label: "Academie"},
-  hq:     {x: 146, y: 96, w: 0, h: 0, label: "HQ"},
-};
-const DESKS = ["crypto", "meme", "stocks", "metals", "fx"];
-// bouwplaatsen voor de schaduw-afdelingen: ze groeien mee met de 90 dagen proef
-const P = {
-  schatkist:    {x: 102, y: 126, w: 18, h: 14, wall: "#cfd6e6", label: "De Schatkist"},
-  obligaties:   {x: 186, y: 142, w: 20, h: 14, wall: "#a7c4e8", label: "Obligatiebank"},
-  vastgoed:     {x: 140, y: 160, w: 16, h: 16, wall: "#e2a77a", label: "Vastgoedkantoor"},
-  grondstoffen: {x: 224, y: 152, w: 22, h: 12, wall: "#b98a5e", label: "Grondstoffenhal"},
-};
-const shadows = () => (S && S.arena && S.arena.shadow) || [];
-const desk = id => S && S.desks.find(d => d.id === id);
-
-function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
-
-// Echte dag en nacht in Amsterdam: zonsopgang en -ondergang schuiven mee met de seizoenen.
-function amsHour() {
-  const parts = new Intl.DateTimeFormat("nl-NL", {timeZone: "Europe/Amsterdam", hour: "numeric", minute: "numeric", hourCycle: "h23"}).formatToParts(new Date());
-  const get = t => +(parts.find(p => p.type === t) || {value: 0}).value;
-  return get("hour") + get("minute") / 60;
-}
-let SUN = null, sunAt = 0;
-function sunTimes() {
-  if (SUN && Date.now() - sunAt < 60e3) return SUN;
-  const now = new Date(), doy = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 864e5);
-  const len = 12.2 + 4.4 * Math.sin(2 * Math.PI * (doy - 80) / 365);      // daglengte Amsterdam: ~7,8 tot ~16,6 uur
-  const summer = new Intl.DateTimeFormat("en", {timeZone: "Europe/Amsterdam", timeZoneName: "short"}).format(now).includes("+2");
-  const noon = summer ? 13.7 : 12.7;
-  SUN = {rise: noon - len / 2, set: noon + len / 2, h: amsHour()};
-  sunAt = Date.now();
-  return SUN;
-}
-// 0 = volle dag, 1 = diepe nacht; een uur schemer rond op- en ondergang
-function darkness() {
-  const {rise, set, h} = sunTimes();
-  if (h >= rise + .75 && h <= set - .75) return 0;
-  if (h <= rise - .75 || h >= set + .75) return 1;
-  return h < 12 ? (rise + .75 - h) / 1.5 : (h - (set - .75)) / 1.5;
-}
-function night() { return darkness() > .5; }
-
-function drawWater() {
-  const n = night();
-  rect(0, 0, W, H, n ? "#0d2440" : "#1e5f8f");
-  ctx.globalAlpha = .35;
-  for (let i = 0; i < 70; i++) {
-    const x = (i * 53 + tick * (i % 3 + 1) * .15) % (W + 10) - 5, y = (i * 37) % H;
-    rect(x, y, 4, 1, n ? "#2c5b8a" : "#7fc4ef");
-  }
-  ctx.globalAlpha = 1;
-}
-
-function blob(cx, cy, rx, ry, c, wob) {
-  for (let y = -ry; y <= ry; y++) {
-    const k = Math.sqrt(1 - (y * y) / (ry * ry));
-    const w = rx * k + Math.sin(y * .35 + wob);
-    rect(cx - w, cy + y, w * 2, 1, c);
-  }
-}
-
-// ------------------------------------------------------------------ de stad (pixel-Manhattan)
-const ISLE = {cx: 160, cy: 104, rx: 136, ry: 70};
-const inIsle = (x, y, m = 0) => ((x - ISLE.cx) / (ISLE.rx - m)) ** 2 + ((y - ISLE.cy) / (ISLE.ry - m)) ** 2 < 1;
-const AVENUES = [44, 92, 128, 156];          // straten van west naar oost (y)
-const STREETS = [90, 126, 196, 232, 278];   // straten van noord naar zuid (x)
-const PARK = {x: 134, y: 84, w: 52, h: 22};  // park met fontein en standbeeld in het midden
-const hash = n => { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); return ((n ^ (n >>> 15)) >>> 0) / 4294967296; };
-let FILLER = null;
-function fillers() {
-  // kleine wolkenkrabbers in de lege blokken, nooit op een afdeling, bouwplaats, park of straat
-  if (FILLER) return FILLER;
-  const taken = [...Object.values(B).filter(b => b.w), ...Object.values(P)].map(b => [b.x - 3, b.y - b.h - 6, b.w + 6, b.h + 9]);
-  taken.push([PARK.x - 2, PARK.y - 2, PARK.w + 4, PARK.h + 4], [278, 88, 42, 30], [BB.x - 2, BB.y - 2, BB.w + 4, BB.h + 8]);
-  const free = (x, y, w, h) => !taken.some(([tx, ty, tw, th]) => x < tx + tw && x + w > tx && y - h < ty + th && y > ty)
-    && !AVENUES.some(a => a > y - 4 && a < y + 4) && !STREETS.some(sx => sx > x - 3 && sx < x + w + 3);
-  FILLER = [];
-  for (let gy = 38; gy <= 172; gy += 7)
-    for (let gx = 26; gx <= 296; gx += 8) {
-      const r = hash(gx * 131 + gy * 7), w = 6 + Math.floor(r * 5), h = 8 + Math.floor(hash(gx + gy * 977) ** 1.6 * 30);
-      const x = gx + Math.floor(hash(gy * 31 + gx) * 4), y = gy;
-      if (!inIsle(x, y, 9) || !inIsle(x + w, y, 9)) continue;
-      if (!free(x, y, w, h)) continue;
-      FILLER.push({x, y, w, h, c: ["#7d7f8c", "#8c7a6b", "#6b8aa8", "#a39888", "#5d6170", "#4f7fa0", "#b0a48e"][Math.floor(r * 7)], glass: r > .7, seed: gx * 3 + gy});
-      taken.push([x - 1, y - h, w + 2, h + 2]);
-    }
-  FILLER.sort((a, b) => a.y - b.y);
-  return FILLER;
-}
-
-function drawIsland() {
-  const n = night();
-  blob(ISLE.cx, ISLE.cy, ISLE.rx, ISLE.ry, n ? "#4a4c58" : "#8d8f99", 1);           // kademuur
-  blob(ISLE.cx, ISLE.cy - 1, ISLE.rx - 4, ISLE.ry - 4, n ? "#3a3c46" : "#b9b6ad", 2); // trottoir
-  blob(ISLE.cx, ISLE.cy - 1, ISLE.rx - 8, ISLE.ry - 8, n ? "#2f313b" : "#9d9a92", 3); // stadsgrond
-  ctx.save();
-  ctx.beginPath(); ctx.ellipse(ISLE.cx, ISLE.cy - 1, ISLE.rx - 8, ISLE.ry - 8, 0, 0, Math.PI * 2); ctx.clip();
-  const road = n ? "#1c1d25" : "#3d3f4a", line = n ? "#8a7a30" : "#e8c84a";
-  for (const y of AVENUES) { rect(0, y - 3, W, 6, road); for (let x = (tick * .0) % 8; x < W; x += 8) rect(x, y, 4, 1, line); rect(0, y - 4, W, 1, n ? "#55555f" : "#d6d3ca"); rect(0, y + 3, W, 1, n ? "#55555f" : "#d6d3ca"); }
-  for (const x of STREETS) { rect(x - 2, 0, 4, H, road); for (let y = 0; y < H; y += 8) rect(x, y, 1, 3, n ? "#666" : "#f4f1e8"); }
-  // zebrapaden op de kruisingen
-  for (const y of AVENUES) for (const x of STREETS) for (let k = -2; k <= 2; k += 2) rect(x - 4, y + k, 1, 1, "#eee");
-  ctx.restore();
-  // park met fontein en standbeeld
-  rect(PARK.x - 1, PARK.y - 1, PARK.w + 2, PARK.h + 2, n ? "#3a3c46" : "#cfc9b8");
-  rect(PARK.x, PARK.y, PARK.w, PARK.h, n ? "#1f4a2a" : "#4fa64f");
-  for (let i = 0; i < 9; i++) { const x = PARK.x + 3 + (i * 17) % (PARK.w - 6), y = PARK.y + 3 + (i * 11) % (PARK.h - 6); blob(x, y, 3, 3, n ? "#173a20" : "#2f8f3f", i); }
-  rect(PARK.x, PARK.y + PARK.h / 2, PARK.w, 1, n ? "#6e6450" : "#e0d3a8"); rect(PARK.x + PARK.w / 2, PARK.y, 1, PARK.h, n ? "#6e6450" : "#e0d3a8");
-  blob(160, 95, 7, 4, n ? "#5d5a50" : "#d8d2c0", 0); blob(160, 95, 5, 3, "#5ab8ff", 0);
-  rect(159, 85, 3, 9, "#7fd1b0"); rect(157, 84, 7, 2, "#7fd1b0"); rect(162, 80, 1, 5, "#7fd1b0"); rect(161, 78, 3, 2, tick % 30 < 15 ? "#ffcc4d" : "#ffdf70");
-  // bomen langs de avenues
-  for (const y of AVENUES) for (let x = 20; x < W - 20; x += 13) {
-    const tx = x + (y % 5), ty = y - 5;
-    if (!inIsle(tx, ty, 12) || STREETS.some(sx => Math.abs(sx - tx) < 4) || (tx > PARK.x - 2 && tx < PARK.x + PARK.w + 2 && ty > PARK.y - 2 && ty < PARK.y + PARK.h + 2)) continue;
-    blob(tx, ty, 2, 2, n ? "#173a20" : "#3f9a4a", tx);
-  }
-  // achtergrondgebouwen
-  for (const f of fillers()) tower(f);
-  bridge(); billboard();
-}
-
-function tower(f) {
-  const n = night(), top = f.y - f.h;
-  rect(f.x + 1, f.y, f.w, 2, "rgba(0,0,0,.25)");
-  rect(f.x, top, f.w, f.h, f.c);
-  rect(f.x, top, 1, f.h, "rgba(255,255,255,.12)"); rect(f.x + f.w - 1, top, 1, f.h, "rgba(0,0,0,.18)");
-  if (f.glass && !n) { ctx.globalAlpha = .25; for (let k = 0; k < f.h; k += 1) rect(f.x + ((k + tick / 20) % f.w), top + k, 1, 1, "#e8f6ff"); ctx.globalAlpha = 1; }
-  if (f.h > 20) { rect(f.x + 2, top - 3, f.w - 4, 3, f.c); rect(f.x + f.w / 2, top - 6, 1, 3, "#ccc"); }   // trapsgewijs dak
-  for (let wy = top + 2; wy < f.y - 2; wy += 3)
-    for (let wx = f.x + 1; wx < f.x + f.w - 1; wx += 2) {
-      const on = n ? hash(f.seed * 97 + wx * 13 + wy * 7 + Math.floor(tick / 300)) < .55 : false;
-      rect(wx, wy, 1, 1, on ? "#ffe9a0" : n ? "#1b1e2a" : "rgba(30,40,60,.45)");
-    }
-  if (f.h > 24 && n && tick % 60 < 30) rect(f.x + f.w / 2, top - 7, 1, 1, "#ff5d6c");     // vliegtuiglampje
-}
-
-// hangbrug naar de wal in het oosten
-function bridge() {
-  const y = 103, x0 = 286, n = night();
-  rect(x0, y - 1, W - x0, 4, n ? "#3a3c46" : "#7a6f64"); rect(x0, y + 3, W - x0, 1, "rgba(0,0,0,.3)");
-  for (const tx of [296, 314]) { rect(tx, y - 16, 3, 16, n ? "#5a4f46" : "#a08a72"); rect(tx - 1, y - 17, 5, 2, n ? "#5a4f46" : "#8a7560"); }
-  ctx.strokeStyle = n ? "#8a7f70" : "#d8cbb5"; ctx.lineWidth = .6; ctx.beginPath();
-  ctx.moveTo(x0, y - 2); ctx.quadraticCurveTo(306, y - 2, 297, y - 16); ctx.moveTo(298, y - 16); ctx.quadraticCurveTo(306, y - 4, 315, y - 16);
-  ctx.moveTo(316, y - 16); ctx.quadraticCurveTo(320, y - 8, 324, y - 4); ctx.stroke();
-  for (let x = 298; x < 315; x += 2) { const k = (x - 306.5) / 8.5; rect(x, y - 4 - (1 - k * k) * -0 - (k * k) * 11, .5, (k * k) * 11 + 2, n ? "#8a7f70" : "#d8cbb5"); }
-  // auto's op de brug
-  for (let i = 0; i < 3; i++) { const x = x0 + ((tick * .25 + i * 13) % (W - x0 + 6)) - 3; rect(x, y, 3, 1, ["#ffcc4d", "#ff5d6c", "#e8e4f0"][i]); if (n) rect(x + 3, y, 1, 1, "#fff8c0"); }
-}
-
-// lichtscherm op het plein (zoals op Times Square) met de stand van de holding
-const BB = {x: 144, y: 64, w: 36, h: 13};
-function billboard() {
-  if (!S) return;
-  const {x, y, w, h} = BB;
-  rect(x - 1, y - 1, w + 2, h + 2, "#111"); rect(x, y, w, h, "#060812");
-  rect(x + 6, y + h + 1, 1, 4, "#555"); rect(x + w - 7, y + h + 1, 1, 4, "#555");
-  const t = S.total, up = t.pnl_pct >= 0;
-  const msgs = [`JP-LIBAU ${eur(t.equity_eur, 0)}`, `${up ? "▲" : "▼"} ${pct(t.pnl_pct)} SINDS START`];
-  for (const k of (S.ticker || []).slice(0, 6)) msgs.push(`${k.name.toUpperCase()} ${(k.change ?? 0) >= 0 ? "▲" : "▼"}${pct(k.change)}`);
-  const text = msgs.join("   ·   ") + "   ·   ";
-  ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
-  ctx.font = "bold 5px monospace"; ctx.textBaseline = "middle";
-  const tw = ctx.measureText(text).width, off = (tick * .35) % tw;
-  ctx.fillStyle = "#ffcc4d"; ctx.fillText(text, x + 1 - off, y + 3.5); ctx.fillText(text, x + 1 - off + tw, y + 3.5);
-  ctx.fillStyle = up ? "#5fe08a" : "#ff5d6c";
-  ctx.fillRect(x + 1, y + 7, (w - 2) * Math.min(1, Math.abs(t.pnl_pct) * 10), 1);
-  for (let i = 0; i < 6; i++) rect(x + 2 + i * 4.5, y + 9, 3, 1, (Math.floor(tick / 10) + i) % 3 ? "#ff4fd8" : "#5ab8ff");
-  ctx.restore();
-  ctx.globalAlpha = night() ? .25 : .08; blob(x + w / 2, y + h + 6, 18, 5, "#ffcc4d", 0); ctx.globalAlpha = 1;
-}
-
-// verkeer: gele taxi's en andere auto's op de straten
-function traffic() {
-  const n = night();
-  for (let i = 0; i < 18; i++) {
-    const vertical = i % 3 === 0, lane = vertical ? STREETS[i % STREETS.length] : AVENUES[i % AVENUES.length];
-    const dir = i % 2 ? 1 : -1, speed = .25 + hash(i) * .3, len = vertical ? H : W;
-    let p = (tick * speed + i * 47) % (len + 20) - 10; if (dir < 0) p = len - p;
-    const x = vertical ? lane - 1 + (dir > 0 ? 1 : -1) : p, y = vertical ? p : lane - 1 + (dir > 0 ? 1 : -1);
-    if (!inIsle(x, y, 10)) continue;
-    const c = hash(i * 7) < .55 ? "#ffcc33" : ["#e8e4f0", "#ff5d6c", "#5ab8ff", "#2a2a2a"][i % 4];
-    if (vertical) { rect(x, y, 2, 4, c); rect(x, y + (dir > 0 ? 3 : 0), 2, 1, n ? "#fff8c0" : "#333"); }
-    else { rect(x, y, 4, 2, c); rect(x + (dir > 0 ? 3 : 0), y, 1, 2, n ? "#fff8c0" : "#333"); if (c === "#ffcc33") rect(x + 1, y - 1, 2, 1, "#222"); }
-  }
-}
-
-// lucht en water: veerboten, een helikopter en de zeppelin van de holding
-function skyTraffic() {
-  const n = night();
-  for (let i = 0; i < 2; i++) {
-    const x = (tick * (.12 + i * .05) + i * 150) % (W + 40) - 20, y = i ? 172 : 14 + 0;
-    if (i === 0) continue;
-    rect(x, y, 16, 3, "#e8e4f0"); rect(x + 3, y - 3, 9, 3, "#f4a340"); rect(x + 4, y - 2, 7, 1, n ? "#ffe9a0" : "#5ab8ff");
-    ctx.globalAlpha = .4; rect(x - 6, y + 2, 6, 1, "#cfe8ff"); ctx.globalAlpha = 1;
-  }
-  { const x = 300 - (tick * .1) % (W + 60), y = 168; rect(x, y, 14, 3, "#c94a3a"); rect(x + 4, y - 3, 6, 3, "#e8e4f0"); }
-  const hx = 160 + Math.cos(tick / 140) * 110, hy = 30 + Math.sin(tick / 140) * 10;
-  rect(hx - 3, hy, 7, 3, "#2a3a5a"); rect(hx + 4, hy + 1, 6, 1, "#2a3a5a"); rect(hx + 9, hy - 1, 1, 3, "#2a3a5a");
-  rect(hx - 6 + (tick % 4), hy - 2, 13 - (tick % 4) * 2, 1, "#ccc");
-  if (n && tick % 30 < 15) rect(hx, hy + 3, 1, 1, "#ff5d6c");
-  const zx = (tick * .06) % (W + 80) - 40, zy = 22;
-  blob(zx, zy, 14, 4, "#d8d2e6", 0); rect(zx - 4, zy + 4, 8, 2, "#5e4a8a"); rect(zx + 12, zy - 3, 3, 6, "#8b4fd8");
-  ctx.fillStyle = "#2a1a00"; ctx.font = "bold 5px monospace"; ctx.textBaseline = "middle"; ctx.fillText("JP", zx - 5, zy + .5);
-}
-
-function plot(id, sd) {
-  const b = P[id];
-  if (!b) return;
-  const n = night(), t = tick;
-  const grow = Math.max(.12, Math.min(1, (sd.days || 0) / 90));       // bouwt mee met de proef
-  rect(b.x - 3, b.y - 2, b.w + 6, 4, n ? "#5a4630" : "#8a6a42");        // bouwgrond
-  for (let x = b.x - 3; x <= b.x + b.w + 3; x += 3) rect(x, b.y - 4, 1, 2, "#e8c26a"); // hekje
-  const hh = Math.round(b.h * grow), top = b.y - hh;
-  rect(b.x, top, b.w, hh, b.wall);                                     // muren tot zover gebouwd
-  for (let y = top + 2; y < b.y - 1; y += 3) rect(b.x, y, b.w, 1, "rgba(0,0,0,.12)");
-  // steigers
-  for (const x of [b.x - 2, b.x + b.w + 1]) rect(x, b.y - b.h - 4, 1, b.h + 4, "#c9a36b");
-  for (let y = b.y - b.h - 2; y < b.y; y += 5) rect(b.x - 2, y, b.w + 4, 1, "#c9a36b");
-  // kraantje met slingerende haak
-  const cx = b.x + b.w + 4, ctop = b.y - b.h - 12;
-  rect(cx, ctop, 2, b.h + 12, "#ffcc4d");
-  rect(cx - b.w + 2, ctop, b.w + 2, 2, "#ffcc4d");
-  const hx = cx - b.w / 2 + Math.sin(t / 25) * 3;
-  rect(hx, ctop + 2, 1, 6 + Math.sin(t / 18) * 2, "#ddd"); rect(hx - 1, ctop + 8 + Math.sin(t / 18) * 2, 3, 2, "#9aa");
-  if (sd.stronger) { rect(b.x + b.w / 2, top - 8, 1, 8, "#ddd"); rect(b.x + b.w / 2 + 1, top - 8, 5, 3, "#5fe08a"); }
-}
-
-function shade(hex, k) {           // k > 0 lichter, k < 0 donkerder
-  const n = parseInt(hex.slice(1), 16), f = c => Math.max(0, Math.min(255, Math.round(k > 0 ? c + (255 - c) * k : c * (1 + k))));
-  return "#" + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(f).map(c => c.toString(16).padStart(2, "0")).join("");
-}
-function win(x, y, w, h, on, alarm, glass) {
-  const c = alarm ? (tick % 20 < 10 ? "#ff5d6c" : "#5e1f1f") : on ? "#ffe9a0" : glass || (night() ? "#1b2236" : "#2c3a58");
-  rect(x, y, w, h, c);
-  if (!on && !alarm && !night()) rect(x, y, 1, 1, "rgba(255,255,255,.35)");      // glinstering
-  if (on && night()) { ctx.globalAlpha = .18; rect(x - 1, y - 1, w + 2, h + 2, "#ffe9a0"); ctx.globalAlpha = 1; }
-}
-function facade(b, top, wall) {
-  rect(b.x, top, b.w, b.h, wall);
-  rect(b.x, top, 2, b.h, shade(wall, .18)); rect(b.x + b.w - 2, top, 2, b.h, shade(wall, -.22));   // licht links, schaduw rechts
-}
-function lobby(b, color, lights) {
-  const y = b.y - 6;
-  rect(b.x, y, b.w, 6, shade(color, -.35)); rect(b.x, y - 1, b.w, 1, shade(color, .3));
-  const dx = b.x + b.w / 2 - 3;
-  rect(dx, y + 1, 6, 5, lights ? "#ffe9a0" : "#4a5a78"); rect(dx + 3, y + 1, 1, 5, shade(color, -.5));
-  rect(dx - 2, y - 2, 10, 2, "#c94a3a"); for (let i = 0; i < 10; i += 2) rect(dx - 2 + i, y - 2, 1, 2, "#f4ecd8");   // luifel
-}
-function rooftop(x, y, kind) {
-  if (kind === "tank") { rect(x, y - 5, 4, 4, "#7a5530"); rect(x - 1, y - 6, 6, 1, "#5a3a20"); rect(x, y - 1, 1, 1, "#444"); rect(x + 3, y - 1, 1, 1, "#444"); }
-  if (kind === "ac") { rect(x, y - 2, 4, 2, "#b8bcc8"); rect(x + 1, y - 2, 2, 1, "#6a6e7a"); }
-  if (kind === "dish") { const k = Math.sin(tick / 40); rect(x + 1, y - 3, 1, 3, "#999"); rect(x - 1 + k, y - 5, 4, 2, "#e8e4f0"); }
-}
-
-// Gebouwen groeien mee met het resultaat: elke 2,5% winst een verdieping erbij (max 8, binnen beeld).
-// Staat een team meer dan 3% onder de start, dan staan er steigers: er wordt aan gewerkt.
-function floors(d) { return d && d.pnl_pct > 0 ? Math.min(8, Math.floor(d.pnl_pct * 100 / 2.5)) : 0; }
-function geo(id) {
-  const b = B[id], d = DESKS.includes(id) ? desk(id) : null;
-  const room = b.y - b.h - Math.max(20, 16 + ((SIGN_AT[id] || [0, 0])[1]));     // bord en kroon blijven in beeld
-  const g = Math.min(floors(d), Math.floor(Math.max(0, room) / 3)) * 3;
-  return g ? {...b, h: b.h + g, extra: g / 3} : b;
-}
-function scaffold(b, top) {
-  const c = "#c9a36b";
-  for (const x of [b.x - 2, b.x + b.w + 1]) rect(x, top + 2, 1, b.h - 2, c);
-  for (let y = top + 4; y < b.y - 2; y += 6) { rect(b.x - 2, y, b.w + 4, 1, c); rect(b.x + b.w - 6, y - 2, 3, 2, "#e8c26a"); }
-  rect(b.x + 2, b.y - 3, 6, 2, "#ffcc4d"); for (let i = 0; i < 6; i += 2) rect(b.x + 2 + i, b.y - 3, 1, 2, "#2a1a00");   // let-op-bord
-}
-
-function building(id, d) {
-  const b = geo(id), top = b.y - b.h, t = tick, n = night();
-  const closed = d && d.status === "gesloten", alarm = d && d.status === "alarm";
-  const lit = d && !closed && (n || d.status === "aan het werk");
-  const on = (wx, wy) => lit && ((wx * 7 + wy * 3 + Math.floor(t / 40)) % 5 !== 0);
-  rect(b.x + 3, b.y, b.w, 3, "rgba(0,0,0,.28)");                    // schaduw op straat
-
-  if (id === "crypto") {                 // glazen toren met lichtkroon
-    facade(b, top, "#1f8f86");
-    for (let y = top + 2; y < b.y - 7; y += 4) for (let x = b.x + 2; x < b.x + b.w - 2; x += 3) win(x, y, 2, 3, on(x, y), alarm, n ? "#123c40" : "#4fd0c2");
-    if (!n) { ctx.globalAlpha = .22; for (let k = 0; k < b.h; k++) rect(b.x + ((k * 1.4 + t / 6) % (b.w + 10)) - 5, top + k, 3, 1, "#ffffff"); ctx.globalAlpha = 1; }
-    lobby(b, "#1f8f86", lit);
-    rect(b.x + 3, top - 8, b.w - 6, 8, "#167068"); rect(b.x + 3, top - 3, b.w - 6, 1, (t >> 3) % 2 ? "#5fe08a" : "#2bb3a3");
-    rect(b.x + 6, top - 13, b.w - 12, 5, "#145e58");
-    for (let i = 0; i < b.w - 6; i += 2) rect(b.x + 3 + i, top - 8, 1, 1, ((i + (t >> 2)) % 6) < 3 ? "#7fffe8" : "#2a6a64");
-    rect(b.x + 4, top - 2, 3, 2, "#b8bcc8"); rooftop(b.x + b.w - 8, top - 13, "dish");
-  } else if (id === "meme") {            // speelhal met lichtrand en neonletters
-    facade(b, top, "#6f35c0");
-    for (let y = top + 9; y < b.y - 8; y += 5) for (let x = b.x + 3; x < b.x + b.w - 4; x += 5) win(x, y, 3, 3, on(x, y), alarm, n ? "#2a1640" : "#9a6ae0");
-    rect(b.x + 2, top + 1, b.w - 4, 7, "#1a0b2a");
-    ctx.font = "bold 6px monospace"; ctx.textBaseline = "top"; ctx.fillStyle = t % 24 < 18 ? "#ff4fd8" : "#7fffe8";
-    ctx.fillText("MEME", b.x + b.w / 2 - 7, top + 1.5);
-    for (let i = 0; i < 2 * (b.w + b.h); i += 3) {   // knipperende lampjes rondom
-      const k = i < b.w ? [b.x + i, top] : i < b.w + b.h ? [b.x + b.w - 1, top + i - b.w] : i < 2 * b.w + b.h ? [b.x + b.w - (i - b.w - b.h), b.y - 1] : [b.x, b.y - (i - 2 * b.w - b.h)];
-      rect(k[0], k[1], 1, 1, ((i / 3 + (t >> 3)) % 2) ? "#ffcc4d" : "#5a2050");
-    }
-    lobby(b, "#6f35c0", true);
-    rect(b.x + b.w / 2 - 4, b.y - 1, 8, 2, "#c94a3a");                  // rode loper
-    rect(b.x + 3, top - 4, 5, 4, "#3a1a5a"); rect(b.x + 4, top - 7, 3, 3, t % 40 < 20 ? "#ffcc4d" : "#ff4fd8");   // dakbord
-  } else if (id === "stocks") {          // art-deco wolkenkrabber
-    facade(b, top, "#7d889f");
-    for (let x = b.x + 3; x < b.x + b.w - 2; x += 4) rect(x, top, 1, b.h - 6, shade("#7d889f", .25));   // pilasters
-    for (let y = top + 3; y < b.y - 9; y += 4) for (let x = b.x + 4; x < b.x + b.w - 3; x += 4) win(x, y, 2, 3, on(x, y), alarm);
-    // lichtkrant om de gevel
-    rect(b.x - 1, b.y - 10, b.w + 2, 3, "#060812");
-    for (let i = 0; i < b.w; i += 2) rect(b.x + i, b.y - 9, 1, 1, ((i + (t >> 2)) % 7) < 4 ? (d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a") : "#1a2a1a");
-    lobby(b, "#7d889f", lit);
-    rect(b.x + 1, b.y - 6, 2, 6, "#d8d2c0"); rect(b.x + b.w - 3, b.y - 6, 2, 6, "#d8d2c0");     // zuilen bij de ingang
-    // trapsgewijze top met gouden banden en spits
-    rect(b.x - 1, top - 2, b.w + 2, 2, "#c9a24a");
-    rect(b.x + 3, top - 10, b.w - 6, 8, "#8a95ad"); for (let x = b.x + 5; x < b.x + b.w - 4; x += 3) win(x, top - 8, 1, 4, n, false);
-    rect(b.x + 2, top - 11, b.w - 4, 1, "#c9a24a");
-    rect(b.x + 6, top - 18, b.w - 12, 7, "#97a2b8"); rect(b.x + 5, top - 19, b.w - 10, 1, "#c9a24a");
-    rect(b.x + b.w / 2 - 2, top - 24, 4, 5, "#a8b2c6"); rect(b.x + b.w / 2 - 1, top - 34, 2, 10, "#c9ccd6"); rect(b.x + b.w / 2, top - 40, 1, 6, "#e8e4f0");
-    if (n) { ctx.globalAlpha = .35; rect(b.x + 3, top - 19, b.w - 6, 9, "#ffd27a"); ctx.globalAlpha = 1; }
-    if (n && t % 50 < 25) rect(b.x + b.w / 2, top - 41, 1, 1, "#ff5d6c");
-  } else if (id === "metals") {          // klassieke bank met zuilen en fronton
-    facade(b, top, "#e6d8b0");
-    rect(b.x - 2, b.y - 3, b.w + 4, 1, "#cfc2a0"); rect(b.x - 3, b.y - 2, b.w + 6, 1, "#bfb290"); rect(b.x - 4, b.y - 1, b.w + 8, 1, "#afa280");   // trappen
-    for (let x = b.x + 2; x < b.x + b.w - 1; x += 5) { rect(x, top + 4, 2, b.h - 7, "#fff8e8"); rect(x, top + 4, 1, b.h - 7, "#ffffff"); rect(x - 1, top + 3, 4, 1, "#d8cba8"); }
-    for (let x = b.x + 4; x < b.x + b.w - 3; x += 5) win(x, top + 7, 2, 4, on(x, top), alarm);
-    ctx.fillStyle = "#d8cba8"; ctx.beginPath(); ctx.moveTo(b.x - 2, top + 3); ctx.lineTo(b.x + b.w / 2, top - 7); ctx.lineTo(b.x + b.w + 2, top + 3); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#f4ecd8"; ctx.beginPath(); ctx.moveTo(b.x + 3, top + 2); ctx.lineTo(b.x + b.w / 2, top - 4); ctx.lineTo(b.x + b.w - 3, top + 2); ctx.closePath(); ctx.fill();
-    blob(b.x + b.w / 2, top - 1, 2, 2, "#ffcc4d", 0);
-    blob(b.x + b.w / 2, b.y - 8, 5, 5, "#8a6a10", 0); blob(b.x + b.w / 2, b.y - 8, 3, 3, "#ffdf70", 0);   // kluisdeur
-    const r = t / 30; rect(b.x + b.w / 2 + Math.cos(r) * 2 - .5, b.y - 8 + Math.sin(r) * 2 - .5, 1, 1, "#7a5a0c");
-    const bars = d ? Math.min(6, d.positions.length * 3) : 0;
-    for (let i = 0; i < bars; i++) rect(b.x + b.w + 3 + (i % 3) * 4, b.y - 3 - Math.floor(i / 3) * 3, 4, 2, i % 2 ? "#e8e8f0" : "#ffcc4d");
-  } else if (id === "fx") {              // havenkantoor met klok en vlaggen
-    facade(b, top, "#2f6fc6");
-    for (let y = top + 3; y < b.y - 7; y += 4) for (let x = b.x + 2; x < b.x + b.w - 2; x += 3) win(x, y, 2, 3, on(x, y), alarm, n ? "#13284a" : "#7fb8ff");
-    lobby(b, "#2f6fc6", lit);
-    blob(b.x + b.w / 2, top - 3, 4, 4, "#f4ecd8", 0); blob(b.x + b.w / 2, top - 3, 3, 3, "#fffaf0", 0);   // klok
-    const hr = (amsHour() % 12) / 12 * Math.PI * 2 - Math.PI / 2, mn = (amsHour() % 1) * Math.PI * 2 - Math.PI / 2;
-    ctx.strokeStyle = "#222"; ctx.lineWidth = .6; ctx.beginPath(); ctx.moveTo(b.x + b.w / 2, top - 3); ctx.lineTo(b.x + b.w / 2 + Math.cos(hr) * 1.6, top - 3 + Math.sin(hr) * 1.6);
-    ctx.moveTo(b.x + b.w / 2, top - 3); ctx.lineTo(b.x + b.w / 2 + Math.cos(mn) * 2.5, top - 3 + Math.sin(mn) * 2.5); ctx.stroke();
-    const flags = [["#ae1c28", "#fff", "#21468b"], ["#b22234", "#fff", "#3c3b6e"], ["#012169", "#c8102e", "#fff"], ["#fff", "#bc002d", "#fff"], ["#d52b1e", "#fff", "#d52b1e"]];
-    flags.forEach((f, i) => { const fx = b.x + 2 + i * 7 + (i > 1 ? 10 : 0), wave = Math.sin(t / 10 + i) > 0 ? 1 : 0;
-      rect(fx, top - 9, 1, 9, "#ccc"); rect(fx + 1, top - 9 + wave * 0, 4, 1, f[0]); rect(fx + 1, top - 8, 4, 1, f[1]); rect(fx + 1, top - 7, 4 - wave, 1, f[2]); });
-    rect(b.x - 22, b.y - 2, 22, 3, "#7a5530"); for (let x = b.x - 22; x < b.x; x += 4) rect(x, b.y + 1, 1, 3, "#5a3a20");   // steiger
-    const bx = b.x - 40 + Math.sin(t / 60) * 6;
-    rect(bx, b.y + 6, 14, 3, "#e8e4f0"); rect(bx + 1, b.y + 9, 12, 1, "#9aa"); rect(bx + 6, b.y - 2, 1, 8, "#ddd"); rect(bx + 7, b.y - 2, 5, 5, "#ff5d6c");
-  } else if (id === "lab") {             // modern lab met sterrenwacht
-    facade(b, top, "#e8e4f0");
-    for (let x = b.x + 2; x < b.x + b.w - 2; x += 4) win(x, top + 4, 3, 6, on(x, top), alarm, n ? "#2a2a4a" : "#9ad0ff");
-    rect(b.x, top + 11, b.w, 1, "#b07cff");
-    lobby(b, "#c8c2dc", lit);
-    blob(b.x + b.w / 2, top - 1, 9, 6, "#cfc8e4", 0); rect(b.x + b.w / 2 - 9, top - 1, 18, 2, "#b8b0d0");
-    const slit = Math.sin(t / 120) * 4; rect(b.x + b.w / 2 + slit - 1, top - 6, 2, 5, "#2a2245");
-    rect(b.x + b.w / 2 + slit, top - 9, 1, 3, "#b07cff");
-    for (let i = 0; i < 3; i++) rect(b.x + 2 + i * 3, top - 2, 2, 1, "#2a3a6a");                          // zonnepanelen
-    rooftop(b.x + b.w - 5, top, "dish");
-  } else if (id === "academy") {         // klassieke academie: zuilen, fronton, koepel met vlag
-    const cream = "#efe3c8";
-    rect(b.x - 1, b.y - 2, b.w + 2, 2, "#cdbf9f"); rect(b.x - 2, b.y - 1, b.w + 4, 1, "#b8a888");      // trappen
-    facade(b, top + 3, cream);
-    for (let x = b.x + 1; x < b.x + b.w - 1; x += 4) { rect(x, top + 4, 2, b.h - 6, "#fffaf0"); rect(x + 2, top + 4, 1, b.h - 6, "#d8ccb0"); }  // zuilen
-    for (let x = b.x + 3; x < b.x + b.w - 3; x += 4) win(x, top + 6, 1, 4, n || on(x, top), false, n ? "#2a2440" : "#7a6a52");
-    for (let k = 0; k < 4; k++) rect(b.x + k * 2, top + 3 - k, b.w - k * 4, 1, k ? "#d8ccb0" : "#8a5a2b");   // fronton
-    blob(b.x + b.w / 2, top - 3, 4, 3, "#6fa58a", 0); rect(b.x + b.w / 2 - 4, top - 1, 8, 1, "#4f7f68");     // koperen koepel
-    rect(b.x + b.w / 2, top - 11, 1, 6, "#ddd");
-    const wave = Math.sin(tick / 9) > 0 ? 1 : 0; rect(b.x + b.w / 2 + 1, top - 11, 4, 3 - wave, "#b07cff");
-    rect(b.x + b.w / 2 + 2, top - 10, 2, 1, "#ffcc4d");                                                 // vlag met boekje
-  } else if (id === "risk") {            // vuurtoren-wachttoren met rood-witte banden
-    facade(b, top, "#b84a4a");
-    for (let y = top + 6; y < b.y - 6; y += 8) rect(b.x, y, b.w, 3, "#f4ecd8");
-    for (let y = top + 3; y < b.y - 8; y += 8) win(b.x + b.w / 2 - 1, y, 2, 2, n, alarm);
-    rect(b.x - 2, top - 2, b.w + 4, 2, "#3a3550"); for (let x = b.x - 2; x < b.x + b.w + 2; x += 2) rect(x, top - 4, 1, 2, "#3a3550");   // galerij
-    rect(b.x + 2, top - 10, b.w - 4, 6, n ? "#fff4c0" : "#cfe8ff"); rect(b.x + 1, top - 12, b.w - 2, 2, "#5e1f1f");
-    rect(b.x + b.w / 2, top - 15, 1, 3, "#5e1f1f");
-    rect(b.x + b.w / 2 - 1, b.y - 5, 3, 5, "#2a1a10");
-  } else {
-    facade(b, top, b.wall);
-  }
-  if (b.extra) for (let k = 0; k < b.extra; k++) rect(b.x, top + 1 + k * 3, b.w, 0.5, "rgba(255,255,255,.18)");   // nieuwe verdiepingen
-  if (d && d.pnl_pct < -.03) scaffold(b, top);
-  extras(id, b, top, d);
-  if (alarm && t % 30 < 15) { ctx.strokeStyle = "#ff5d6c"; ctx.lineWidth = 1; ctx.strokeRect(b.x - 4.5, top - 7.5, b.w + 9, b.h + 11); }
-}
-
-function extras(id, b, top, d) {
-  const t = tick;
-  if (id === "crypto") {               // draaiende munt boven de lichtkroon
-    rect(b.x + b.w / 2, top - 18, 1, 5, "#ddd");
-    const w = Math.abs(Math.cos(t / 15)) * 6 + 1;
-    rect(b.x + b.w / 2 + .5 - w / 2, top - 24, w, 6, "#ffcc4d"); rect(b.x + b.w / 2 + .5 - w / 4, top - 22, Math.max(1, w / 2), 2, "#ffe9a0");
-  }
-  if (id === "meme") {                 // neonbord + waarschuwing
-    rect(b.x - 8, b.y - 10, 6, 6, "#ffcc4d"); rect(b.x - 6, b.y - 9, 2, 3, "#2a1a00"); rect(b.x - 6, b.y - 5, 2, 1, "#2a1a00");
-  }
-  if (id === "stocks") {               // vlag aan de spits: groen of rood
-    rect(b.x + b.w / 2 + 1, top - 33, 5, 3, d && d.pnl_pct < 0 ? "#ff5d6c" : "#5fe08a");
-  }
-  if (id === "risk" && S && S.risk && typeof S.risk.exposure === "number") {
-    // kantoortje van de Risicodirecteur tegen de toren, met een meter: hoeveel crypto en memes in de markt
-    const ax = b.x - 15, ay = b.y, e = S.risk.exposure;
-    rect(ax + 2, ay, 14, 2, "rgba(0,0,0,.25)");
-    rect(ax, ay - 11, 15, 11, "#d8d2e6"); rect(ax - 1, ay - 13, 17, 3, "#5e1f1f");
-    rect(ax + 6, ay - 5, 3, 5, "#2a1a10");
-    rect(ax + 1, ay - 10, 13, 4, "#1b1630");                                   // meter
-    const ang = Math.PI * (1 - e) + Math.sin(tick / 25) * .04;
-    for (let i = 0; i <= 6; i++) { const a = Math.PI * i / 6; rect(ax + 7.5 - Math.cos(a) * 5, ay - 6.5 - Math.sin(a) * 3, 1, 1, i < 2 ? "#ff5d6c" : i < 4 ? "#ffb347" : "#5fe08a"); }
-    ctx.strokeStyle = "#ffe9a0"; ctx.lineWidth = .8; ctx.beginPath();
-    ctx.moveTo(ax + 7.5, ay - 6.5); ctx.lineTo(ax + 7.5 - Math.cos(ang) * 4.5, ay - 6.5 - Math.sin(ang) * 2.8); ctx.stroke();
-  }
-  if (id === "risk") {                 // baken: groen of rood
-    const bad = S && (S.kill || S.desks.some(x => x.status === "alarm"));
-    const c = bad ? (t % 20 < 10 ? "#ff5d6c" : "#7a1f1f") : (t % 60 < 50 ? "#5fe08a" : "#2f7a4a");
-    rect(b.x + 4, top - 9, 4, 4, c);
-    if (bad) { ctx.globalAlpha = .25; blob(b.x + 6, top - 7, 14, 10, "#ff5d6c", 0); ctx.globalAlpha = 1; }
-  }
-}
-
-// kleine medewerkers die tussen het plein en hun gebouw lopen
-function workers() {
-  for (const id of DESKS) {
-    const d = desk(id), b = B[id];
-    if (!d) continue;
-    const door = [b.x + b.w / 2, b.y + 1], hq = [160, 102];
-    const n = d.status === "aan het werk" ? 3 : d.status === "wacht af" ? 2 : 0;
-    for (let i = 0; i < n; i++) {
-      const p = ((tick / 4 + i * 37 + id.length * 13) % 100) / 100, t = p < .5 ? p * 2 : 2 - p * 2;
-      const x = door[0] + (hq[0] - door[0]) * t * .7, y = door[1] + (hq[1] - door[1]) * t * .7;
-      const bob = Math.floor(tick / 6 + i) % 2;
-      rect(x - 1, y - 6 + bob, 3, 2, "#f2c9a0"); rect(x - 1, y - 4 + bob, 3, 3, b.wall); rect(x - 1, y - 1, 1, 1, "#222"); rect(x + 1, y - 1, 1, 1, "#222");
-    }
-    if (d.status === "gesloten" && tick % 90 < 60) {      // slapend team
-      ctx.fillStyle = "#e8e4f0"; ctx.font = "6px monospace"; ctx.fillText("z", b.x + b.w + 1, b.y - b.h - 2 - (tick % 90) / 15);
-    }
-  }
-}
-
-// Het weer volgt het echte marktweer: zon als bitcoin en de beurs boven hun 200-dagengemiddelde staan.
-function sky() {
-  const mw = (S && S.market_weather) || [];
-  const bad = mw.filter(w => !w.ok).length;
-  const dd = S ? S.total.drawdown : 0;
-  if (dd > 0.05) return "storm";
-  if (!mw.length) return "helder";
-  return bad === 0 ? "zon" : bad === mw.length ? "regen" : "wolken";
-}
-
-function cloud(x, y, k) {
-  blob(x, y, 12 * k, 4 * k, "rgba(235,235,245,.85)", 0); blob(x + 8 * k, y - 3 * k, 8 * k, 4 * k, "rgba(245,245,250,.9)", 1);
-}
-
-function weather() {
-  const el = document.getElementById("weather"), kind = sky(), n = night();
-  const vix = S && S.vix, scary = vix != null && vix >= 30;
-  const dk = darkness(), {rise, set, h} = sunTimes();
-  // zon en maan lopen in een boog over de hemel
-  const dayP = Math.min(1, Math.max(0, (h - rise) / (set - rise)));
-  const sx = 20 + dayP * 280, sy = 16 - Math.sin(dayP * Math.PI) * 8;      // langs de bovenrand, boven het water
-  if (dk < .9 && kind !== "regen" && kind !== "storm") {
-    const r = 8 + Math.sin(tick / 30), warm = dk > .1 || dayP < .12 || dayP > .88;
-    ctx.globalAlpha = .9; blob(sx, sy, r, r, warm ? "#ff9a3c" : "#ffdf5a", 0); ctx.globalAlpha = .22;
-    for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2 + tick / 200; rect(sx + Math.cos(t) * 15, sy + Math.sin(t) * 15, 2, 2, "#ffdf5a"); }
-    ctx.globalAlpha = 1;
-  }
-  if (dk > 0) {
-    // schemer: eerst oranje-roze, dan diepblauw
-    const dusk = Math.sin(Math.min(1, dk) * Math.PI);
-    if (dusk > .05) { ctx.fillStyle = `rgba(255,120,60,${(.16 * dusk).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
-    ctx.fillStyle = `rgba(8,10,40,${(.34 * dk).toFixed(3)})`; ctx.fillRect(0, 0, W, H);
-  }
-  if (n) {
-    for (let i = 0; i < 40; i++) {                        // sterren, alleen boven het water
-      const x = (i * 71) % W, y = (i * 23) % 40;
-      if ((x - 160) ** 2 / 136 ** 2 + (y - 104) ** 2 / 70 ** 2 < 1) continue;
-      ctx.globalAlpha = .4 + .4 * Math.sin(tick / 20 + i); rect(x, y, 1, 1, "#fff8d8");
-    }
-    ctx.globalAlpha = 1;
-    const nightP = h >= set ? (h - set) / (24 - set + rise) : (h + 24 - set) / (24 - set + rise);
-    const mx = 20 + nightP * 280, my = 16 - Math.sin(nightP * Math.PI) * 8;
-    blob(mx, my, 6, 6, "#f4ecd8", 0); blob(mx + 3, my - 2, 5, 5, "#0d2440", 0);
-    lamps();
-  }
-  if (kind === "wolken" || kind === "regen" || kind === "storm") {
-    for (let i = 0; i < (kind === "wolken" ? 3 : 6); i++) cloud((i * 70 + tick * .08) % (W + 40) - 20, 14 + (i % 3) * 8, kind === "wolken" ? 1 : 1.3);
-  }
-  if (kind === "regen" || kind === "storm") {
-    ctx.fillStyle = kind === "storm" ? "rgba(20,20,40,.35)" : "rgba(30,40,70,.18)"; ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = .6;
-    const drops = kind === "storm" ? 120 : 60;
-    for (let i = 0; i < drops; i++) { const x = (i * 29 + tick * 2) % W, y = (i * 17 + tick * 4) % H; rect(x, y, 1, 3, "#9fc4ff"); }
-    ctx.globalAlpha = 1;
-  }
-  if ((kind === "storm" || scary) && tick % 240 < 4) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillRect(0, 0, W, H); }
-  const mw = (S && S.market_weather) || [];
-  const parts = mw.map(w => `${w.name}: ${w.ok ? "zon" : "regen"}`);
-  if (vix != null) parts.push(`angstindex ${Math.round(vix)}${scary ? " (onweer!)" : ""}`);
-  el.textContent = kind === "storm" ? `Storm: ${pct(S.total.drawdown)} onder de top. De Wachttoren bewaakt de grens.`
-    : (parts.length ? "Marktweer · " + parts.join(" · ") : n ? "Nacht op het eiland." : "Helder weer op het eiland.");
-  el.title = mw.map(w => w.text).join("\n");
-}
-
-// lantaarns langs het plein en het licht van de Wachttoren, alleen 's nachts
-function lamps() {
-  for (const [x, y] of [[146, 92], [174, 92], [146, 109], [174, 109], [120, 100], [200, 100]]) {
-    ctx.globalAlpha = .18; blob(x, y + 2, 7, 4, "#ffd27a", 0); ctx.globalAlpha = 1;
-    rect(x, y - 6, 1, 8, "#3a3550"); rect(x - 1, y - 8, 3, 2, "#ffe9a0");
-  }
-  const b = B.risk, ox = b.x + 6, oy = b.y - b.h - 7, a = tick / 60;
-  ctx.globalAlpha = .13; ctx.fillStyle = "#fff4c0";
-  ctx.beginPath(); ctx.moveTo(ox, oy);
-  ctx.lineTo(ox + Math.cos(a - .12) * 160, oy + Math.sin(a - .12) * 160);
-  ctx.lineTo(ox + Math.cos(a + .12) * 160, oy + Math.sin(a + .12) * 160);
-  ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-}
-
-// ------------------------------------------------------------------ muntjes bij trades
-const coins = [];
-function spawnCoins(id, buy, n = 8) {
-  const b = B[id]; if (!b) return;
-  const door = [b.x + b.w / 2, b.y - 4], hq = [160, 94];
-  const [from, to] = buy ? [hq, door] : [door, hq];
-  for (let i = 0; i < n; i++) coins.push({from, to, t: -i * 6, life: 70});
-}
-// Geldtransport: bij elke koop rijdt een waardetransport van het hoofdkwartier naar de afdeling,
-// bij een verkoop terug. Over de echte straten: langs de park-straat, de avenue en de oprit.
-const trucks = [];
-function route(id) {
-  const b = B[id], dx = Math.round(b.x + b.w / 2), av = AVENUES.find(a => a >= b.y + 2) || AVENUES[AVENUES.length - 1];
-  const sx = dx < 160 ? 126 : 196;
-  return [[sx, 100], [sx, av], [dx, av], [dx, b.y + 1]];
-}
-function sendTruck(id, buy, delay = 0) {
-  if (!B[id] || trucks.length >= 6) return spawnCoins(id, buy);
-  const r = route(id);
-  trucks.push({id, buy, pts: buy ? r : [...r].reverse(), t: -delay});
-}
-function drawTrucks() {
-  const n = night();
-  for (let i = trucks.length - 1; i >= 0; i--) {
-    const k = trucks[i]; k.t++;
-    if (k.t < 0) continue;
-    let dist = k.t * .35, j = 0;
-    const len = (a, c) => Math.abs(c[0] - a[0]) + Math.abs(c[1] - a[1]);
-    while (j < k.pts.length - 1 && dist > len(k.pts[j], k.pts[j + 1])) { dist -= len(k.pts[j], k.pts[j + 1]); j++; }
-    if (j >= k.pts.length - 1) {          // aangekomen: muntjes uitladen
-      const [ex, ey] = k.pts[k.pts.length - 1];
-      for (let c = 0; c < 5; c++) coins.push({from: [ex, ey - 2], to: [ex + (c - 2) * 3, ey - 4], t: -c * 4, life: 28});
-      trucks.splice(i, 1); continue;
-    }
-    const a = k.pts[j], c = k.pts[j + 1], L = len(a, c), p = L ? dist / L : 1;
-    const horiz = a[1] === c[1], dir = horiz ? Math.sign(c[0] - a[0]) : Math.sign(c[1] - a[1]);
-    const x = a[0] + (c[0] - a[0]) * p + (horiz ? 0 : dir), y = a[1] + (c[1] - a[1]) * p + (horiz ? dir : 0);
-    const body = "#3d5a45", cab = "#5f8a6a", gold = "#ffcc4d";
-    if (horiz) {
-      rect(x - 4, y - 2, 8, 3, body); rect(x - 4, y - 1, 8, 1, gold);
-      rect(dir > 0 ? x + 2 : x - 4, y - 2, 2, 3, cab); rect(dir > 0 ? x + 3 : x - 4, y - 2, 1, 1, "#9ad0ff");
-      rect(x - 3, y + 1, 1, 1, "#111"); rect(x + 2, y + 1, 1, 1, "#111");
-      if (n) rect(dir > 0 ? x + 4 : x - 5, y - 1, 1, 1, "#fff8c0");
-    } else {
-      rect(x - 1, y - 4, 3, 8, body); rect(x, y - 4, 1, 8, gold);
-      rect(x - 1, dir > 0 ? y + 2 : y - 4, 3, 2, cab);
-      if (n) rect(x, dir > 0 ? y + 4 : y - 5, 1, 1, "#fff8c0");
-    }
-    if (tick % 16 < 8) rect(x, y - (horiz ? 3 : 5), 1, 1, "#ffa040");          // zwaailicht
-  }
-}
-function drawCoins() {
-  for (let i = coins.length - 1; i >= 0; i--) {
-    const c = coins[i]; c.t++;
-    if (c.t < 0) continue;
-    if (c.t > c.life) { coins.splice(i, 1); continue; }
-    const p = c.t / c.life, x = c.from[0] + (c.to[0] - c.from[0]) * p, y = c.from[1] + (c.to[1] - c.from[1]) * p - Math.sin(p * Math.PI) * 18;
-    const w = Math.abs(Math.cos(c.t / 4)) * 3 + 1;
-    rect(x - w / 2, y - 2, w, 4, "#ffcc4d"); rect(x - w / 2, y - 2, Math.max(1, w / 3), 1, "#fff2b0");
-  }
-}
-
-// ------------------------------------------------------------------ tekstballonnen
-function catchphrase(d) {
-  const last = S.feed.find(f => f.desk === d.id && (f.kind === "trade" || f.kind === "refused" || f.kind === "reflection"));
-  const why = last ? (last.why || last.detail || "") : "";
-  let m;
-  if (/noodrem/.test(why)) return "Noodrem! Het marktweer is slecht, wij staan droog.";
-  if ((m = why.match(/RSI \((\d+)\)/)) && last.text.includes("koopt")) return `RSI ${m[1]}, ik koop de dip!`;
-  if (/terugkeer klaar/.test(why)) return "Herstel binnen, winst pakken!";
-  if (/trend omhoog/.test(why)) return "De trend is omhoog, wij gaan mee!";
-  if (/trend omlaag/.test(why)) return "Trend omlaag. Wij stappen eruit.";
-  if (/uitbraak:/.test(why)) return "Uitbraak! Nieuwe top in zicht.";
-  if (/momentum:/.test(why)) return "Momentum! Stijgers blijven stijgen.";
-  if (/herverdeling/.test(why)) return "Even herverdelen, alles weer in balans.";
-  if (last && last.kind === "reflection") return "Terugblik gedaan. Weer wat geleerd!";
-  if (last && last.kind === "refused") return "De Wachttoren zei nee. Veiligheid eerst.";
-  if (d.mode === "vasthouden") return d.positions.length ? "Wij houden vast. Geduld wint." : "Klaar om in te stappen.";
-  if (d.weather && /slecht/.test(d.weather)) return "We wachten op beter weer.";
-  if (d.status === "gesloten") return "Zzz... de markt is dicht.";
-  return d.positions.length ? "Alles onder controle." : "Wij wachten op een kans.";
-}
-let bubbleAt = 0, bubbleIdx = 0;
-function bubbles() {
-  const box = document.getElementById("bubbles");
-  if (!S || Date.now() - bubbleAt < 6000) return;
-  bubbleAt = Date.now();
-  const d = S.desks[bubbleIdx++ % S.desks.length], b = geo(d.id);
-  const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 7) * scale - 34;
-  box.innerHTML = `<div class="bubble" style="left:${x}px;top:${y}px">${esc(catchphrase(d))}</div>`;
-}
-
-function frame() {
-  tick++;
-  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();      // niets buiten de wereld tekenen (geen sporen)
-  drawWater(); drawIsland(); traffic();
-  for (const sd of shadows()) plot(sd.id, sd);
-  const order = ["meme", "crypto", "stocks", "risk", "lab", "academy", "metals", "fx"].sort((a, b) => B[a].y - B[b].y);
-  for (const id of order) building(id, desk(id));
-  workers(); drawTrucks(); drawCoins(); skyTraffic(); weather();
-  ctx.restore();
-  if (tick % 15 === 0) { placeSigns(); bubbles(); }
-  requestAnimationFrame(frame);
-}
-
-function resize() {
-  const r = cv.parentElement.getBoundingClientRect();
-  cv.width = r.width; cv.height = r.height;
-  scale = Math.max(1, Math.min(r.width / W, r.height / H));
-  offX = (r.width - W * scale) / 2; offY = (r.height - H * scale) / 2;
-  ctx.setTransform(scale, 0, 0, scale, offX, offY);
-  ctx.imageSmoothingEnabled = false;
-  placeSigns();
-}
-
-// borden iets hoger of opzij, zodat kronen, spitsen en vlaggen zichtbaar blijven
-const SIGN_AT = {crypto: [-4, 18], meme: [0, 9], stocks: [-30, -6], fx: [0, 10], lab: [-14, 6], risk: [-8, 14], metals: [0, -33], academy: [0, 12]};
-function placeSigns() {
-  const box = document.getElementById("labels");
-  if (!S) return;
-  const html = [];
-  const small = window.innerWidth < 600;   // telefoon: korte borden, anders vallen ze over elkaar
-  for (const id of [...DESKS, "risk", "lab", "academy"]) {
-    const b = geo(id), d = desk(id);
-    const [dx, dy] = SIGN_AT[id] || [0, 0];
-    const x = offX + (b.x + b.w / 2 + dx) * scale, y = offY + Math.max(17, b.y - b.h - 7 - dy) * scale;   // bord altijd in beeld
-    let inner;
-    if (d) inner = `<b>${esc(b.label)}</b><span class="lv">Lv ${d.level}</span> · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
-    else if (id === "risk") {
-      const e = S.risk && typeof S.risk.exposure === "number" ? S.risk.exposure : null;
-      inner = `<b>Wachttoren</b>${S.kill ? '<span class="dn">noodstop aan</span>' : S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">alles veilig</span>'}`
-        + (e !== null && e < 1 ? ` · <span class="dn" title="Risicodirecteur: zoveel crypto en memes in de markt">${Math.round(e * 100)}% in</span>` : "");
-    }
-    else if (id === "academy") {
-      const A = S.academy;
-      inner = `<b>Academie</b>${A ? `<span class="mute">${A.forecasts} voorspellingen</span>` : '<span class="mute">opent na de volgende ronde</span>'}`;
-    }
-    else {
-      const n = labAlerts24h();
-      inner = `<b>Onderzoekslab</b>${n ? `<span class="dn">${n} melding${n > 1 ? "en" : ""}</span>` : '<span class="mute">rustig</span>'}`;
-    }
-    if (small) {
-      if (d) inner = `<b>${esc(b.label)}</b><span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span>`;
-      else if (id === "academy") inner = `<b>Academie</b><span class="mute">${S.academy ? S.academy.forecasts : 0} voorsp.</span>`;
-      else if (id === "risk") inner = `<b>Wachttoren</b>${S.kill || S.desks.some(x => x.status === "alarm") ? '<span class="dn">alarm</span>' : '<span class="up">veilig</span>'}`;
-      else { const n = labAlerts24h(); inner = `<b>Lab</b>${n ? `<span class="dn">${n} meld.</span>` : '<span class="mute">rustig</span>'}`; }
-    }
-    const alarm = d && d.status === "alarm";
-    html.push(`<div class="sign ${selected === id ? "sel" : ""} ${alarm ? "alarm" : ""}" data-id="${id}" style="left:${x}px;top:${y}px">${inner}</div>`);
-  }
-  for (const sd of small ? [] : shadows()) {   // op de telefoon laten de steigers zien dat er gebouwd wordt
-    const b = P[sd.id];
-    if (!b) continue;
-    const x = offX + (b.x + b.w / 2) * scale, y = offY + (b.y - b.h - 13) * scale;
-    const r = sd.since_start == null ? "" : ` · <span class="${cls(sd.since_start)}">${pct(sd.since_start)}</span>`;
-    html.push(`<div class="sign shadow" data-id="lab" data-shadow="1" style="left:${x}px;top:${y}px"><b>${esc(b.label)}</b><span class="mute">in aanbouw</span>${r}</div>`);
-  }
-  box.innerHTML = html.join("");
-  box.querySelectorAll(".sign").forEach(el => el.onclick = () => el.dataset.shadow ? openShadow() : select(el.dataset.id));
-}
-
-cv.addEventListener("click", ev => {
-  const r = cv.getBoundingClientRect();
-  const x = (ev.clientX - r.left - offX) / scale, y = (ev.clientY - r.top - offY) / scale;
-  for (const id of Object.keys(B)) {
-    const b = geo(id);
-    if (b.w && x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - b.h - 8 && y <= b.y + 3) return select(id);
-    if (id === "risk" && x >= b.x - 17 && x < b.x && y >= b.y - 14 && y <= b.y + 2) return select("risk");
-  }
-  for (const b of Object.values(P)) if (x >= b.x - 4 && x <= b.x + b.w + 8 && y >= b.y - b.h - 12 && y <= b.y + 3) return openShadow();
-  if (Math.hypot(x - 160, y - 100) < 16) return select("hq");
-});
-
-// ------------------------------------------------------------------ panelen
-function spark(canvas, pts, base) {
-  const c = canvas.getContext("2d"), w = canvas.width = canvas.clientWidth, h = canvas.height = 90;
-  c.fillStyle = "#0b0816"; c.fillRect(0, 0, w, h);
-  if (!pts || pts.length < 2) { c.fillStyle = "#b9ad93"; c.font = "11px monospace"; c.fillText("nog te weinig rondes voor een grafiek", 8, 48); return; }
-  const v = pts.map(p => p[1]), lo = Math.min(...v, base), hi = Math.max(...v, base), pad = (hi - lo) * .1 || 1;
-  const Y = x => h - 6 - (x - lo + pad) / (hi - lo + 2 * pad) * (h - 12);
-  c.fillStyle = "#3a2f63"; for (let x = 0; x < w; x += 4) c.fillRect(x, Math.round(Y(base)), 2, 1);
-  c.fillStyle = v[v.length - 1] >= base ? "#5fe08a" : "#ff5d6c";
-  for (let i = 0; i < w; i += 2) { const k = Math.min(v.length - 1, Math.round(i / w * (v.length - 1))); c.fillRect(i, Math.round(Y(v[k])), 2, 2); }
-}
-
-function jarvisStatus() {
-  const h = (S.jarvis && S.jarvis.health) || {status: "ok", issues: []};
-  const issues = [...h.issues];
-  const ageH = (Date.now() - new Date(S.generated_at)) / 3600e3;
-  if (!S.demo && ageH > 2.5) issues.unshift({level: "alarm", text: `de laatste ronde is ${Math.round(ageH)} uur geleden: de bot draait niet`});
-  const status = issues.some(i => i.level === "alarm") ? "alarm" : issues.length ? "let op" : "ok";
-  return {status, issues};
-}
-function jarvisCard() {
-  const b = S.jarvis && S.jarvis.briefing;
-  if (!b) return "";
-  const h = jarvisStatus();
-  const c = h.status === "alarm" ? "alarm" : h.status === "ok" ? "" : "warn";
-  return `<div class="jarvis-card"><div class="head"><div class="arc ${c}"></div>
-    <div><b class="px">JARVIS</b><div class="hint">${h.status === "ok" ? "alle systemen normaal" : esc(h.status)} · ${when(b.at)}</div></div></div>
-    <div>${esc(b.hello)} Phil.</div>
-    <ul>${b.lines.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
-    ${h.issues.length ? `<div class="${c === "alarm" ? "dn" : ""}">${h.issues.map(i => "⚠ " + esc(i.text)).join("<br>")}</div>` : ""}
-    <button onclick="speak()">🔊 Voorlezen</button></div>`;
-}
-function speak() {
-  const b = S.jarvis && S.jarvis.briefing;
-  if (!b || !window.speechSynthesis) return toast("Voorlezen kan niet in deze browser");
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(b.speech.replace(/€/g, "euro "));
-  u.lang = "nl-NL"; u.rate = 1.02;
-  const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith("nl"));
-  if (v) u.voice = v;
-  speechSynthesis.speak(u);
-}
-let WI = {series: "Hele holding", amount: 1000, start: 0};
-const wiDate = s => new Date(s).toLocaleDateString("nl-NL", {day: "numeric", month: "short", year: "numeric"});
-function whatifCard() {
-  const W = S.whatif;
-  if (!W || !W.series || !Object.keys(W.series).length) return "";
-  if (!W.series[WI.series]) WI.series = Object.keys(W.series)[0];
-  const n = W.series[WI.series].length;
-  WI.start = Math.min(WI.start, n - 2);
-  return `<h3 class="px">Wat als?</h3><div class="card whatif">
-    <div class="row"><select id="wi-s" onchange="WI.series=this.value;WI.start=0;whatifUpdate(true)">${Object.keys(W.series).map(k => `<option ${k === WI.series ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
-      <span>€ <input type="number" min="10" step="100" value="${WI.amount}" style="width:90px" oninput="WI.amount=Math.max(1,+this.value||1000);whatifUpdate()"></span></div>
-    <div class="hint" style="margin:6px 0 2px">Ingestapt op <b id="wi-d"></b></div>
-    <input id="wi-r" type="range" min="0" max="${n - 2}" value="${WI.start}" oninput="WI.start=+this.value;whatifUpdate()">
-    <div id="wi-res"></div>
-    <canvas class="spark" id="wi"></canvas>
-    <div class="hint legend"><i style="background:#d9a521"></i>huidige regels<i style="background:#8a95ad"></i>vasthouden</div>
-    <div class="hint" style="margin-top:4px">Teruggerekend met de regels van nu op echte koersen, na kosten. Een terugblik, geen belofte.</div></div>`;
-}
-function whatifUpdate(reset) {
-  const el = document.getElementById("wi");
-  if (!el || !S.whatif || !S.whatif.series) return;
-  const all = S.whatif.series[WI.series];
-  if (reset) { const r = document.getElementById("wi-r"); r.max = all.length - 2; r.value = WI.start; }
-  const pts = all.slice(WI.start), p0 = pts[0], p1 = pts[pts.length - 1];
-  const mine = WI.amount * p1[1] / p0[1], hold = WI.amount * p1[2] / p0[2];
-  let peak = 0, dd = 0;
-  for (const p of pts) { peak = Math.max(peak, p[1]); dd = Math.max(dd, 1 - p[1] / peak); }
-  document.getElementById("wi-d").textContent = `${wiDate(p0[0])} (tot ${wiDate(p1[0])})`;
-  document.getElementById("wi-res").innerHTML = `
-    <div class="row"><span>Met de huidige regels</span><b class="${cls(mine / WI.amount - 1)}">${eur(mine, 0)} (${pct(mine / WI.amount - 1)})</b></div>
-    <div class="row"><span>Gewoon vasthouden</span><span class="${cls(hold / WI.amount - 1)}">${eur(hold, 0)} (${pct(hold / WI.amount - 1)})</span></div>
-    <div class="row"><span>Grootste tussentijdse daling</span><span class="dn">${pct(-dd)}</span></div>`;
-  const c = el.getContext("2d"), w = el.width = el.clientWidth, h = el.height = 90;
-  c.fillStyle = "#0b0816"; c.fillRect(0, 0, w, h);
-  const a = pts.map(p => p[1] / p0[1]), b = pts.map(p => p[2] / p0[2]);
-  const lo = Math.min(...a, ...b, 1), hi = Math.max(...a, ...b, 1), pad = (hi - lo) * .1 || .01;
-  const Y = x => h - 6 - (x - lo + pad) / (hi - lo + 2 * pad) * (h - 12);
-  c.fillStyle = "#3a2f63"; for (let x = 0; x < w; x += 4) c.fillRect(x, Math.round(Y(1)), 2, 1);
-  for (const [v, col] of [[b, "#8a95ad"], [a, "#d9a521"]]) {
-    c.fillStyle = col;
-    for (let i = 0; i < w; i += 2) { const k = Math.min(v.length - 1, Math.round(i / w * (v.length - 1))); c.fillRect(i, Math.round(Y(v[k])), 2, 2); }
-  }
-}
-
-// Coach per afdeling: vuistregels uit de vakkennis, getoetst op onze eigen koersen.
-const COACH_V = {"klopt": ["up", "✓ klopt"], "klopt niet": ["dn", "✗ klopt niet"], "deels": ["mute", "± deels"], "niet aangetoond": ["mute", "? niet aangetoond"], "te weinig data": ["mute", "… te weinig data"]};
-function coachCard(id) {
-  const C = S.coach;
-  if (!C || !C.desks[id]) return "";
-  const rules = C.desks[id];
-  const row = r => { const [c, label] = COACH_V[r.verdict] || ["mute", r.verdict];
-    return `<div class="card hint"><div class="row"><b>${r.from ? "🤝 " : ""}${esc(r.title)}</b><span class="${c}" style="white-space:nowrap">${label}</span></div>
-      ${r.from ? `<div class="mute">Tip van ${esc(C.coaches[r.from] || r.from)}</div>` : ""}<div>${esc(r.text || "")}</div><div class="mute" style="margin-top:2px">${esc(r.why)}</div></div>`; };
-  return `<h3 class="px">${esc(C.coaches[id] || "Coach")}</h3>
-  <div class="hint">De coach kent de vuistregels van deze markt, maar gelooft ze pas als onze eigen koersen ze steunen.</div>
-  ${rules.map(row).join("")}`;
-}
-function teamCard() {
-  const items = ((S.lessons && S.lessons.items) || []).filter(x => x.topic === "teamoverleg" || x.topic === "samenwerking").slice(0, 3);
-  if (!S.coach) return "";
-  const confirmed = Object.values(S.coach.desks).flat().filter(r => !r.from && r.verdict === "klopt").length;
-  const total = Object.values(S.coach.desks).flat().filter(r => !r.from).length;
-  return `<h3 class="px">Teamoverleg</h3><div class="card hint">
-    <div class="row"><span>Vuistregels getoetst</span><span>${total}</span></div>
-    <div class="row"><span>Bevestigd door onze koersen</span><span class="up">${confirmed}</span></div>
-    ${items.map(x => `<div style="margin-top:6px">${x.topic === "samenwerking" ? "🤝" : "🗣️"} ${when(x.ts)} · ${esc(x.text)}</div>`).join("") || '<div style="margin-top:6px">Het eerste teamoverleg is na de volgende ronde.</div>'}
-    <div class="mute" style="margin-top:6px">Elke week deelt elke coach zijn sterkste les. Gebeurt er iets dat een andere afdeling raakt, dan waarschuwt de coach die afdeling meteen.</div></div>`;
-}
-
-function hqPanel() {
-  const t = S.total;
-  const ranked = [...S.desks].sort((a, b) => b.pnl_pct - a.pnl_pct);
-  return `<h2 class="px">Hoofdkwartier</h2><div class="mute">${esc(S.name)} · alles met nepgeld</div>
-  ${jarvisCard()}
-  <div class="card"><div class="big">${eur(t.equity_eur)}</div>
-    <div class="row"><span>Resultaat</span><span class="${cls(t.pnl_pct)}">${eur(t.pnl_eur)} (${pct(t.pnl_pct)})</span></div>
-    <div class="row"><span>Koop-en-houd zou zijn</span><span>${eur(t.benchmark_eur)}</span></div>
-    <div class="row"><span>Onder de top</span><span>${pct(-t.drawdown)}</span></div>
-    <canvas class="spark" id="sp"></canvas></div>
-  <h3 class="px">Ranglijst afdelingen</h3>
-  <table><tr><th>Afdeling</th><th class="r">Potje</th><th class="r">Resultaat</th><th class="r">K&H</th></tr>
-  ${ranked.map(d => `<tr style="cursor:pointer" onclick="select('${d.id}')"><td>${esc(d.name)}</td><td class="r">${eur(d.equity_eur, 0)}</td>
-    <td class="r ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r ${cls(d.benchmark_eur == null ? null : d.benchmark_eur / d.capital_eur - 1)}">${d.benchmark_eur == null ? "–" : pct(d.benchmark_eur / d.capital_eur - 1)}</td></tr>`).join("")}
-  </table>
-  <p class="hint">Tik op een gebouw voor het dossier van dat team. K&H = wat koop-en-houd sinds de start had opgeleverd.</p>
-  ${orgChart()}
-  ${teamCard()}
-  ${whatifCard()}
-  ${S.radar && S.radar.length ? `<h3 class="px">Memecoin-radar (alleen kijken)</h3><table><tr><th>Munt</th><th class="r">24u</th><th>Waarschuwing</th></tr>
-    ${S.radar.slice(0, 6).map(r => `<tr><td>${esc(r.symbol)} <span class="pill">${esc(r.chain)}</span></td><td class="r ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100, 0)}</td><td class="hint">${esc(r.flags.join(", ") || "geen")}</td></tr>`).join("")}</table>` : ""}`;
-}
-
-// Het kantoor: wie beslist wat. Klik op een medewerker voor diens dossier.
-function orgChart() {
-  const who = (cls, title, sub, onclick) => `<div class="who ${cls}" ${onclick ? `onclick="${onclick}"` : ""}><b>${title}</b><span>${sub}</span></div>`;
-  const e = S.risk && typeof S.risk.exposure === "number" ? S.risk.exposure : null;
-  const lab = labAlerts24h(), sh = shadows();
-  return `<h3 class="px">Het kantoor</h3><div class="card org">
-    <div class="lvl">${who("ceo", "Phil · CEO", "beslist over geld en promoties")}</div>
-    <div class="lvl">${who("", "Jarvis", "assistent · meldt en bewaakt", "select('hq')")}</div>
-    <div class="lvl">${who("", "Risicodirecteur", e === null ? "nog geen stand" : `${Math.round(e * 100)}% crypto + memes in`, "select('risk')")}
-      ${who("", "Wachttoren", S.kill ? "noodstop aan" : "risicogrenzen", "select('risk')")}
-      ${who("", "Onderzoekslab", lab ? `${lab} melding${lab > 1 ? "en" : ""}` : "backtests · verkenners", "select('lab')")}</div>
-    <div class="lvl">${S.desks.map(d => who("", esc(d.name), `Lv ${d.level} · <span class="${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</span><br>${d.instruments.length} handelaars + coach`, `select('${d.id}')`)).join("")}</div>
-    ${sh.length ? `<div class="lvl">${sh.map(x => who("ghost", esc(x.name), "in aanbouw · schaduw")).join("")}</div>` : ""}
-    <div class="hint" style="margin-top:8px">Elke afdeling heeft één handelaar per instrument. Nieuwe afdelingen proefdraaien eerst als schaduw; alleen Phil bepaalt of ze echt geld krijgen.</div></div>`;
-}
-
-function deskPanel(d) {
-  const xpNext = 20 * d.level * d.level, xpPrev = 20 * (d.level - 1) * (d.level - 1);
-  const xpFrac = Math.max(0, Math.min(1, (d.xp - xpPrev) / (xpNext - xpPrev || 1)));
-  const modes = {vasthouden: ["KERN", "Houdt vast en verdeelt elk kwartaal opnieuw. Op echte koersen won vasthouden hier van actief handelen."],
-    vasthouden_marktweer: ["KERN + NOODREM", "Houdt vast, maar stapt uit als de marktleider onder zijn 200-dagengemiddelde zakt."],
-    actief: ["JACHT", "Kiest elke week strategieën, wisselt alleen als een nieuwe duidelijk beter is, en koopt niet bij slecht marktweer."]};
-  const md = modes[d.mode] || ["", ""];
-  return `<h2 class="px">${esc(d.name)}</h2><div class="mute">Team ${esc(d.team)} · status: <b>${esc(d.status)}</b></div>
-  ${md[0] ? `<div class="card"><span class="pill in">${md[0]}</span> <span class="hint">${esc(md[1])}</span>${d.weather ? `<div class="hint" style="margin-top:4px">${esc(d.weather)}</div>` : ""}</div>` : ""}
-  ${d.paused_reason ? `<div class="card dn">${esc(d.paused_reason)}</div>` : ""}
-  <div class="card"><div class="row"><span class="px" style="font-size:11px">Level ${d.level}</span><span class="hint">${d.xp} XP</span></div>
-    <div class="bar xp"><i style="width:${xpFrac * 100}%"></i></div>
-    <div class="hint" style="margin-top:4px">XP komt van discipline: elke beslissing, elke trade en elke dag binnen de regels.</div></div>
-  <div class="card"><div class="big">${eur(d.equity_eur)}</div>
-    <div class="row"><span>Startpotje</span><span>${eur(d.capital_eur)}</span></div>
-    <div class="row"><span>Resultaat</span><span class="${cls(d.pnl_pct)}">${eur(d.pnl_eur)} (${pct(d.pnl_pct)})</span></div>
-    <div class="row"><span>Koop-en-houd zou zijn</span><span>${eur(d.benchmark_eur)}</span></div>
-    <div class="row"><span>Cash</span><span>${eur(d.cash_eur)}</span></div>
-    <div class="row"><span>Trades · kosten</span><span>${d.trades} · ${eur(d.fees_eur)}</span></div>
-    <canvas class="spark" id="sp"></canvas></div>
-  ${S.arena && S.arena.desks && S.arena.desks[d.id] && S.arena.desks[d.id].board.some(r => r.days > 0) ? `<h3 class="px">Schaduw-arena</h3>${arenaBoard(S.arena, S.arena.desks[d.id], 3)}
-    <p class="hint">Uitdagers op papier sinds ${esc(S.arena.start)}. Meer in het Onderzoekslab.</p>` : ""}
-  <div class="card"><div class="row"><span>Gebouw</span><span>${floors(d) ? `+${floors(d)} verdieping${floors(d) > 1 ? "en" : ""}` : d.pnl_pct < -.03 ? "in de steigers" : "basis"}</span></div>
-    <div class="hint">Elke 2,5% winst een verdieping erbij. Meer dan 3% onder de start: steigers tot het herstelt.</div></div>
-  ${coachCard(d.id)}
-  <h3 class="px">Het team · één handelaar per instrument</h3>
-  <table><tr><th>Handelaar</th><th class="r">Koers €</th><th class="r">24u</th><th>Strategie</th></tr>
-  ${d.instruments.map(i => `<tr><td>${esc(i.symbol)} ${i.in_market ? '<span class="pill in">in</span>' : ""}</td>
-    <td class="r" style="white-space:nowrap">${tiny(i.price_eur)}</td>
-    <td class="r ${cls(i.change_24h)}">${pct(i.change_24h)}</td><td class="hint">${esc(strat(i.strategy))}${i.fresh ? "" : " · koers oud"}</td></tr>`).join("")}
-  </table>
-  <h3 class="px">Posities</h3>
-  ${d.positions.length ? `<table><tr><th>Instrument</th><th class="r">Waarde</th><th class="r">Sinds aankoop</th></tr>
-    ${d.positions.map(p => `<tr><td>${esc(p.symbol)}</td><td class="r">${eur(p.value_eur)}</td><td class="r ${cls(p.pnl_pct)}">${pct(p.pnl_pct)}</td></tr>`).join("")}</table>`
-    : `<div class="hint">Geen posities. Het team wacht tot een strategie een kans ziet.</div>`}
-  <h3 class="px">Waarom deze trades?</h3>
-  ${S.feed.filter(f => f.desk === d.id && (f.kind === "trade" || f.kind === "refused")).slice(0, 5).map(f =>
-    `<div class="card hint"><b class="${f.kind === "trade" ? "up" : "dn"}">${esc(f.text)}</b> · ${when(f.ts)}<br>${esc(strat(f.why || f.detail))}${f.kind === "refused" ? `<br><span class="dn">${esc(f.detail.split("Risico: ").pop())}</span>` : ""}</div>`).join("")
-    || '<div class="hint">Nog geen trades.</div>'}
-  <p class="hint">Strategieën worden elke week opnieuw gekozen op de laatste 500 dagen${d.selected_at ? " (laatst: " + when(d.selected_at) + ")" : ""}.</p>`;
-}
-
-function arenaBoard(a, d, n = 4) {
-  const top = d.board.slice(0, n);
-  const live = d.board.find(r => r.live);
-  if (live && !top.includes(live)) top.push(live);
-  return `<table><tr><th>#</th><th>Uitdager</th><th class="r">Sinds start</th><th class="r">Sharpe</th></tr>
-    ${top.map(r => `<tr${r.live ? ' style="background:rgba(43,179,163,.15)"' : ""}><td>${d.board.indexOf(r) + 1}</td>
-      <td class="hint">${r.live ? "<b>" : ""}${esc(r.name)}${r.live ? "</b>" : ""}${r.promote ? " 🏆" : ""}</td>
-      <td class="r ${cls(r.return)}">${pct(r.return)}</td><td class="r">${r.days >= 30 ? r.sharpe.toFixed(2).replace(".", ",") : "–"}</td></tr>`).join("")}</table>`;
-}
-function openShadow() {
-  select("lab");
-  const el = document.getElementById("shadow-sec");
-  if (el) el.scrollIntoView({behavior: "smooth", block: "start"});
-}
-function shadowSection() {
-  const list = shadows();
-  if (!list.length) return "";
-  const f = v => v.toFixed(2).replace(".", ",");
-  return `<h3 class="px" id="shadow-sec">Nieuwe afdelingen in aanbouw</h3>
-  <div class="hint">Deze afdelingen draaien alleen op papier mee, met echte koersen. Er wordt niet mee gehandeld. Ze groeien op het eiland mee met de 90 dagen proef. Hun eindexamen: wat als 10% van de holding erin had gezeten? Wordt de holding daar sterker van (hogere Sharpe, geen diepere val), dan krijgen ze een groene vlag. Of ze echt mogen, beslist alleen Phil.</div>
-  ${list.map(sd => { const m = sd.mix;
-    return `<div class="card"><div class="row"><b>${esc(sd.name)}</b><span class="${sd.stronger ? "up" : "mute"}">${sd.stronger ? "🟩 maakt sterker" : m ? "nog niet overtuigend" : "verzamelt data"}</span></div>
-      <div class="hint">${esc(sd.why)}</div>
-      ${sd.instruments.map(i => `<div class="row"><span class="hint">${esc(i.name)}</span><span class="${cls(i.since_start)}">${i.since_start == null ? "geen koers" : pct(i.since_start) + " sinds start"}</span></div>`).join("")}
-      ${m ? `<div class="row"><span>Holding nu (terugblik)</span><span>Sharpe ${f(m.base.sharpe)} · val ${pct(-m.base.max_dd, 0)}</span></div>
-        <div class="row"><span>Met 10% ${esc(sd.name)}</span><span class="${m.mix.sharpe > m.base.sharpe ? "up" : "dn"}">Sharpe ${f(m.mix.sharpe)} · val ${pct(-m.mix.max_dd, 0)}</span></div>
-        <div class="hint">${sd.corr == null ? "" : `Samenhang met de holding: ${f(sd.corr)} (${sd.corr < .3 ? "beweegt duidelijk anders, goed voor spreiding" : sd.corr < .6 ? "beweegt deels mee" : "beweegt sterk mee"}). `}Over ${m.days} dagen echte koersen.</div>` : ""}
-    </div>`; }).join("")}`;
-}
-function arenaSection() {
-  const a = S.arena;
-  if (!a || !a.desks || !Object.keys(a.desks).length) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena start bij de eerste paper-ronde.</div>`;
-  const days = Math.max(...Object.values(a.desks).flatMap(d => d.board.map(r => r.days)), 0);
-  if (!days) return `<h3 class="px">Schaduw-arena</h3><div class="hint">De arena is net begonnen (${esc(a.start)}). ${Object.values(a.desks)[0].board.length - 1} uitdagers per afdeling draaien vanaf nu op papier mee. De eerste uitslag staat er morgen.</div>`;
-  return `<h3 class="px">Schaduw-arena</h3>
-  <div class="hint">Andere strategieën draaien op papier mee met hetzelfde geld en dezelfde echte koersen, vanaf ${esc(a.start)} (${days} dagen). Alleen wat daarna gebeurt telt. Wint een uitdager ${a.promote_days} dagen lang op rendement én Sharpe, en is de kans dat dat geluk is kleiner dan 10% (de toeval-toets van de Academie), dan krijgt hij een 🏆 en meldt Jarvis het. Promoveren beslist alleen Phil. Sharpe verschijnt na 30 dagen; eerder zegt die niets.</div>
-  ${Object.values(a.desks).map(d => `<div class="card"><div class="row"><b>${esc(d.name)}</b><span class="hint">huidige regels op plek ${d.live_rank} van ${d.board.length}</span></div>${arenaBoard(a, d)}</div>`).join("")}`;
-}
-
-function labAlerts24h() {
-  if (!S || !S.lab) return 0;
-  const since = new Date(S.generated_at).getTime() - 24 * 3600e3;
-  return S.lab.alerts.filter(a => new Date(a.ts).getTime() >= since && a.level !== "info").length;
-}
-
-// Lessenboek: alles wat de holding leert, ook van weigeringen, instapmomenten en backtests.
-const RULE_NL = {kostenwacht: "kostenwacht", ordergrootte: "ordergrootte", geen_bijkopen_bij_verlies: "niet bijkopen bij verlies",
-  max_drawdown: "dalingsgrens", dagverlies: "dagverlies", trades_per_dag: "trades per dag", koers_vers: "verse koers", niet_gepauzeerd: "pauze", noodstop: "noodstop"};
-function lessonSection() {
-  const B = S.lessons || {items: [], summary: {rules: [], entry: null}, count: 0};
-  const sm = B.summary || {rules: []};
-  const topic = {weigering: "🛡️", instap: "🎯", backtest: "📊", academie: "🎓", samenwerking: "🤝", teamoverleg: "🗣️"};
-  return `<h3 class="px">Lessenboek · wat we geleerd hebben</h3>
-  ${sm.rules.length || sm.entry ? `<div class="card">
-    ${sm.rules.slice(0, 5).map(r => `<div class="row"><span>${esc(RULE_NL[r.rule] || r.rule)} <span class="hint">${r.n}×</span></span>
-      <span class="${r.avg_move < 0 ? "up" : "dn"}">${r.avg_move < 0 ? "bespaart" : "kost"} gem. ${pct(Math.abs(r.avg_move)).replace("+", "")}</span></div>`).join("")}
-    ${sm.entry ? `<div class="row"><span>Instapmoment <span class="hint">${sm.entry.n}×</span></span><span class="${sm.entry.avg_gap > 0 ? "dn" : "up"}">gem. ${pct(Math.abs(sm.entry.avg_gap)).replace("+", "")} ${sm.entry.avg_gap > 0 ? "te duur" : "goedkoop"}</span></div>` : ""}
-    <div class="hint" style="margin-top:4px">Per regel van de Wachttoren: wat deed de koers een week na een weigering? Daalde hij, dan bespaarde de regel geld.</div></div>` : ""}
-  ${B.items.length ? B.items.slice(0, 8).map(x => `<div class="card hint">${topic[x.topic] || "•"} ${when(x.ts)} · ${esc(x.text)}</div>`).join("")
-    : '<div class="hint">Het boek is nog leeg. Een week na de eerste weigering, twee weken na de eerste aankoop en bij de eerste wekelijkse backtest komen hier de eerste lessen.</div>'}`;
-}
-
-const VERDICT = {"beter dan vasthouden": "up", "slechter dan vasthouden": "dn", "live slechter dan beloofd": "dn", "houdt zich aan de belofte": "up"};
-const verdict = v => `<span class="${VERDICT[v] || "mute"}">${esc(v)}</span>`;
-const band = (lo, hi) => lo == null ? "" : ` <span class="hint">(${pct(lo, 2)} tot ${pct(hi, 2)})</span>`;
-function academyPanel() {
-  const A = S.academy;
-  const head = `<h2 class="px">Academie</h2><div class="mute">Leert elke dag van alle medewerkers. Verandert zelf niets aan de handel.</div>`;
-  if (!A) return head + '<div class="card hint">De Academie opent na de volgende ronde. Dan schrijft ze de eerste voorspellingen op.</div>';
-  const a = A.live.all, h = A.h;
-  const firstScore = A.first ? new Date(new Date(A.first).getTime() + h * 864e5).toLocaleDateString("nl-NL", {day: "numeric", month: "long"}) : "–";
-  const live = a ? `<div class="row"><span>Live strategieën klopten</span><span>${Math.round(a.hit * 100)}% van ${a.n}</span></div>
-      <div class="row"><span>Gewoon vasthouden klopte</span><span>${Math.round(a.base * 100)}%</span></div>
-      <div class="row"><span>Opbrengst t.o.v. vasthouden</span><span class="${cls(a.edge)}">${pct(a.edge, 2)} per ${h} dagen</span></div>
-      <div class="row"><span>Oordeel</span><span>${verdict(a.verdict)}</span></div>`
-    : `<div class="hint">De eerste scores over ${h} dagen komen rond ${firstScore}.</div>`;
-  const use = new Set(A.in_use);
-  const hist = A.history;
-  const pick = hist.filter((r, i) => use.has(r.strategy) || r.strategy === "koop_en_houd" || i < 3 || i >= hist.length - 2);
-  const histRows = pick.map(r => `<tr><td>${use.has(r.strategy) ? "<b>" : ""}${esc(strat(r.strategy))}${use.has(r.strategy) ? "</b> <span class=\"pill\">live</span>" : ""}</td>
-      <td class="r ${cls(r.edge)}">${r.strategy === "koop_en_houd" ? "maatlat" : pct(r.edge, 2) + band(r.edge_lo, r.edge_hi)}</td>
-      <td class="r">${Math.round(r.hit * 100)}%</td><td class="r">${r.strategy === "koop_en_houd" ? "" : verdict(r.verdict)}</td></tr>`).join("");
-  const wRows = Object.entries(A.weather).filter(([k]) => k !== "koop_en_houd").map(([k, w]) =>
-    `<tr><td>${esc(strat(k))}</td>${["goed", "slecht"].map(x => w[x] ? `<td class="r ${cls(w[x].edge)}" title="${esc(w[x].verdict)}">${pct(w[x].edge, 2)}</td>` : '<td class="r mute">–</td>').join("")}</tr>`).join("");
-  const promise = A.promise.filter(p => p.verdict !== "nog toeval");
-  const luckRows = [];
-  for (const d of Object.values((S.arena && S.arena.desks) || {}))
-    for (const r of d.board) if (r.luck != null) luckRows.push(`<div class="row"><span>${esc(d.name)}: ${esc(r.name)}</span><span class="${r.luck < .1 ? "up" : "mute"}">${Math.round(r.luck * 100)}% kans op geluk</span></div>`);
-  return head + `
-  <div class="card">
-    <div class="row"><span>Voorspellingsboek</span><span>${A.forecasts} voorspellingen</span></div>
-    <div class="row"><span>Sinds</span><span>${esc(A.first || "–")}</span></div>
-    ${live}
-    <div class="hint" style="margin-top:4px">Na elke nieuwe dagkoers schrijft elke strategie per instrument op of ze erin wil (verwacht stijging) of eruit. Dat staat vast vóórdat de koers bekend is. Na 1, 7 en 30 dagen wordt het gescoord.</div></div>
-
-  <h3 class="px">Wat het verleden zegt</h3>
-  <table><tr><th>Strategie</th><th class="r">t.o.v. vasthouden per ${h} dagen</th><th class="r">Trefkans</th><th class="r">Oordeel</th></tr>${histRows}</table>
-  <p class="hint">Gemeten op alle koersen vóór de start van het boek, zonder kosten. Tussen haakjes: de onzekerheid (90%). Instrumenten die samen bewegen tellen als één meting, dus de Academie is liever te voorzichtig dan te blij.</p>
-
-  ${A.team && A.team.length ? `<h3 class="px">De live keuzes, in hun eigen afdeling</h3><table><tr><th>Afdeling</th><th>Strategie</th><th class="r">t.o.v. vasthouden</th><th class="r">Oordeel</th></tr>
-    ${A.team.map(r => `<tr><td>${esc(DESK_SHORT[r.desk] || r.desk)}</td><td>${esc(strat(r.strategy))}</td><td class="r ${cls(r.edge)}">${r.strategy === "koop_en_houd" ? "maatlat" : pct(r.edge, 2) + band(r.edge_lo, r.edge_hi)}</td><td class="r">${r.strategy === "koop_en_houd" ? "" : verdict(r.verdict)}</td></tr>`).join("")}</table>` : ""}
-
-    ${wRows ? `<h3 class="px">Per marktweer</h3><table><tr><th>Live strategie</th><th class="r">Weer goed</th><th class="r">Weer slecht</th></tr>${wRows}</table>
-  <p class="hint">Opbrengst t.o.v. vasthouden per ${h} dagen, in het verleden. Zo zie je of een strategie vooral in slecht weer helpt.</p>` : ""}
-
-  <h3 class="px">Belofte tegen praktijk</h3>
-  ${promise.length ? promise.map(p => `<div class="row"><span>${esc(strat(p.strategy))}</span><span>verleden ${Math.round(p.past * 100)}% · live ${Math.round(p.live * 100)}% · ${verdict(p.verdict)}</span></div>`).join("")
-    : '<div class="hint">Nog te weinig live-metingen om te zeggen of de strategieën doen wat de backtest beloofde. Tot die tijd zegt de Academie "nog toeval".</div>'}
-
-  <h3 class="px">Toeval-toets in de arena</h3>
-  ${luckRows.length ? luckRows.join("") + '<p class="hint">Een uitdager wordt alleen voorgedragen als de kans dat zijn voorsprong geluk is kleiner is dan 10%.</p>'
-    : '<div class="hint">Er ligt nu geen uitdager voor op wat live draait, of er zijn nog te weinig dagen om te toetsen.</div>'}
-
-  <p class="hint" style="margin-top:10px">De spelregel blijft: een verandering gaat pas live als ze wint in de backtest, en alleen Phil beslist.</p>`;
-}
-
-function labPanel() {
-  const L = S.lab || {alerts: [], watch: [], reflections: [], records: [], reports: [], adjustments: {}};
-  const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven"};
-  const rows = S.desks.flatMap(d => d.instruments.map(i => ({desk: d.name, ...i})));
-  const counts = {};
-  rows.forEach(r => { const f = (r.strategy || "").split("(")[0]; counts[f] = (counts[f] || 0) + 1; });
-  const adj = L.adjustments || {};
-  return `<h2 class="px">Onderzoekslab</h2><div class="mute">Kijkt terug, leert en houdt de wereld in de gaten</div>
-  <div class="card">
-    <div class="row"><span>Trades teruggeblikt</span><span>${L.reviewed}</span></div>
-    <div class="row"><span>Met winst</span><span>${L.hit_rate == null ? "–" : Math.round(L.hit_rate * 100) + "%"}</span></div>
-    <div class="row"><span>Gemiddeld t.o.v. vasthouden</span><span class="${cls(L.avg_edge)}">${L.avg_edge == null ? "–" : pct(L.avg_edge)}</span></div>
-    <div class="hint" style="margin-top:4px">Een week na elke verkoop kijkt het lab of de trade slim was: wat had vasthouden gedaan, was de verkoop te vroeg, en welke strategie had het beter gedaan.</div></div>
-
-  ${lessonSection()}
-
-  <h3 class="px">Verkenners</h3>
-  ${L.alerts.length ? L.alerts.slice(0, 8).map(a => `<div class="card hint"><span class="lvl-${a.level}">●</span> ${when(a.ts)} · ${esc(a.text)}</div>`).join("")
-    : '<div class="hint">Geen ongewone bewegingen gezien. De verkenners kijken elk uur naar alle markten.</div>'}
-
-  ${L.watch.length ? `<h3 class="px">De wereld</h3><table><tr><th>Markt</th><th class="r">24u</th></tr>
-    ${L.watch.map(w => `<tr><td>${esc(w.name)} <span class="pill">${esc(w.kind)}</span></td><td class="r ${cls(w.change_24h)}">${pct(w.change_24h)}${w.fresh ? "" : ' <span class="hint">dicht</span>'}</td></tr>`).join("")}</table>
-    <p class="hint">Alleen om mee te kijken. Hier wordt niet op gehandeld.</p>` : ""}
-
-  <h3 class="px">Terugblik op trades</h3>
-  ${L.reflections.length ? L.reflections.slice(0, 8).map(r => `<div class="card"><div class="row"><span><b>${esc(r.instrument)}</b> <span class="pill">${esc(who[r.desk] || r.desk)}</span></span>
-      <span class="${cls(r.pnl_pct)}">${esc(r.verdict)} ${pct(r.pnl_pct)}</span></div>
-      <div class="hint">${esc(strat(r.strategy))} · ${r.days} dagen · vasthouden ${pct(r.hold_pct)}</div>
-      ${r.lessons.map(l => `<div class="lesson">→ ${esc(strat(l))}</div>`).join("")}</div>`).join("")
-    : '<div class="hint">Nog geen afgeronde trades. Een week na de eerste verkoop verschijnt hier de eerste terugblik.</div>'}
-
-  <h3 class="px">Rapportcijfers strategieën</h3>
-  ${L.records.length ? `<table><tr><th>Strategie</th><th class="r">Trades</th><th class="r">Raak</th><th class="r">vs houden</th></tr>
-    ${L.records.map(r => { const a = adj[r.desk + ":" + r.strategy];
-      return `<tr><td class="hint">${esc(strat(r.strategy))}${a ? ` <span class="${a < 0 ? "dn" : "up"}">${a < 0 ? "straf" : "bonus"}</span>` : ""}</td><td class="r">${r.trades}</td><td class="r">${Math.round(r.hit_rate * 100)}%</td><td class="r ${cls(r.avg_edge)}">${pct(r.avg_edge)}</td></tr>`; }).join("")}</table>
-    <p class="hint">Na 3 of meer trades krijgt een strategie die live slechter is dan vasthouden strafpunten bij de weekkeuze. Duidelijk beter? Dan een kleine bonus.</p>`
-    : '<div class="hint">Nog geen cijfers. Die komen na de eerste terugblikken.</div>'}
-
-  <h3 class="px">Weekrapporten</h3>
-  ${L.reports.length ? L.reports.map(r => `<div class="card hint"><b>${esc(who[r.desk] || r.desk)}</b> · ${when(r.ts)}<br>${esc(strat(r.reason.replace(/^weekrapport: /, "")))}</div>`).join("")
-    : '<div class="hint">Het eerste weekrapport komt na 7 dagen.</div>'}
-
-  ${arenaSection()}
-  ${shadowSection()}
-
-  <h3 class="px">Strategietoernooi</h3>
-  <div class="hint">Elke week strijden alle strategieën per instrument op de laatste 500 dagen, na kosten. Vasthouden wint, tenzij een strategie duidelijk beter is.</div>
-  <table>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k.replaceAll("_", "-"))}</td><td class="r">${v}×</td></tr>`).join("")}</table>`;
-}
-
-function autopilot() {
-  const ageMin = (Date.now() - new Date(S.generated_at)) / 60e3;
-  const next = new Date(new Date(S.generated_at).getTime() + 60 * 60e3).toLocaleTimeString("nl-NL", {hour: "2-digit", minute: "2-digit"});
-  if (S.demo) return {label: "DEMO", cls: "warn", next, ageMin, text: "Dit is de nep-wereld: hier draait geen autopiloot."};
-  if (ageMin <= 80) return {label: "AAN", cls: "", next, ageMin, text: "Alles draait vanzelf."};
-  if (ageMin <= 150) return {label: "TRAAG", cls: "warn", next, ageMin, text: "De laatste ronde is wat lang geleden; Jarvis start hem zelf opnieuw."};
-  return {label: "STIL", cls: "alarm", next, ageMin, text: "Er is al lang geen ronde geweest. Jarvis meldt dit via Telegram."};
-}
-
-function directorCard() {
-  const R = S.risk;
-  if (!R || typeof R.exposure !== "number") return "";
-  const e = R.exposure, b = R.backtest;
-  const pc = v => v == null ? "?" : Math.round(v * 100) + "%";
-  const corr = typeof R.crypto_meme_corr === "number" ? R.crypto_meme_corr : null;
-  const calm = !R.vol || R.vol <= R.target;
-  return `<h3 class="px">Risicodirecteur</h3><div class="card">
-    <div class="row"><span>Crypto + memes in de markt</span><span class="${e >= 1 ? "up" : ""}"><b>${pc(e)}</b></span></div>
-    <div class="bar" style="margin:6px 0"><i style="width:${Math.round(e * 100)}%;background-color:${e >= .9 ? "var(--good)" : e >= .6 ? "var(--warn)" : "var(--bad)"}"></i></div>
-    <div class="row"><span>Beweeglijkheid (${R.vol_days} dagen)</span><span class="${calm ? "up" : "dn"}">${R.vol ? pc(R.vol) : "?"} per jaar</span></div>
-    <div class="row"><span>Doel</span><span>${pc(R.target)} per jaar</span></div>
-    ${corr !== null ? `<div class="row"><span>Crypto en memes bewegen samen</span><span>${Math.round(corr * 100)}%</span></div>` : ""}
-    ${b ? `<table style="margin-top:6px"><tr><td></td><td class="r">rendement</td><td class="r">Sharpe</td><td class="r">diepste daling</td></tr>
-      <tr><td>zonder directeur</td><td class="r">${pct(b.base.return)}</td><td class="r">${b.base.sharpe.toFixed(2)}</td><td class="r">${pct(-b.base.max_dd)}</td></tr>
-      <tr><td>met directeur ${b.wins ? "✅" : ""}</td><td class="r">${pct(b.director.return)}</td><td class="r">${b.director.sharpe.toFixed(2)}</td><td class="r">${pct(-b.director.max_dd)}</td></tr></table>` : ""}
-    <div class="hint" style="margin-top:4px">${e >= 1 ? (calm ? "Rustig genoeg: alles zit in de markt." : "Net iets boven het doel, te weinig om kosten voor te maken: alles blijft in de markt.") : `Te wild: ${pc(1 - e)} staat als geld klaar tot het weer rustiger wordt.`}
-      Hoe wilder crypto en memes bewegen, hoe minder erin zit. Aandelen, metalen en valuta blijven zoals ze zijn.
-      ${b ? `Getest op echte koersen sinds ${wiDate(b.since)}${b.wins ? ": hij won, dus hij mag sturen." : ": hij won niet, dus hij stuurt nu niet bij."}` : ""}</div></div>`;
-}
-
-// Stresstest: wat de holding van vandaag zou doen als het misgaat.
-const DESK_SHORT = {crypto: "Crypto", meme: "Memes", stocks: "Aandelen", metals: "Metalen", fx: "Valuta"};
-function stressCard() {
-  const T = S.stress;
-  if (!T) return "";
-  const mon = d => new Date(d).toLocaleDateString("nl-NL", {month: "short", year: "numeric"});
-  const rows = [
-    ...T.real.map(r => ({name: r.days <= 31 ? "Slechtste maand" : "Slechtste kwartaal", sub: `echt gebeurd, ${mon(r.from)} – ${mon(r.to)}`, r: r.return, real: true})),
-    ...T.scenarios.map(x => ({name: x.name, sub: `zoals ${x.when}`, r: x.return, paused: x.paused})),
-  ];
-  const maxLoss = Math.max(.3, ...rows.map(x => -x.r));
-  return `<h3 class="px">Stresstest</h3><div class="card">
-    ${rows.map(x => `<div style="margin:8px 0"><div class="row" style="padding:0"><span>${esc(x.name)}</span>
-      <span style="white-space:nowrap"><span class="dn">${pct(x.r)}</span> <span class="hint">→ ${eur(T.equity_eur * (1 + x.r), 0)}</span></span></div>
-      <div style="height:6px;background:#0b0816;margin:2px 0"><i style="display:block;height:6px;width:${Math.min(100, -x.r / maxLoss * 100)}%;background:${x.real ? "var(--bad)" : "#b05a6a"}"></i></div>
-      <div class="hint">${esc(x.sub)}${x.paused && x.paused.length ? ` · pauze: ${x.paused.map(c => DESK_SHORT[c] || c).join(", ")}` : ""}</div></div>`).join("")}
-    <div class="hint" style="margin-top:6px">De holding zoals ze nu staat (${pct(T.cash_pct, 0).replace("+", "")} cash). "Echt gebeurd" is teruggespeeld op onze koersen sinds ${mon(T.real.length ? T.real[0].since : T.computed_at)}.
-      De scenario's zijn afgeronde schokken per afdeling zoals in die crisis, geen metingen. Zakt een afdeling ${pct(T.limit, 0).replace("+", "")} of meer, dan gaat ze op pauze en koopt ze niets bij tot jij haar hervat.
-      Gerekend zonder noodrem: in een lange daling stapt Crypto Lab bij slecht marktweer al eerder uit.</div></div>`;
-}
-
-function riskPanel() {
-  return `<h2 class="px">Wachttoren</h2><div class="mute">De risico-afdeling mag elke order weigeren</div>
-  <div class="card"><div class="row"><span>Noodstop</span><span class="${S.kill ? "dn" : "up"}">${S.kill ? "AAN" : "uit"}</span></div>
-  <div class="row"><span>Max daling vanaf de top</span><span>${pct(S.limits.max_drawdown_pct, 0)}</span></div>
-  <div class="row"><span>Max verlies per dag</span><span>${pct(S.limits.daily_loss_limit_pct, 0)}</span></div></div>
-  ${directorCard()}
-  ${stressCard()}
-  <h3 class="px">Autopiloot</h3>
-  ${(() => { const a = autopilot(); return `<div class="card"><div class="row"><span>Status</span><span class="${a.cls === "alarm" ? "dn" : a.cls ? "" : "up"}">${a.label}</span></div>
-    <div class="row"><span>Laatste ronde</span><span>${when(S.generated_at)} (${Math.round(a.ageMin)} min geleden)</span></div>
-    <div class="row"><span>Volgende ronde</span><span>rond ${a.next}</span></div>
-    <div class="row"><span>Jarvis kijkt</span><span>elke 10 minuten</span></div>
-    <div class="hint" style="margin-top:4px">${esc(a.text)} Een hartslag in GitHub maakt Jarvis elke 10 minuten wakker. Jarvis beantwoordt Telegram, start de uurronde en zet de hartslag weer aan als die ooit wegvalt. Je hoeft er niets voor te doen.</div></div>`; })()}
-  <h3 class="px">Status per team</h3>
-  <table>${S.desks.map(d => `<tr><td>${esc(d.name)}</td><td class="r ${d.status === "alarm" ? "dn" : ""}">${esc(d.status)}</td><td class="r">${pct(-d.drawdown)}</td></tr>`).join("")}</table>
-  <h3 class="px">Laatste weigeringen</h3>
-  ${S.feed.filter(f => f.kind === "refused").slice(0, 8).map(f => `<div class="card hint">${when(f.ts)} · ${esc(f.text)}<br>${esc(f.detail)}</div>`).join("") || '<div class="hint">Nog niets geweigerd.</div>'}`;
-}
-
-function select(id) {
-  selected = id;
-  const side = document.getElementById("side");
-  const d = desk(id);
-  side.innerHTML = d ? deskPanel(d) : id === "lab" ? labPanel() : id === "risk" ? riskPanel() : id === "academy" ? academyPanel() : hqPanel();
-  const sp = document.getElementById("sp");
-  if (sp) spark(sp, d ? d.equity_curve : S.total.equity_curve, d ? d.capital_eur : S.total.capital_eur);
-  whatifUpdate();
-  placeSigns();
-}
-
-function hud() {
-  const t = S.total;
-  document.getElementById("h-eq").textContent = eur(t.equity_eur);
-  const pnl = document.getElementById("h-pnl"); pnl.textContent = `${pct(t.pnl_pct)} sinds start · vandaag ${pct(t.day_pnl_pct)}`; pnl.className = "hint " + cls(t.pnl_pct);
-  const hp = Math.max(0, 1 - t.drawdown / S.limits.max_drawdown_pct);
-  const hpEl = document.getElementById("h-hp");
-  hpEl.style.width = hp * 100 + "%";
-  hpEl.style.backgroundColor = hp > .6 ? "var(--good)" : hp > .3 ? "var(--warn)" : "var(--bad)";
-  document.getElementById("h-hpt").textContent = `${pct(-t.drawdown)} van max ${pct(-S.limits.max_drawdown_pct, 0)}`;
-  const en = Math.max(0, 1 - Math.max(0, -t.day_pnl_pct) / S.limits.daily_loss_limit_pct);
-  document.getElementById("h-en").style.width = en * 100 + "%";
-  document.getElementById("h-ent").textContent = `${Math.round(en * 100)}% van het dagbudget over`;
-  document.getElementById("h-day").style.width = Math.min(1, S.days_active / 90) * 100 + "%";
-  document.getElementById("h-dayt").textContent = `dag ${S.days_active} van minimaal 90`;
-  const a = autopilot();
-  document.getElementById("h-time").textContent = when(S.generated_at);
-  const ab = document.getElementById("b-auto");
-  ab.textContent = "AUTO: " + a.label;
-  ab.className = "badge auto " + a.cls;
-  document.getElementById("b-kill").hidden = !S.kill;
-  document.getElementById("b-demo").hidden = !S.demo;
-  const j = jarvisStatus(), jb = document.getElementById("b-jarvis");
-  jb.textContent = "JARVIS: " + (j.status === "ok" ? "OK" : j.status.toUpperCase());
-  jb.className = "badge jarvis " + (j.status === "alarm" ? "alarm" : j.status === "ok" ? "" : "warn");
-}
-
-const DESK_COLOR = {crypto: "#2bb3a3", meme: "#8b4fd8", stocks: "#8a95ad", metals: "#d9a521", fx: "#3f7fd6"};
-function price(v, cur) {
-  const d = v >= 1000 ? 0 : v >= 10 ? 2 : v >= 0.01 ? 4 : 8;
-  const sym = {EUR: "€", USD: "$", GBP: "£", JPY: "¥", CHF: "CHF "}[cur] ?? "";
-  return sym + Number(v).toLocaleString("nl-NL", {minimumFractionDigits: Math.min(d, 2), maximumFractionDigits: d});
-}
-function miniLine(pts, up) {
-  if (!pts || pts.length < 2) return "";
-  const lo = Math.min(...pts), hi = Math.max(...pts), k = hi - lo || 1;
-  const d = pts.map((v, i) => `${(i / (pts.length - 1) * 40 + 1).toFixed(1)},${(13 - (v - lo) / k * 12).toFixed(1)}`).join(" ");
-  return `<svg viewBox="0 0 42 14"><polyline points="${d}" fill="none" stroke="${up ? "#5fe08a" : "#ff5d6c"}" stroke-width="1.4"/></svg>`;
-}
-let tapeKey = "";
-function tape() {
-  const T = S.ticker || [], run = document.getElementById("tape-run");
-  const key = S.generated_at + T.length;
-  if (!run || key === tapeKey) return;
-  tapeKey = key;
-  if (!T.length) { document.getElementById("tape").hidden = true; return; }
-  const one = T.map(t => {
-    const up = (t.change ?? 0) >= 0;
-    return `<span class="tk ${t.fresh ? "" : "closed"}" onclick="select('${t.desk}')" title="${esc(t.symbol)}${t.fresh ? "" : " · markt dicht, laatste koers"}">
-      <i class="dot" style="background:${DESK_COLOR[t.desk] || "#888"}"></i><b>${esc(t.name)}</b>
-      <span class="p">${price(t.price, t.currency)}</span><span class="${up ? "up" : "dn"}">${up ? "▲" : "▼"} ${pct(t.change)}</span>${miniLine(t.line, up)}</span>`;
-  }).join("");
-  run.innerHTML = one + one;                  // twee keer, voor een naadloze lus
-  run.style.setProperty("--dur", Math.max(40, T.length * 5) + "s");
-}
-
-function feed() {
-  const who = {crypto: "Crypto Lab", meme: "Meme Arcade", stocks: "Beurstoren", metals: "De Kluis", fx: "Wisselhaven", scouts: "Verkenners"};
-  const box = document.getElementById("feed");
-  box.innerHTML = S.feed.length ? S.feed.map(f =>
-    `<div class="msg ${f.kind}"><span class="t">[${when(f.ts)}]</span> <span class="who">${esc(who[f.desk] || f.desk)}:</span> <span class="txt">${esc(strat(f.text))}</span> <span class="t">${esc(strat(f.strategy || ""))}</span>${f.detail ? `<div class="det">${esc(strat(f.detail))}</div>` : ""}</div>`).join("")
-    : '<div class="msg t">Nog geen gebeurtenissen. De eerste ronde draait binnen het uur.</div>';
-  box.querySelectorAll(".msg").forEach(el => el.onclick = () => el.classList.toggle("open"));
-  const bl = badgeList();
-  document.getElementById("quests").innerHTML = `<div class="px" style="font-size:12px">Badges ${bl.filter(b => b.got).length}/${bl.length}</div>
-    <div class="badges">${bl.map(b => `<div class="bdg ${b.got ? "got" : ""}" title="${esc(b.title)}">${b.icon}</div>`).join("")}</div>
-    <div class="px" style="font-size:12px;margin-bottom:4px">Missies</div>` + S.missions.map(m => {
-    const done = m.progress >= m.goal;
-    return `<div class="quest ${done ? "done" : ""} ${m.locked ? "locked" : ""}"><div class="qt"><span>${done ? "✔ " : m.locked ? "🔒 " : ""}${esc(m.title)}</span><span>${m.progress}/${m.goal}</span></div>
-      <div class="bar xp"><i style="width:${Math.min(1, m.progress / m.goal) * 100}%"></i></div>${m.hint ? `<div class="hint">${esc(m.hint)}</div>` : ""}</div>`;
-  }).join("");
-}
-
-// ------------------------------------------------------------------ feestjes: muntjes, missies en badges
-function toast(text) {
-  const el = document.getElementById("toast");
-  el.innerHTML = text; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
-  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 4500);
-}
-function celebrate(prev) {
-  const seenTs = localStorage.getItem("jplh-seen-ts") || (prev ? prev.generated_at : new Date(Date.now() - 2 * 3600e3).toISOString());
-  const fresh = S.feed.filter(f => f.kind === "trade" && f.ts > seenTs);
-  fresh.slice(0, 6).forEach((f, i) => sendTruck(f.desk, f.text.includes("koopt"), i * 90));
-  localStorage.setItem("jplh-seen-ts", S.generated_at);
-  const got = JSON.parse(localStorage.getItem("jplh-badges") || "[]");
-  for (const bd of badgeList()) {
-    if (bd.got && !got.includes(bd.id)) {
-      got.push(bd.id);
-      if (!S.demo) toast(`${bd.icon} Badge verdiend: ${esc(bd.title)}`);
-    }
-  }
-  localStorage.setItem("jplh-badges", JSON.stringify(got));
-}
-function badgeList() {
-  const m = id => S.missions.find(x => x.id === id) || {progress: 0, goal: 1};
-  const done = id => m(id).progress >= m(id).goal;
-  const L = S.lab || {reviewed: 0, alerts: []};
-  return [
-    {id: "first", icon: "🪙", title: "Eerste paper trade", got: done("first")},
-    {id: "fifty", icon: "💰", title: "50 paper trades", got: done("fifty")},
-    {id: "lesson", icon: "🔬", title: "Eerste terugblik in het lab", got: L.reviewed > 0},
-    {id: "scout", icon: "🔭", title: "Eerste melding van de verkenners", got: L.alerts.length > 0},
-    {id: "week", icon: "📅", title: "Een week actief", got: S.days_active >= 7},
-    {id: "level5", icon: "⭐", title: "Een team op level 5", got: S.desks.some(d => d.level >= 5)},
-    {id: "green", icon: "📈", title: "Holding in de plus", got: S.total.pnl_pct > 0},
-    {id: "beat", icon: "🏆", title: "Beter dan koop-en-houd na 30 dagen", got: done("beat")},
-    {id: "discipline", icon: "🛡️", title: "30 dagen binnen de risicogrenzen", got: done("discipline")},
-    {id: "demo", icon: "🎓", title: "Demofase afgerond", got: done("demo")},
-  ];
-}
-
+/* ── data en hulpjes ─────────────────────────────────────────────────────── */
+const S = { state: null, om: null, snap: null, gh: {}, sim: { id: "market", k: 1 }, graph: { sel: null, types: null, desk: "", nature: "" } };
+const DESK_COLOR = { crypto: "var(--d-crypto)", meme: "var(--d-meme)", stocks: "var(--d-stocks)", metals: "var(--d-metals)", fx: "var(--d-fx)" };
+const STATUS = { HEALTHY: ["s-good", "●", "Gezond"], DEGRADED: ["s-warn", "▲", "Verminderd"], STALE: ["s-serious", "■", "Verouderd"],
+  BLOCKED: ["s-crit", "✕", "Geblokkeerd"], UNKNOWN: ["s-unknown", "?", "Onbekend"] };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nf = (d) => new Intl.NumberFormat("nl-NL", { minimumFractionDigits: d, maximumFractionDigits: d });
+const eur = (x, d = 2) => x == null ? "—" : "€ " + nf(d).format(x);
+const pct = (x, d = 1, sign = true) => x == null || isNaN(x) ? "—" : (sign && x > 0 ? "+" : "") + nf(d).format(x * 100) + "%";
+const cls = x => x == null ? "" : x > 0 ? "up" : x < 0 ? "down" : "";
+const when = ts => { if (!ts) return "—"; const d = new Date(ts); return d.toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); };
+const ageH = ts => ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : null;
+const ago = ts => { const h = ageH(ts); if (h == null) return "onbekend"; if (h < 1) return Math.max(1, Math.round(h * 60)) + " min geleden";
+  if (h < 48) return nf(h < 10 ? 1 : 0).format(h) + " uur geleden"; return Math.round(h / 24) + " dagen geleden"; };
+const status = (s, txt) => { const [c, i, l] = STATUS[s] || STATUS.UNKNOWN; return `<span class="status ${c}" data-i="${i}">${esc(txt || l)}</span>`; };
+const label = t => `<span class="label">${esc(t)}</span>`;
+const deskName = id => (S.state?.desks.find(d => d.id === id) || {}).name || id;
+const deskDot = id => `<span class="dot" style="background:${DESK_COLOR[id] || "var(--ink-3)"}"></span>`;
+const pulseStatus = p => { if (p.status === "BLOCKED" || p.healthy_h == null || !p.last_ts) return p.status;
+  const a = ageH(p.last_ts); return a <= p.healthy_h ? "HEALTHY" : a <= p.stale_h ? "DEGRADED" : "STALE"; };
+const empty = (title, why) => `<div class="empty"><b>${esc(title)}</b><br>${esc(why)}</div>`;
+
+async function getJSON(url) { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(url + " " + r.status); return r.json(); }
 async function load() {
-  try {
-    const r = await fetch("state.json?t=" + Date.now(), {cache: "no-store"});
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const prev = S;
-    S = await r.json();
-    document.getElementById("err").style.display = "none";
-    hud(); tape(); feed(); select(selected);
-    celebrate(prev);
-  } catch (e) {
-    const el = document.getElementById("err");
-    el.style.display = "block";
-    el.innerHTML = `<b>Kan de stand niet laden.</b><br><span class="hint">${esc(e.message)}. Open het dashboard via de link van GitHub Pages of met <code>jplh dashboard</code>.</span>`;
+  const [st, om, sn] = await Promise.allSettled([getJSON("state.json"), getJSON("overmind.json"), getJSON("snapshot.json")]);
+  if (st.status !== "fulfilled") { document.getElementById("app").innerHTML = empty("Geen gegevens", "state.json kon niet geladen worden. De bot publiceert die elk uur."); return; }
+  S.state = st.value; S.om = om.status === "fulfilled" ? om.value : null; S.snap = sn.status === "fulfilled" ? sn.value : null;
+  renderFresh(); route(); ghPulse();
+}
+function renderFresh() {
+  const last = (S.state.total.equity_curve || []).slice(-1)[0]?.[0] || S.state.generated_at;
+  const h = ageH(last); const st = h == null ? "UNKNOWN" : h <= 1.5 ? "HEALTHY" : h <= 3 ? "DEGRADED" : "STALE";
+  document.getElementById("fresh").innerHTML = `${status(st, st === "HEALTHY" ? "Actueel" : STATUS[st][2])}<span>ronde ${esc(when(last))}</span>${S.state.demo ? label("simulated") : label("paper · vertraagd")}`;
+}
+/* Publieke GitHub-gegevens over de laatste runs: echt runtime-bewijs voor Jarvis en publicatie. */
+async function ghPulse() {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/); const repo = location.pathname.split("/").filter(Boolean)[0];
+  if (!m || !repo) return;
+  for (const [id, wf] of [["jarvis", "jarvis.yml"], ["publish", "paper.yml"]]) {
+    try { const r = await getJSON(`https://api.github.com/repos/${m[1]}/${repo}/actions/workflows/${wf}/runs?per_page=1&status=completed`);
+      const run = r.workflow_runs?.[0]; if (run) S.gh[id] = { ts: run.updated_at, ok: run.conclusion === "success", conclusion: run.conclusion };
+    } catch (e) { S.gh[id] = { error: true }; }
   }
+  if (["overview", "control"].includes(currentRoute()[0])) route();
 }
 
-window.addEventListener("resize", resize);
-resize(); load(); frame();
-setInterval(load, 5 * 60 * 1000);
+/* ── router ─────────────────────────────────────────────────────────────── */
+const ROUTES = { overview: renderOverview, trading: renderTrading, intelligence: renderIntel, academy: renderAcademy, control: renderControl };
+const currentRoute = () => (location.hash.slice(1) || "overview").split("/");
+function route() {
+  if (!S.state) return;
+  const [r, ...rest] = currentRoute(); const fn = ROUTES[r] || renderOverview;
+  document.querySelectorAll("nav.main a").forEach(a => a.setAttribute("aria-current", a.getAttribute("href") === "#" + (ROUTES[r] ? r : "overview") ? "page" : "false"));
+  const app = document.getElementById("app"); app.innerHTML = fn(rest); afterRender(r, rest);
+}
+window.addEventListener("hashchange", () => { route(); document.getElementById("app").focus({ preventScroll: true }); window.scrollTo(0, 0); });
+const go = (h) => `#${h}`;
+
+/* ── grafieken (SVG, met hover) ─────────────────────────────────────────── */
+function lineChart(id, series, opts = {}) {
+  const W = 760, H = opts.h || 220, P = { l: 56, r: 64, t: 12, b: 24 };
+  const pts = series.flatMap(s => s.data); if (pts.length < 2) return empty("Te weinig punten", "Er is nog geen curve om te tekenen.");
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs); let y0 = Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0) * .08 || 1; y0 -= pad; y1 += pad;
+  const X = t => P.l + (t - x0) / (x1 - x0 || 1) * (W - P.l - P.r), Y = v => H - P.b - (v - y0) / (y1 - y0) * (H - P.t - P.b);
+  const ticks = [0, .25, .5, .75, 1].map(f => y0 + f * (y1 - y0));
+  let g = ticks.map(v => `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${P.l - 8}" y="${Y(v) + 4}" text-anchor="end">${esc(opts.fmt ? opts.fmt(v) : nf(0).format(v))}</text>`).join("");
+  g += [x0, (x0 + x1) / 2, x1].map((t, i) => `<text x="${X(t)}" y="${H - 6}" text-anchor="${["start", "middle", "end"][i]}">${esc(new Date(t).toLocaleDateString("nl-NL", { day: "numeric", month: "short" }))}</text>`).join("");
+  for (const s of series) {
+    const d = s.data.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("");
+    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" ${s.dash ? 'stroke-dasharray="4 4"' : ""}/>`;
+    const last = s.data[s.data.length - 1];
+    g += `<text x="${X(last[0]) + 6}" y="${Y(last[1]) + 4}" style="fill:var(--ink-2)">${esc(s.name)}</text>`;
+  }
+  g += `<line id="${id}-x" y1="${P.t}" y2="${H - P.b}" stroke="var(--axis)" stroke-width="1" visibility="hidden"/>`;
+  g += `<rect x="${P.l}" y="${P.t}" width="${W - P.l - P.r}" height="${H - P.t - P.b}" fill="transparent" data-chart="${id}"/>`;
+  CHARTS[id] = { series, X, x0, x1, P, W, fmt: opts.fmt };
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(opts.label || "grafiek")}">${g}</svg>`;
+}
+const CHARTS = {};
+document.addEventListener("pointermove", e => {
+  const tip = document.getElementById("tip"); const t = e.target;
+  if (t.dataset && t.dataset.chart) {
+    const c = CHARTS[t.dataset.chart]; const svg = t.ownerSVGElement; const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse()); const tt = c.x0 + (p.x - c.P.l) / (c.W - c.P.l - c.P.r) * (c.x1 - c.x0);
+    const rows = c.series.map(s => { let best = s.data[0]; for (const q of s.data) if (Math.abs(q[0] - tt) < Math.abs(best[0] - tt)) best = q; return [s, best]; });
+    const ln = svg.getElementById(t.dataset.chart + "-x"); ln.setAttribute("x1", c.X(rows[0][1][0])); ln.setAttribute("x2", c.X(rows[0][1][0])); ln.setAttribute("visibility", "visible");
+    tip.innerHTML = `<div class="muted">${esc(when(rows[0][1][0]))}</div>` + rows.map(([s, q]) => `<div><span class="dot" style="background:${s.color}"></span> ${esc(s.name)}: <b class="num">${esc(c.fmt ? c.fmt(q[1]) : q[1])}</b></div>`).join("");
+    show(tip, e);
+  } else if (t.closest && t.closest("[data-tip]")) { tip.innerHTML = t.closest("[data-tip]").dataset.tip; show(tip, e); }
+  else { tip.style.display = "none"; document.querySelectorAll('line[id$="-x"]').forEach(l => l.setAttribute("visibility", "hidden")); }
+});
+function show(tip, e) { tip.style.display = "block"; const w = tip.offsetWidth; tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px"; tip.style.top = (e.clientY + 14) + "px"; }
+
+function barRows(rows, fmt, opts = {}) {      // horizontale staven rond nul; label en waarde in tekstinkt
+  const m = Math.max(1e-9, ...rows.map(r => Math.abs(r.v ?? 0))); const oneSided = rows.every(r => (r.v ?? 0) <= 0);
+  const mid = oneSided ? 100 : 50, span = oneSided ? 100 : 50;
+  return `<div role="table" aria-label="${esc(opts.label || "")}">` + rows.map(r => {
+    const w = Math.abs(r.v ?? 0) / m * span; const neg = (r.v ?? 0) < 0;
+    return `<div role="row" class="spread" style="gap:12px;margin:6px 0" data-tip="${esc(r.name)}: ${esc(fmt(r.v))}${r.note ? " · " + esc(r.note) : ""}">
+      <span role="cell" style="width:120px;flex:none" class="row">${r.dot || ""}${esc(r.name)}</span>
+      <span style="flex:1;position:relative;height:14px"><span style="position:absolute;left:${mid}%;top:-2px;bottom:-2px;width:1px;background:var(--axis)"></span>
+        <span style="position:absolute;top:2px;height:10px;${neg ? `right:${100 - mid}%` : `left:${mid}%`};width:${w}%;background:${r.color || "var(--ink-3)"};border-radius:${neg ? "4px 0 0 4px" : "0 4px 4px 0"}"></span></span>
+      <span role="cell" class="num ${cls(r.v)}" style="width:80px;text-align:right">${esc(fmt(r.v))}</span></div>`;
+  }).join("") + "</div>";
+}
+
+/* ── OVERVIEW ───────────────────────────────────────────────────────────── */
+function attentionList(items) {
+  const col = { critical: "var(--crit)", change: "var(--warn)", context: "var(--ink-3)" };
+  const sec = { overview: "overview", trading: "trading", intelligence: "intelligence", academy: "academy", control: "control" };
+  return items.map(a => `<div class="att"><span class="bar-l" style="background:${col[a.level]}"></span>
+    <div><div class="t">${esc(a.title)}</div><div class="d">${esc(a.detail)} <span class="muted">· bron: ${esc(a.source)}</span></div></div>
+    <a class="go" href="#${a.replay ? "control/replay/" + encodeURIComponent(a.replay) : (sec[a.section] || "overview") + (a.desk ? "/" + a.desk : "")}">bekijk →</a></div>`).join("");
+}
+function renderOverview() {
+  const st = S.state, t = st.total, om = S.om;
+  const bench = t.benchmark_eur ? t.benchmark_eur / t.capital_eur - 1 : null;
+  const invested = om ? om.exposure.invested_eur / (om.exposure.equity_eur || 1) : null;
+  const att = om ? om.attention : [];
+  const crit = att.filter(a => a.level === "critical"), chg = att.filter(a => a.level === "change"), ctx = att.filter(a => a.level === "context");
+  const curve = (t.equity_curve || []).map(p => [new Date(p[0]).getTime(), p[1]]);
+  const pulse = om ? om.pulse.map(p => ({ ...p, live: liveStatus(p) })) : [];
+  const counts = {}; pulse.forEach(p => counts[p.live] = (counts[p.live] || 0) + 1);
+  const rated = om ? om.radar.filter(r => r.rated).length : 0;
+  return `
+  <h1>Goed${new Date().getHours() < 12 ? "emorgen" : new Date().getHours() < 18 ? "emiddag" : "enavond"}, Phil</h1>
+  <p class="lead">Eerst wat aandacht vraagt, daarna wat er veranderde, dan de context. Alles is papiergeld; elk getal heeft een bron.</p>
+  <div class="kpis" style="margin-bottom:var(--gap)">
+    <div class="kpi hero"><div class="l">Schatkist (paper)</div><div class="v num">${eur(t.equity_eur)}</div><div class="s">start ${eur(t.capital_eur, 0)}</div></div>
+    <div class="kpi"><div class="l">Laatste 24 uur</div><div class="v num ${cls(t.day_pnl_pct)}">${pct(t.day_pnl_pct)}</div><div class="s">equity-curve</div></div>
+    <div class="kpi"><div class="l">Sinds start</div><div class="v num ${cls(t.pnl_pct)}">${pct(t.pnl_pct)}</div><div class="s">${st.days_active} dagen actief</div></div>
+    <div class="kpi"><div class="l">Gewoon vasthouden</div><div class="v num ${cls(bench)}">${pct(bench)}</div><div class="s">${bench == null ? "" : (t.pnl_pct - bench >= 0 ? "wij " + pct(t.pnl_pct - bench) + " beter" : "wij " + pct(t.pnl_pct - bench) + " slechter")}</div></div>
+    <div class="kpi"><div class="l">Daling vanaf top</div><div class="v num ${t.drawdown > 0 ? "down" : ""}">${pct(-t.drawdown)}</div><div class="s">pauzegrens per afdeling ${pct(-(st.limits?.max_drawdown_pct || .15), 0)}</div></div>
+    <div class="kpi"><div class="l">Belegd</div><div class="v num">${pct(invested, 0, false)}</div><div class="s">rest in cash</div></div>
+  </div>
+  <div class="grid g-main">
+    <div class="grid" style="align-content:start">
+      <section class="card" aria-labelledby="h-att"><div class="spread"><h2 id="h-att">Vraagt aandacht</h2><span class="muted">${crit.length} kritiek</span></div>
+        ${om ? (crit.length ? attentionList(crit) : `<div class="att"><span class="bar-l" style="background:var(--good)"></span><div class="t">Niets kritieks</div><span></span></div>`) : empty("Geen Command Center-gegevens", "overmind.json ontbreekt; de bot maakt die vanaf de volgende ronde.")}
+        ${om && om.decisions.length ? `<h2 style="margin-top:16px">Wacht op jouw besluit</h2>` + om.decisions.map(d => `<div class="att"><span class="bar-l" style="background:var(--accent)"></span><div><div class="t">${esc(d.title)}</div><div class="d">${esc(d.detail)} <span class="muted">· hoe: ${esc(d.how)}</span></div></div><a class="go" href="#${d.replay ? "control/replay/" + encodeURIComponent(d.replay) : "control"}">waarom →</a></div>`).join("") : ""}
+      </section>
+      <section class="card"><h2>Wat veranderde (24 uur)</h2>${om ? attentionList(chg) : ""}</section>
+      <section class="card"><div class="spread"><h2>Schatkist per uur</h2><span class="muted">${curve.length} punten</span></div>
+        ${lineChart("eq", [{ name: "holding", color: "var(--accent)", data: curve }], { fmt: v => eur(v, 0), label: "Waarde van de holding per uur" })}
+        <p class="muted" style="margin:6px 0 0;font-size:12px">Eén lijn: de vasthoud-vergelijking staat als getal hierboven (de bot bewaart geen uurcurve van vasthouden).</p></section>
+    </div>
+    <div class="grid" style="align-content:start">
+      <section class="card"><h2>Afdelingen</h2>${deskHealth()}</section>
+      <section class="card"><div class="spread"><h2>Systeemhartslag</h2><a class="muted" href="#control/pulse">details →</a></div>
+        <div class="row">${Object.entries(counts).map(([k, n]) => status(k, n + " " + STATUS[k][2].toLowerCase())).join("")}</div>
+        <p class="sub" style="margin:10px 0 0;font-size:13px">${esc(pulse.filter(p => p.live !== "HEALTHY").map(p => p.name).join(" · ") || "alles gezond")}</p></section>
+      <section class="card"><div class="spread"><h2>NEXUS onderzoekt</h2><a class="muted" href="#intelligence">open →</a></div>
+        ${om && om.research.connected ? `<p>${om.research.items.length} onderzoeksrecords, laatste ${esc(ago(om.research.exported_at))}.</p>` : `<p class="sub">${status("BLOCKED", "niet verbonden")} NEXUS draait nog niet mee; er zijn geen echte onderzoeksrecords. Er wordt niets verzonnen.</p>`}
+        <p class="sub" style="font-size:13px">Onderzoeksradar: ${om ? om.radar.length : 0} vragen, ${rated} met genoeg bewijs voor een prioriteit.</p></section>
+      <section class="card"><h2>Context</h2>${om ? attentionList(ctx) : ""}</section>
+    </div>
+  </div>`;
+}
+function deskHealth() {
+  const lim = S.state.limits?.max_drawdown_pct || .15;
+  return `<table><thead><tr><th>Afdeling</th><th class="r">Resultaat</th><th class="r">Vasthouden</th><th style="width:30%">Daling / grens</th></tr></thead><tbody>` +
+    S.state.desks.map(d => { const b = d.benchmark_eur / d.capital_eur - 1; const dd = d.drawdown || 0;
+      const s = d.paused_reason ? status("BLOCKED", "stil") : dd >= .7 * lim ? status("DEGRADED", "let op") : status("HEALTHY", "actief");
+      return `<tr><td><a href="#trading/${d.id}" class="row" style="text-decoration:none;gap:6px">${deskDot(d.id)}${esc(d.name)}</a><div style="margin-top:4px">${s}</div></td>
+        <td class="r num ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</td><td class="r num ${cls(b)}">${pct(b)}</td>
+        <td><div class="meter lim" data-tip="${esc(d.name)}: ${pct(-dd)} onder de top; grens ${pct(-lim, 0)}"><i style="width:${Math.min(100, dd / lim * 100)}%;background:${d.paused_reason ? "var(--crit)" : dd >= .7 * lim ? "var(--warn)" : "var(--ink-3)"}"></i></div><div class="muted num" style="font-size:11px;margin-top:3px">${pct(-dd)}</div></td></tr>`; }).join("") + "</tbody></table>";
+}
+function liveStatus(p) {
+  if (p.github_workflow) { const g = S.gh[p.id]; if (!g || g.error) return "UNKNOWN"; if (!g.ok) return "DEGRADED";
+    const a = ageH(g.ts); return a <= p.healthy_h ? "HEALTHY" : a <= p.stale_h ? "DEGRADED" : "STALE"; }
+  return pulseStatus(p);
+}
+
+/* ── TRADING ────────────────────────────────────────────────────────────── */
+function renderTrading([id]) {
+  const desks = S.state.desks; const d = desks.find(x => x.id === id) || desks[0]; const om = S.om;
+  const b = d.benchmark_eur / d.capital_eur - 1; const lim = S.state.limits?.max_drawdown_pct || .15;
+  const inv = (d.positions || []).reduce((a, p) => a + (p.value_eur || 0), 0);
+  const dec = om ? om.replay.filter(r => r.desk === d.id).slice(0, 12) : [];
+  const team = (S.state.academy?.team || []).filter(t => t.desk === d.id);
+  const rules = (S.state.coach?.desks || {})[d.id] || [];
+  const radar = om ? om.radar.filter(r => r.desk === d.id) : [];
+  const recs = om ? om.research.items.filter(r => r.subject === "desk:" + d.id || r.subject === "holding") : [];
+  const curve = (d.equity_curve || []).map(p => [new Date(p[0]).getTime(), p[1]]);
+  return `<h1>Trading</h1><p class="lead">Elke afdeling handelt zelfstandig met papiergeld. Dit scherm leest alleen; aan de handel verandert niets.</p>
+  <div class="tabs" role="tablist">${desks.map(x => `<a role="tab" class="btn" aria-selected="${x.id === d.id}" style="${x.id === d.id ? "border-color:var(--accent)" : ""};text-decoration:none" href="#trading/${x.id}">${deskDot(x.id)} ${esc(x.name)}</a>`).join("")}</div>
+  <div class="kpis" style="margin-bottom:var(--gap)">
+    <div class="kpi hero"><div class="l">${esc(d.name)}</div><div class="v num">${eur(d.equity_eur)}</div><div class="s">${d.paused_reason ? status("BLOCKED", "gepauzeerd") : status("HEALTHY", d.status)}</div></div>
+    <div class="kpi"><div class="l">Kapitaal</div><div class="v num">${eur(d.capital_eur, 0)}</div><div class="s">${pct(d.capital_eur / S.state.total.capital_eur, 0, false)} van de holding</div></div>
+    <div class="kpi"><div class="l">Resultaat</div><div class="v num ${cls(d.pnl_pct)}">${pct(d.pnl_pct)}</div><div class="s">${eur(d.pnl_eur)}</div></div>
+    <div class="kpi"><div class="l">Vasthouden</div><div class="v num ${cls(b)}">${pct(b)}</div><div class="s">verschil ${pct(d.pnl_pct - b)}</div></div>
+    <div class="kpi"><div class="l">Daling</div><div class="v num ${d.drawdown > 0 ? "down" : ""}">${pct(-d.drawdown)}</div><div class="s">grens ${pct(-lim, 0)}</div></div>
+    <div class="kpi"><div class="l">Belegd</div><div class="v num">${pct(inv / (d.equity_eur || 1), 0, false)}</div><div class="s">cash ${eur(d.cash_eur, 0)}</div></div>
+    <div class="kpi"><div class="l">Kosten · trades</div><div class="v num">${eur(d.fees_eur)}</div><div class="s">${d.trades} trades</div></div>
+  </div>
+  ${d.paused_reason ? `<div class="att" style="margin-bottom:var(--gap)"><span class="bar-l" style="background:var(--crit)"></span><div><div class="t">Risicoregel: afdeling staat stil</div><div class="d">${esc(d.paused_reason)}. Hervatten kan alleen de eigenaar; dit dashboard kan dat bewust niet.</div></div><a class="go" href="#control/replay/${encodeURIComponent((dec.find(r => r.kind === "pause") || {}).id || "")}">waarom →</a></div>` : ""}
+  <div class="grid g-main">
+    <div class="grid" style="align-content:start">
+      <section class="card"><h2>Waarde per uur</h2>${lineChart("dq", [{ name: d.name, color: DESK_COLOR[d.id], data: curve }], { fmt: v => eur(v, 0), label: "Waarde van " + d.name })}</section>
+      <section class="card"><h2>Posities</h2>${(d.positions || []).length ? `<div class="scroll"><table><thead><tr><th>Instrument</th><th class="r">Waarde</th><th class="r">Resultaat</th><th>Strategie</th></tr></thead><tbody>${d.positions.map(p => `<tr><td>${esc(p.symbol)}</td><td class="r num">${eur(p.value_eur)}</td><td class="r num ${cls(p.pnl_pct)}">${pct(p.pnl_pct)}</td><td class="muted">${esc(p.strategy)}</td></tr>`).join("")}</tbody></table></div>` : empty("Geen posities", d.paused_reason ? "De afdeling staat stil en houdt alles in cash." : "Alles staat in cash.")}</section>
+      <section class="card"><h2>Instrumenten en strategie</h2><div class="scroll"><table><thead><tr><th>Instrument</th><th class="r">Koers</th><th class="r">24 uur</th><th>Strategie</th><th>In de markt</th><th>Data</th></tr></thead><tbody>${(d.instruments || []).map(i => `<tr><td>${esc(i.symbol)}</td><td class="r num">${i.price_eur == null ? "—" : eur(i.price_eur, i.price_eur < 1 ? 6 : 2)}</td><td class="r num ${cls(i.change_24h)}">${pct(i.change_24h)}</td><td class="muted">${esc(i.strategy)}</td><td>${i.in_market ? "ja" : "nee"}</td><td>${i.fresh ? status("HEALTHY", "vers") : status("STALE", "oud")}</td></tr>`).join("")}</tbody></table></div><p class="muted" style="font-size:12px;margin:8px 0 0">Weekkeuze: ${esc(when(d.selected_at))}.</p></section>
+      <section class="card"><h2>Recente beslissingen</h2>${dec.length ? `<table><tbody>${dec.map(r => `<tr><td class="muted num" style="white-space:nowrap">${esc(when(r.ts))}</td><td>${esc(replayTitle(r))}</td><td class="r"><a href="#control/replay/${encodeURIComponent(r.id)}">terugkijken →</a></td></tr>`).join("")}</tbody></table>` : empty("Geen beslissingen", "Er staat nog niets in het logboek van deze afdeling.")}</section>
+    </div>
+    <div class="grid" style="align-content:start">
+      <section class="card"><h2>Risicoregels</h2><table><tbody>
+        <tr><td>Pauzegrens (daling vanaf top)</td><td class="r num">${pct(-lim, 0)}</td></tr>
+        <tr><td>Daglimiet verlies</td><td class="r num">${pct(-(S.state.limits?.daily_loss_limit_pct || 0), 0)}</td></tr>
+        <tr><td>Nu</td><td class="r num ${d.drawdown > 0 ? "down" : ""}">${pct(-d.drawdown)}</td></tr>
+        <tr><td>Marktweer</td><td class="r">${esc(d.weather?.text || d.weather || "—")}</td></tr></tbody></table>
+        <p class="muted" style="font-size:12px">Limieten zijn vast en kunnen alleen strenger; dat besluit de eigenaar.</p></section>
+      <section class="card"><h2>Academie over deze afdeling</h2>${team.length ? `<table><tbody>${team.map(t => `<tr><td>${esc(t.strategy)}<div class="muted" style="font-size:12px">${esc(t.verdict)}</div></td><td class="r num">${pct(t.edge)}<div class="muted" style="font-size:11px">90%: ${pct(t.edge_lo)} … ${pct(t.edge_hi)}</div></td></tr>`).join("")}</tbody></table>` : empty("Nog geen oordeel", "De Academie heeft voor deze afdeling nog geen geschiedenis berekend.")}</section>
+      <section class="card"><h2>Coach</h2>${rules.length ? rules.map(r => `<div style="margin-bottom:10px"><div class="row" style="gap:6px">${verdictBadge(r.verdict)}<b>${esc(r.title)}</b></div><div class="sub" style="font-size:13px">${esc(r.text || "")}</div></div>`).join("") : empty("Geen regels", "Deze afdeling heeft geen coach-regels.")}</section>
+      <section class="card"><h2>Onderzoek (NEXUS en radar)</h2>${recs.length ? recs.map(r => `<p>${esc(r.summary)} <span class="muted">· ${esc(r.generator)}</span></p>`).join("") : `<p class="sub">${status("BLOCKED", "niet verbonden")} Geen NEXUS-records voor deze afdeling.</p>`}
+        <p class="sub" style="font-size:13px">${radar.length} onderzoeksvragen op de radar, ${radar.filter(r => r.rated).length} met prioriteit. <a href="#intelligence/radar">bekijk →</a></p></section>
+    </div>
+  </div>`;
+}
+function verdictBadge(v) { const m = { "klopt": "HEALTHY", "deels": "DEGRADED", "niet aangetoond": "UNKNOWN", "klopt niet": "BLOCKED" }; return status(m[v] || "UNKNOWN", v || "onbekend"); }
+function replayTitle(r) {
+  if (r.kind === "decision") return `${r.recorded.side === "buy" ? "Koop" : "Verkoop"} ${r.recorded.instrument} (${r.recorded.strategy})${r.recorded.approved === false ? " · afgekeurd" : ""}`;
+  if (r.kind === "pause") return "Risicopauze"; if (r.kind === "resume") return "Hervat door eigenaar";
+  return `Weekkeuze strategieën (${(r.recorded.changes || []).length} wijzigingen)`;
+}
+
+/* ── NEXUS INTELLIGENCE ─────────────────────────────────────────────────── */
+function renderIntel([sub]) {
+  const tabs = [["radar", "Onderzoeksradar"], ["graph", "Intelligence Graph"], ["research", "Onderzoeksrecords"], ["scouts", "Markt en verkenners"], ["modules", "NEXUS-onderdelen"]];
+  const cur = tabs.find(t => t[0] === sub) ? sub : "radar";
+  const body = { radar: intelRadar, graph: intelGraph, research: intelResearch, scouts: intelScouts, modules: intelModules }[cur]();
+  return `<h1>NEXUS Intelligence</h1><p class="lead">De onderzoekslaag. Hij leest alleen en kan niet handelen. Wat niet verbonden is, staat er zo bij; er wordt geen AI-tekst verzonnen.</p>
+  <div class="tabs">${tabs.map(([k, l]) => `<a class="btn" style="text-decoration:none;${k === cur ? "border-color:var(--accent)" : ""}" href="#intelligence/${k}">${l}</a>`).join("")}</div>${body}`;
+}
+function intelRadar() {
+  const om = S.om; if (!om) return empty("Geen gegevens", "overmind.json ontbreekt.");
+  const R = om.radar;
+  return `<section class="card"><h2>Onderzoeksradar</h2>
+  <p class="sub" style="margin-top:0">Welke vragen zijn verder onderzoek waard? <b>Geen koop- of verkoopsignaal.</b> Prioriteit = 100 × bewijs × bevestiging × versheid (elk 0–1, uit vaste regels), alleen als alle drie bekend zijn en het minimum gehaald is. Anders: <span class="label">not rated</span>.</p>
+  <div class="scroll"><table><thead><tr><th>Prioriteit</th><th>Vraag</th><th>Waargenomen</th><th class="r">Bewijs</th><th class="r">Bevestiging</th><th class="r">Versheid</th><th>Ontbreekt / beperking</th></tr></thead><tbody>
+  ${R.map(r => `<tr><td>${r.rated ? `<b class="num">${r.score}</b>` : label("not rated")}</td><td>${deskDot(r.desk)} ${esc(r.question)}<div class="muted" style="font-size:12px">${esc(r.source)}</div></td><td class="sub" style="font-size:12px;max-width:340px">${esc(r.observed || "")}</td>
+    ${["evidence", "confirmation", "freshness"].map(k => `<td class="r num">${r.components[k] == null ? "—" : nf(2).format(r.components[k])}</td>`).join("")}
+    <td class="muted" style="font-size:12px">${esc([...(r.missing || []), ...(r.constraints || [])].join("; "))}</td></tr>`).join("")}
+  </tbody></table></div><p class="muted" style="font-size:12px">${R.filter(r => r.rated).length} van ${R.length} vragen hebben genoeg bewijs. Een hoge prioriteit is geen bewezen voorsprong: dat vraagt een toekomstgerichte meting in de arena.</p></section>`;
+}
+function intelGraph() {
+  const om = S.om; if (!om) return empty("Geen gegevens", "overmind.json ontbreekt.");
+  const G = om.graph; const types = [...new Set(G.nodes.map(n => n.type))];
+  if (!S.graph.types) S.graph.types = new Set(types.filter(t => !["event", "decision", "challenger"].includes(t)));
+  const TL = GTL;
+  return `<section class="card"><div class="spread"><h2>Intelligence Graph</h2><span class="muted">${G.nodes.length} knopen · ${G.edges.length} relaties</span></div>
+  <p class="sub" style="margin-top:0">Alleen relaties die in de data staan. Doorgetrokken = waargenomen of vastgelegd; gestreept = hypothese (coach-regel niet bevestigd). Klik een knoop voor de relaties en de bron.</p>
+  <div class="row" style="margin-bottom:10px">${types.map(t => `<button aria-pressed="${S.graph.types.has(t)}" data-gtype="${t}">${esc(TL[t] || t)} <span class="muted">${G.nodes.filter(n => n.type === t).length}</span></button>`).join("")}
+    <select id="gdesk" aria-label="Filter op afdeling" style="background:var(--surface-3);color:var(--ink-1);border:1px solid var(--line-2);border-radius:8px;padding:6px"><option value="">alle afdelingen</option>${S.state.desks.map(d => `<option value="${d.id}" ${S.graph.desk === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>
+    <select id="gnature" aria-label="Filter op soort relatie" style="background:var(--surface-3);color:var(--ink-1);border:1px solid var(--line-2);border-radius:8px;padding:6px"><option value="">alle relaties</option><option value="observed" ${S.graph.nature === "observed" ? "selected" : ""}>waargenomen</option><option value="recorded" ${S.graph.nature === "recorded" ? "selected" : ""}>vastgelegd</option><option value="hypothesis" ${S.graph.nature === "hypothesis" ? "selected" : ""}>hypothese</option></select></div>
+  <div class="grid g-main"><div id="graph" role="region" style="min-height:300px;min-width:0" aria-label="Relatiegrafiek"></div><div id="gside">${empty("Kies een knoop", "Klik op een afdeling, instrument, strategie of bevinding om de relaties met tijd en bron te zien.")}</div></div>
+  <details style="margin-top:12px"><summary>Wat ontbreekt in de graaf</summary><ul>${G.missing.map(m => `<li>${esc(m)}</li>`).join("")}</ul></details></section>`;
+}
+const GTL = { department: "Afdelingen", asset: "Instrumenten", strategy: "Strategieën", decision: "Beslissingen", risk: "Risico", finding: "Academie", rule: "Coach-regels", challenger: "Uitdagers", event: "Marktmeldingen", research: "Onderzoek", source: "Bronnen" };
+function drawGraph() {
+  const host = document.getElementById("graph"); if (!host) return; const G = S.om.graph;
+  const order = ["department", "asset", "strategy", "decision", "risk", "finding", "rule", "challenger", "event", "research", "source"];
+  let edges = G.edges.filter(e => !S.graph.nature || e.nature === S.graph.nature);
+  let nodes = G.nodes.filter(n => S.graph.types.has(n.type));
+  if (S.graph.desk) {         // alles binnen twee stappen van de gekozen afdeling
+    const keep = new Set(["desk:" + S.graph.desk]);
+    for (let k = 0; k < 2; k++) edges.forEach(e => { if (keep.has(e.source)) keep.add(e.target); if (keep.has(e.target)) keep.add(e.source); });
+    nodes = nodes.filter(n => keep.has(n.id));
+  }
+  const ids = new Set(nodes.map(n => n.id)); edges = edges.filter(e => ids.has(e.source) && ids.has(e.target));
+  const cols = order.filter(t => nodes.some(n => n.type === t)); if (!nodes.length) { host.innerHTML = empty("Niets te tonen", "Pas de filters aan."); return; }
+  const W = Math.max(640, cols.length * 150), rowH = 22; const maxN = Math.max(...cols.map(c => nodes.filter(n => n.type === c).length)); const H = Math.max(260, maxN * rowH + 40);
+  const pos = {}; cols.forEach((c, ci) => { const ns = nodes.filter(n => n.type === c); ns.forEach((n, i) => pos[n.id] = [40 + ci * (W - 80) / Math.max(1, cols.length - 1), 30 + (i + .5) * (H - 40) / ns.length]); });
+  const sel = S.graph.sel; const nb = new Set(); if (sel) edges.forEach(e => { if (e.source === sel) nb.add(e.target); if (e.target === sel) nb.add(e.source); });
+  const colr = n => n.type === "department" ? DESK_COLOR[n.id.slice(5)] : n.type === "risk" ? "var(--crit)" : n.type === "rule" ? "var(--d-fx)" : n.type === "finding" ? "var(--d-metals)" : n.type === "decision" ? "var(--d-crypto)" : "var(--ink-3)";
+  let s = edges.map(e => { const a = pos[e.source], b = pos[e.target]; const on = !sel || e.source === sel || e.target === sel;
+    return `<path d="M${a[0]},${a[1]} C${(a[0] + b[0]) / 2},${a[1]} ${(a[0] + b[0]) / 2},${b[1]} ${b[0]},${b[1]}" fill="none" stroke="${on && sel ? "var(--accent)" : "var(--axis)"}" stroke-opacity="${on ? .9 : .12}" stroke-width="${on && sel ? 1.5 : 1}" ${e.nature === "hypothesis" ? 'stroke-dasharray="3 3"' : ""}/>`; }).join("");
+  s += cols.map((c, ci) => `<text x="${pos[nodes.find(n => n.type === c).id][0]}" y="14" text-anchor="start" style="fill:var(--ink-2);font-weight:600">${esc(GTL[c] || c)}</text>`).join("");
+  s += nodes.map(n => { const [x, y] = pos[n.id]; const dim = sel && n.id !== sel && !nb.has(n.id);
+    return `<g data-node="${esc(n.id)}" style="cursor:pointer" opacity="${dim ? .25 : 1}" tabindex="0" role="button" aria-label="${esc(n.type + ": " + n.label)}"><circle cx="${x}" cy="${y}" r="${n.id === sel ? 7 : 5}" fill="${colr(n)}" stroke="var(--surface-1)" stroke-width="2"/><text x="${x + 9}" y="${y + 4}">${esc(String(n.label).slice(0, 24))}</text></g>`; }).join("");
+  host.innerHTML = `<div class="scroll"><svg viewBox="0 0 ${W + 140} ${H}" width="${W + 140}" height="${H}">${s}</svg></div>`;
+  host.querySelectorAll("[data-node]").forEach(g => { const pick = () => { S.graph.sel = g.dataset.node; drawGraph(); side(); };
+    g.addEventListener("click", pick); g.addEventListener("keydown", e => { if (e.key === "Enter") pick(); }); });
+}
+function side() {
+  const G = S.om.graph, id = S.graph.sel; const n = G.nodes.find(x => x.id === id); if (!n) return;
+  const es = G.edges.filter(e => e.source === id || e.target === id); const lab = x => (G.nodes.find(y => y.id === x) || {}).label || x;
+  const rep = n.type === "decision" || n.type === "risk" ? id.slice(9) : null;
+  document.getElementById("gside").innerHTML = `<div class="card"><div class="muted" style="font-size:12px">${esc(n.type)}</div><h3>${esc(n.label)}</h3>
+    ${n.verdict ? `<p>${verdictBadge(n.verdict)}</p>` : ""}${n.ts ? `<p class="muted">${esc(when(n.ts))}</p>` : ""}${rep ? `<p><a href="#control/replay/${encodeURIComponent(rep)}">beslissing terugkijken →</a></p>` : ""}
+    <table><thead><tr><th>Relatie</th><th>Met</th><th>Bron</th></tr></thead><tbody>${es.map(e => `<tr><td style="font-size:11px" class="num">${esc(e.type)}<div>${label(e.nature)}</div></td><td>${esc(lab(e.source === id ? e.target : e.source))}</td><td class="muted" style="font-size:12px">${esc(e.provenance)}<div>${esc(when(e.ts))}</div></td></tr>`).join("")}</tbody></table></div>`;
+}
+function intelResearch() {
+  const om = S.om; const r = om?.research;
+  if (!r || !r.connected) return `<section class="card"><h2>Onderzoeksrecords</h2>${empty("NEXUS: niet verbonden", "NEXUS draait nog niet mee met de bot, dus er zijn geen echte onderzoeksrecords. Zodra een geplande nexus-ops-run intelligence/records.json schrijft (CEO-akkoord nodig), staan ze hier en in Jarvis /onderzoek.")}</section>`;
+  return `<section class="card"><h2>Onderzoeksrecords</h2><p class="muted">Export ${esc(when(r.exported_at))}</p><table><thead><tr><th>Wanneer</th><th>Onderwerp</th><th>Samenvatting</th><th>Bron</th><th>AI</th></tr></thead><tbody>${r.items.map(x => `<tr><td class="num muted">${esc(when(x.created_at))}</td><td>${esc(x.subject)}</td><td>${esc(x.summary)}<div class="muted" style="font-size:12px">${esc(x.recommendation)}</div></td><td>${label(x.generator)} ${label(x.data_label)}</td><td>${esc(x.ai_status)}</td></tr>`).join("")}</tbody></table></section>`;
+}
+function intelScouts() {
+  const al = S.om ? S.om.changes.alerts_24h : []; const radar = S.state.radar || [];
+  return `<div class="grid g2"><section class="card"><h2>Verkenners (24 uur)</h2>${al.length ? `<table><tbody>${al.map(a => `<tr><td class="num muted">${esc(when(a.ts))}</td><td>${esc(a.text)}</td></tr>`).join("")}</tbody></table>` : empty("Rustig", "Geen meldingen in 24 uur.")}</section>
+  <section class="card"><h2>Marktweer</h2><table><tbody>${(S.state.market_weather || []).map(w => `<tr><td>${w.ok ? status("HEALTHY", "goed") : status("DEGRADED", "slecht")}</td><td>${esc(w.name)}<div class="sub" style="font-size:12px">${esc(w.text)}</div></td></tr>`).join("")}</tbody></table>
+  <h2 style="margin-top:14px">Meme-radar (DexScreener)</h2>${radar.length ? `<table><thead><tr><th>Munt</th><th class="r">24 uur</th><th class="r">Liquiditeit</th></tr></thead><tbody>${radar.slice(0, 8).map(r => `<tr><td>${esc(r.symbol)} <span class="muted">${esc(r.chain)}</span></td><td class="r num ${cls(r.change_24h_pct)}">${pct(r.change_24h_pct / 100)}</td><td class="r num">$${nf(0).format(r.liquidity_usd)}</td></tr>`).join("")}</tbody></table>` : empty("Geen radar", "Nog geen meme-radar opgehaald.")}</section></div>`;
+}
+function intelModules() {
+  const M = [["Read-only koppeling (snapshot, onderzoeksrecords)", "IMPLEMENTED · TESTED", "Draait lokaal en in tests; niet uitgerold", "UNKNOWN"],
+    ["AI Gateway, Council, Challenger, 19 rollen", "BLOCKED", "Geen API-sleutel en geen budgetakkoord", "BLOCKED"],
+    ["Risk Guardian", "IMPLEMENTED · TESTED", "Beoordeelt alleen NEXUS-voorstellen; de risicodirecteur van de bot is leidend", "UNKNOWN"],
+    ["Prediction Ledger", "IMPLEMENTED · TESTED", "Niet in gebruik; de Academie-voorspellingen zijn het werkende boek", "UNKNOWN"],
+    ["Decision Theater, AI HQ, workstations", "IMPLEMENTED · TESTED (demo)", "Next.js-app niet gehost; delen zijn in dit Command Center overgenomen", "UNKNOWN"],
+    ["Strategy Lab, Evolution Lab, Sentinel", "IMPLEMENTED · TESTED", "Historische data; holdout-grenzen blijven beschermd", "UNKNOWN"],
+    ["News Reactor, Social Radar", "BLOCKED", "Geen bron of sleutel", "BLOCKED"]];
+  return `<section class="card"><h2>NEXUS-onderdelen en hun echte status</h2><table><thead><tr><th>Onderdeel</th><th>Status</th><th>Toelichting</th></tr></thead><tbody>${M.map(m => `<tr><td>${esc(m[0])}</td><td>${status(m[3], m[1])}</td><td class="sub">${esc(m[2])}</td></tr>`).join("")}</tbody></table>
+  <p class="muted" style="font-size:12px">Bron: docs/UNIFICATION-8.0.md (audit 23-11). OPERATIONAL wordt pas gemeld met runtime-bewijs.</p></section>`;
+}
+
+/* ── ACADEMY ────────────────────────────────────────────────────────────── */
+function renderAcademy() {
+  const a = S.state.academy || {}, live = a.live?.all, co = S.state.coach || {}, ar = S.state.arena || {};
+  const rules = [...new Map(Object.values(co.desks || {}).flat().map(r => [r.id, r])).values()]; const by = v => rules.filter(r => r.verdict === v);
+  const hist = a.history || [];
+  const lessons = (S.state.lessons?.items || []).slice(0, 12);
+  return `<h1>Academy</h1><p class="lead">Wat de holding leerde, wat verworpen is en wat nog onzeker is. Een hogere trefkans is geen bewijs van winst.</p>
+  <div class="grid g3" style="margin-bottom:var(--gap)">
+    <section class="card"><h2>Geleerd (bevestigd)</h2>${by("klopt").map(r => `<p style="margin:0 0 8px">${verdictBadge(r.verdict)} ${esc(r.title)}</p>`).join("") || empty("Nog niets", "")}</section>
+    <section class="card"><h2>Verworpen</h2>${by("klopt niet").map(r => `<p style="margin:0 0 8px">${verdictBadge(r.verdict)} ${esc(r.title)}<br><span class="sub" style="font-size:12px">${esc(r.text || "")}</span></p>`).join("") || empty("Niets verworpen", "")}</section>
+    <section class="card"><h2>Nog onzeker</h2>${[...by("deels"), ...by("niet aangetoond")].map(r => `<p style="margin:0 0 8px">${verdictBadge(r.verdict)} ${esc(r.title)}</p>`).join("") || empty("Niets open", "")}</section>
+  </div>
+  <div class="grid g-main">
+    <div class="grid" style="align-content:start">
+      <section class="card"><h2>Live voorspellingen</h2>${live ? `<div class="kpis"><div class="kpi"><div class="l">Voorspellingen (7 d)</div><div class="v num">${live.n}</div><div class="s">effectief ${nf(1).format(live.effective)} meting(en)</div></div>
+        <div class="kpi"><div class="l">Raak</div><div class="v num">${pct(live.hit, 0, false)}</div><div class="s">vasthouden ${pct(live.base, 0, false)}</div></div>
+        <div class="kpi"><div class="l">Oordeel</div><div class="v" style="font-size:16px">${esc(live.verdict)}</div><div class="s">90%: ${pct(live.edge_lo)} … ${pct(live.edge_hi)}</div></div></div>` : empty("Nog geen live score", "De eerste 7-daagse scores komen na een week.")}
+        <p class="muted" style="font-size:12px">Overlappende voorspellingen tellen als één meting; daarom is "effectief" zo klein.</p></section>
+      <section class="card"><h2>Strategieën in de geschiedenis</h2><div class="scroll"><table><thead><tr><th>Strategie</th><th class="r">Raak</th><th class="r">Voorsprong</th><th class="r">90%-band</th><th>Oordeel</th></tr></thead><tbody>${hist.map(h => `<tr><td>${esc(h.strategy)}</td><td class="r num">${pct(h.hit, 0, false)}</td><td class="r num ${cls(h.edge)}">${pct(h.edge, 2)}</td><td class="r num muted">${pct(h.edge_lo, 2)} … ${pct(h.edge_hi, 2)}</td><td class="sub">${esc(h.verdict)}</td></tr>`).join("")}</tbody></table></div></section>
+      <section class="card"><h2>Schaduw-arena</h2>${Object.entries(ar.desks || {}).map(([k, v]) => `<details><summary>${deskDot(k)} ${esc(v.name)} · live op plaats ${v.live_rank} van ${(v.board || []).length}</summary><table><thead><tr><th>Variant</th><th class="r">Rendement</th><th class="r">Max daling</th><th class="r">Toeval</th><th>Promotie</th></tr></thead><tbody>${(v.board || []).map(r => `<tr><td>${r.live ? "<b>" + esc(r.name) + "</b>" : esc(r.name)}</td><td class="r num ${cls(r.return)}">${pct(r.return)}</td><td class="r num">${pct(-r.max_dd)}</td><td class="r num">${r.luck == null ? "—" : pct(r.luck, 0, false)}</td><td>${r.promote ? status("DEGRADED", "voorgedragen") : r.live ? label("live") : "nee"}</td></tr>`).join("")}</tbody></table></details>`).join("")}
+        <p class="muted" style="font-size:12px">Promotie na minimaal ${ar.promote_days || 90} dagen én toeval &lt; 10%. Alleen de CEO beslist.</p></section>
+    </div>
+    <div class="grid" style="align-content:start">
+      <section class="card"><h2>Coaches</h2>${Object.entries(co.desks || {}).map(([k, rs]) => `<details><summary>${deskDot(k)} ${esc((co.coaches || {})[k] || k)} · ${rs.filter(r => r.verdict === "klopt").length}/${rs.length} bevestigd</summary>${rs.map(r => `<p style="margin:8px 0">${verdictBadge(r.verdict)} <b>${esc(r.title)}</b><br><span class="sub" style="font-size:12px">${esc(r.text || "")}</span></p>`).join("")}</details>`).join("")}</section>
+      <section class="card"><h2>Recente lessen</h2>${lessons.length ? `<table><tbody>${lessons.map(l => `<tr><td class="num muted" style="white-space:nowrap">${esc(when(l.ts))}</td><td>${esc(l.text)}</td></tr>`).join("")}</tbody></table>` : empty("Geen lessen", "")}</section>
+    </div>
+  </div>`;
+}
+
+/* ── CEO CONTROL ────────────────────────────────────────────────────────── */
+function renderControl([sub, arg]) {
+  const tabs = [["overzicht", "Overzicht"], ["pulse", "System Pulse"], ["replay", "Decision Replay"], ["risk", "Risk Simulator"], ["audit", "Audit"]];
+  const cur = tabs.find(t => t[0] === sub) ? sub : "overzicht";
+  const body = { overzicht: ctlOverview, pulse: ctlPulse, replay: () => ctlReplay(arg && decodeURIComponent(arg)), risk: ctlRisk, audit: ctlAudit }[cur]();
+  return `<h1>CEO Control</h1><p class="lead">Overzicht en toezicht. Dit openbare dashboard heeft <b>geen knoppen die iets veranderen</b>: noodstop, hervatten en promoties gaan via Telegram of de eigenaar zelf.</p>
+  <div class="tabs">${tabs.map(([k, l]) => `<a class="btn" style="text-decoration:none;${k === cur ? "border-color:var(--accent)" : ""}" href="#control/${k}">${l}</a>`).join("")}</div>${body}`;
+}
+function ctlOverview() {
+  const om = S.om; const t = S.state.total;
+  return `<div class="grid g2"><section class="card"><h2>Wacht op jouw besluit</h2>${om && om.decisions.length ? om.decisions.map(d => `<div class="att"><span class="bar-l" style="background:var(--accent)"></span><div><div class="t">${esc(d.title)}</div><div class="d">${esc(d.detail)}<br><span class="muted">hoe: ${esc(d.how)}</span></div></div><a class="go" href="#control/replay/${encodeURIComponent(d.replay || "")}">waarom →</a></div>`).join("") : empty("Niets", "Er wacht niets op jou.")}</section>
+  <section class="card"><h2>Jarvis</h2><p class="sub">Jarvis antwoordt op Telegram met vaste code, op dezelfde gegevens als dit scherm.</p><table><tbody>${[["/aandacht", "wat vraagt nu aandacht en welke besluiten wachten"], ["/veranderd", "wat veranderde in 24 uur"], ["/systeem", "systeemhartslag per onderdeel"], ["/pauze crypto", "waarom een afdeling stilstaat, met de cijfers van toen"], ["/onderzoek", "NEXUS-onderzoek (of eerlijk: niet verbonden)"], ["/noodstop · /hervat", "alles stil of weer aan (alleen via Telegram)"]].map(c => `<tr><td class="num">${c[0]}</td><td class="sub">${c[1]}</td></tr>`).join("")}</tbody></table></section>
+  <section class="card"><h2>Modelgebruik en kosten</h2><table><tbody><tr><td>AI-aanroepen</td><td class="r num">0</td></tr><tr><td>AI-kosten</td><td class="r num">€ 0,00</td></tr><tr><td>Status</td><td class="r">${status("BLOCKED", "geen sleutel")}</td></tr><tr><td>Handelskosten (alle afdelingen)</td><td class="r num">${eur(S.state.desks.reduce((a, d) => a + (d.fees_eur || 0), 0))}</td></tr></tbody></table></section>
+  <section class="card"><h2>Risico in één oogopslag</h2><table><tbody><tr><td>Noodstop</td><td class="r">${S.state.kill ? status("BLOCKED", "aan") : status("HEALTHY", "uit")}</td></tr><tr><td>Live handelen</td><td class="r">${status("HEALTHY", "uit")}</td></tr><tr><td>Daling holding</td><td class="r num">${pct(-t.drawdown)}</td></tr>${(S.state.jarvis?.health?.issues || []).map(i => `<tr><td colspan="2" class="sub">${i.level === "alarm" ? status("BLOCKED", "alarm") : status("DEGRADED", i.level)} ${esc(i.text)}</td></tr>`).join("")}</tbody></table></section></div>`;
+}
+function ctlPulse() {
+  const om = S.om; if (!om) return empty("Geen gegevens", "overmind.json ontbreekt.");
+  return `<section class="card"><h2>System Pulse</h2><p class="sub" style="margin-top:0">Status uit tijdstempels, opnieuw berekend in je browser. Groene tests zijn geen bewijs dat productie draait; dit wel. Jarvis en de publicatie komen uit de openbare GitHub-runs.</p>
+  <div class="scroll"><table><thead><tr><th>Onderdeel</th><th>Status</th><th>Laatste bewijs</th><th>Drempel</th><th>Bewijs</th></tr></thead><tbody>${om.pulse.map(p => { const g = S.gh[p.id]; const ts = p.github_workflow ? g?.ts : p.last_ts;
+    return `<tr><td>${esc(p.name)}${p.detail ? `<div class="muted" style="font-size:12px">${esc(p.detail)}</div>` : ""}</td><td>${status(liveStatus(p))}</td><td class="num">${ts ? esc(when(ts)) + `<div class="muted" style="font-size:12px">${esc(ago(ts))}</div>` : "—"}</td><td class="num muted">${p.healthy_h ? `≤ ${p.healthy_h} u gezond · > ${p.stale_h} u oud` : "—"}</td><td class="muted" style="font-size:12px">${esc(p.github_workflow ? (g ? (g.error ? "GitHub niet bereikbaar" : "GitHub-run: " + g.conclusion) : "alleen zichtbaar op de gepubliceerde site") : p.evidence)}</td></tr>`; }).join("")}</tbody></table></div></section>`;
+}
+function ctlReplay(id) {
+  const om = S.om; if (!om) return empty("Geen gegevens", "overmind.json ontbreekt.");
+  const list = om.replay; const r = list.find(x => x.id === id) || list[0];
+  if (!r) return empty("Geen beslissingen", "Het logboek is leeg.");
+  return `<div class="grid g-main"><section class="card"><h2>${esc(replayTitle(r))} · ${esc(deskName(r.desk))}</h2><p class="muted num">${esc(new Date(r.ts).toLocaleString("nl-NL"))}</p>
+    <div class="layer rec"><div class="row">${label("recorded at decision time")}<span class="muted" style="font-size:12px">uit het logboek, ongewijzigd</span></div>${replayRecorded(r)}</div>
+    <div class="layer rcn"><div class="row">${label("reconstructed from historical data")}<span class="muted" style="font-size:12px">alleen data die toen al bekend was</span></div>${replayRecon(r)}</div>
+    <div class="layer post"><div class="row">${label("post-event analysis")}<span class="muted" style="font-size:12px">wat er daarna gebeurde; was toen niet bekend</span></div>${replayPost(r)}</div></section>
+  <section class="card"><h2>Alle beslissingen</h2><div style="max-height:620px;overflow:auto"><table><tbody>${list.map(x => `<tr${x.id === r.id ? ' style="background:var(--surface-3)"' : ""}><td>${deskDot(x.desk)}</td><td><a href="#control/replay/${encodeURIComponent(x.id)}">${esc(replayTitle(x))}</a><div class="muted num" style="font-size:12px">${esc(when(x.ts))}</div></td></tr>`).join("")}</tbody></table></div></section></div>`;
+}
+function replayRecorded(r) {
+  const x = r.recorded;
+  if (r.kind === "decision") return `<p><b>Signaal:</b> ${esc(x.signal_reason || "—")}</p><p><b>Risicobesluit:</b> ${esc(x.reason)} ${x.size_eur ? `<span class="muted">(${eur(x.size_eur)})</span>` : ""}</p>
+    ${x.checks?.length ? `<table><tbody>${x.checks.map(c => `<tr><td>${c.passed ? status("HEALTHY", "ok") : status("BLOCKED", "nee")}</td><td>${esc(c.rule)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join("")}</tbody></table>` : ""}
+    ${x.fill ? `<p><b>Uitgevoerd:</b> ${nf(6).format(x.fill.quantity)} tegen ${eur(x.fill.price_eur, x.fill.price_eur < 1 ? 5 : 2)}, kosten ${eur(x.fill.fee_eur)}</p>` : `<p class="muted">Geen vulling vastgelegd.</p>`}
+    <p class="muted" style="font-size:12px">Alternatieven: niet vastgelegd op het moment zelf.</p>`;
+  if (r.kind === "selection") return `<p>${esc(x.reason || "")}</p><ul>${(x.changes || []).map(c => `<li>${esc(c)}</li>`).join("")}</ul>`;
+  return `<p>${esc(x.reason)}</p>`;
+}
+function replayRecon(r) {
+  const c = r.reconstructed; if (!c) return `<p class="muted">Geen reconstructie: daarvoor is niets vastgelegd.</p>`;
+  if (r.kind === "decision") return `<p>Laatst bekende koers: <b class="num">${c.price_known == null ? "—" : nf(c.price_known < 1 ? 5 : 2).format(c.price_known)}</b> <span class="muted">(candle ${esc(when(c.price_ts))})</span><br>Waarde afdeling: <span class="num">${eur(c.desk_equity)}</span>, daling vanaf top <span class="num">${pct(-(c.desk_drawdown || 0))}</span></p>`;
+  if (r.kind === "pause" || r.kind === "resume") return `<p>Waarde ${eur(c.desk_equity)}, top ${eur(c.desk_peak)}: daling <b class="num">${pct(-(c.desk_drawdown || 0))}</b>, grens ${pct(-(c.limit || 0), 0)}.</p>`;
+  return `<p class="muted">—</p>`;
+}
+function replayPost(r) {
+  const p = r.post_event; if (!p) return `<p class="muted">Geen nameting.</p>`;
+  if (r.kind === "decision") return `<p>Koers nu ${p.price_now == null ? "—" : nf(p.price_now < 1 ? 5 : 2).format(p.price_now)} ${esc(p.currency || "")} <span class="muted">(${esc(when(p.price_now_ts))})</span>${p.move_since != null ? ` · <b class="num ${cls(p.move_since)}">${pct(p.move_since)}</b> sindsdien: ${esc(p.effect)}` : " · geen vergelijking (andere munt)"}</p>
+    ${p.reflection ? `<p><b>Terugblik van het lab</b> (${esc(when(p.reflection.ts))}): ${pct(p.reflection.pnl_pct)} tegen vasthouden ${pct(p.reflection.hold_pct)}; ${esc(p.reflection.verdict)}.</p><ul>${(p.reflection.lessons || []).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}`;
+  if (r.kind === "pause") return `<p>Sinds de pauze: <b class="num ${cls(p.change_since)}">${pct(p.change_since)}</b> (nu ${eur(p.desk_equity_now)}).</p>`;
+  return `<p class="muted">—</p>`;
+}
+function simulate(sc, k) {
+  const ex = S.om.exposure; const pos = ex.positions; const shock = {};
+  const largest = pos.reduce((a, p) => !a || p.value_eur > a.value_eur ? p : a, null);
+  for (const p of pos) {
+    let s = 0; if (sc.shocks) s = sc.shocks[p.asset_class] || 0; if (sc.usd_move && p.currency === "USD") s = sc.usd_move;
+    if (sc.largest && largest && p.symbol === largest.symbol) s = sc.largest; shock[p.desk] = (shock[p.desk] || 0) + p.value_eur * s * k;
+  }
+  const lim = ex.limit_drawdown;
+  const desks = S.state.desks.map(d => { const loss = shock[d.id] || 0; const after = (ex.desk_equity[d.id] || 0) + loss; const peak = ex.desk_peak[d.id] || after;
+    return { id: d.id, name: d.name, loss, after, dd: peak ? 1 - after / peak : 0, breach: !ex.desk_paused[d.id] && peak && 1 - after / peak >= lim, paused: ex.desk_paused[d.id] }; });
+  const tot = desks.reduce((a, d) => a + d.loss, 0); return { desks, tot, after: ex.equity_eur + tot };
+}
+function ctlRisk() {
+  const om = S.om; if (!om) return empty("Geen gegevens", "overmind.json ontbreekt.");
+  const sc = om.scenarios.find(s => s.id === S.sim.id) || om.scenarios[0]; const r = simulate(sc, S.sim.k);
+  return `<section class="card"><h2>Risk Simulator</h2><p class="sub" style="margin-top:0">Wat gebeurt er met de huidige posities bij een vaste schok? <b>Geen kansvoorspelling</b>, alleen rekenen met aannames. Leest alleen: er verandert niets aan posities, pauzes of limieten.</p>
+  <div class="row" style="margin-bottom:12px">${om.scenarios.map(s => `<button aria-pressed="${s.id === sc.id}" data-scn="${s.id}">${esc(s.name)}</button>`).join("")}<button data-reset="1">Reset</button></div>
+  <label class="sub" for="sk">Schaal van de schok: <b class="num" id="skv">${nf(1).format(S.sim.k)}×</b></label><input id="sk" type="range" min="0.5" max="2" step="0.1" value="${S.sim.k}">
+  <p class="layer rcn" style="margin:12px 0"><b>Aanname:</b> ${esc(sc.assumption)} ${S.sim.k !== 1 ? `(× ${nf(1).format(S.sim.k)})` : ""}</p>
+  <div class="kpis" style="margin-bottom:12px"><div class="kpi"><div class="l">Holding nu</div><div class="v num">${eur(om.exposure.equity_eur)}</div></div><div class="kpi"><div class="l">Effect</div><div class="v num ${cls(r.tot)}">${eur(r.tot)}</div><div class="s">${pct(r.tot / om.exposure.equity_eur)}</div></div><div class="kpi"><div class="l">Daarna</div><div class="v num">${eur(r.after)}</div></div><div class="kpi"><div class="l">Nieuwe pauzes</div><div class="v num">${r.desks.filter(d => d.breach).length}</div><div class="s">grens ${pct(-om.exposure.limit_drawdown, 0)} vanaf top</div></div></div>
+  ${barRows(r.desks.map(d => ({ name: d.name, v: d.loss, color: DESK_COLOR[d.id], dot: deskDot(d.id), note: d.paused ? "staat al stil (cash)" : d.breach ? "zou de pauzegrens raken" : "daling vanaf top " + pct(-d.dd) })), v => eur(v), { label: "Effect per afdeling" })}
+  <table style="margin-top:10px"><thead><tr><th>Afdeling</th><th class="r">Effect</th><th class="r">Daling vanaf top</th><th>Gevolg</th></tr></thead><tbody>${r.desks.map(d => `<tr><td>${esc(d.name)}</td><td class="r num ${cls(d.loss)}">${eur(d.loss)}</td><td class="r num">${pct(-d.dd)}</td><td>${d.paused ? label("al gepauzeerd") : d.breach ? status("BLOCKED", "pauzegrens") : status("HEALTHY", "binnen grens")}</td></tr>`).join("")}</tbody></table>
+  <p class="muted" style="font-size:12px">Bron: posities uit de laatste ronde (${esc(when(S.state.generated_at))}). Activaklasse en munt komen uit de config. Reproduceerbaar: dezelfde invoer geeft dezelfde uitkomst.</p></section>`;
+}
+function ctlAudit() {
+  const om = S.om; if (!om) return empty("Geen gegevens", "overmind.json ontbreekt.");
+  const ev = om.replay.filter(r => r.kind !== "decision");
+  return `<section class="card"><h2>Audit: pauzes, hervattingen en strategiewissels</h2><p class="sub" style="margin-top:0">Uit de logboeken van de afdelingen. Dit scherm past niets aan; originele records blijven zoals ze zijn.</p>
+  <table><thead><tr><th>Wanneer</th><th>Afdeling</th><th>Wat</th><th></th></tr></thead><tbody>${ev.map(r => `<tr><td class="num muted">${esc(when(r.ts))}</td><td>${deskDot(r.desk)} ${esc(deskName(r.desk))}</td><td>${esc(replayTitle(r))}<div class="sub" style="font-size:12px">${esc(r.recorded.reason || "")}</div></td><td><a href="#control/replay/${encodeURIComponent(r.id)}">bekijk →</a></td></tr>`).join("")}</tbody></table></section>`;
+}
+
+/* ── na het tekenen: interactie ─────────────────────────────────────────── */
+function afterRender(r, rest) {
+  if (r === "intelligence" && rest[0] === "graph" && S.om) {
+    drawGraph(); if (S.graph.sel) side();
+    document.querySelectorAll("[data-gtype]").forEach(b => b.onclick = () => { const t = b.dataset.gtype; S.graph.types.has(t) ? S.graph.types.delete(t) : S.graph.types.add(t); b.setAttribute("aria-pressed", S.graph.types.has(t)); drawGraph(); });
+    document.getElementById("gdesk").onchange = e => { S.graph.desk = e.target.value; drawGraph(); };
+    document.getElementById("gnature").onchange = e => { S.graph.nature = e.target.value; drawGraph(); };
+  }
+  if (r === "control" && rest[0] === "risk") {
+    document.querySelectorAll("[data-scn]").forEach(b => b.onclick = () => { S.sim.id = b.dataset.scn; route(); });
+    const rs = document.querySelector("[data-reset]"); if (rs) rs.onclick = () => { S.sim = { id: "market", k: 1 }; route(); };
+    const sk = document.getElementById("sk"); if (sk) sk.onchange = e => { S.sim.k = +e.target.value; route(); };
+  }
+}
+load();
 </script>
 </body>
 </html>

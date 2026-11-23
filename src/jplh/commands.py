@@ -30,6 +30,10 @@ HELP = ("Commando's:\n"
         "/coach meme - wat de coach van een afdeling weet, getoetst op onze koersen\n"
         "/maand - de maandafsluiting (of /maand oktober)\n"
         "/onderzoek - de laatste onderzoeksrecords van NEXUS (alleen lezen)\n"
+        "/aandacht - wat nu aandacht vraagt en welke besluiten op jou wachten\n"
+        "/veranderd - wat er in 24 uur veranderde\n"
+        "/systeem - systeemhartslag: wat draait, wat is oud, wat is niet verbonden\n"
+        "/pauze crypto - waarom een afdeling stilstaat, met de cijfers van toen\n"
         "/alarm BTC 80000 - seintje zodra BTC die koers raakt\n"
         "/alarmen - je alarmen bekijken\n"
         "/alarm weg BTC - alarmen voor BTC weghalen (/alarm weg alles: allemaal)\n"
@@ -341,6 +345,14 @@ def _state(config: HoldingConfig, home: Path, market: Store, now: datetime) -> d
     return build_state(config, desks, market, home, now)
 
 
+def _overmind(config: HoldingConfig, home: Path, market: Store, now: datetime) -> tuple[dict, dict]:
+    """Stand plus Command Center-gegevens: dezelfde vaste code als het dashboard, alleen lezen."""
+    from jplh.overmind import build
+    desks = open_desks(config, home, market)
+    state = json.loads(json.dumps(build_state(config, desks, market, home, now), default=str))
+    return state, build(state, config, desks, market, now, home)
+
+
 def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: datetime,
            memo: dict | None = None, sources=None) -> str:
     """Het antwoord van Jarvis op één bericht. ``memo`` (alarmen) wordt bijgewerkt."""
@@ -361,6 +373,21 @@ def answer(text: str, config: HoldingConfig, home: Path, market: Store, now: dat
         return "✅ Noodstop is uit. De volgende ronde handelt weer." if was else "De noodstop stond al uit."
     if cmd == "/onderzoek":
         return intelligence_text(home, now)
+    if cmd in ("/aandacht", "/veranderd", "/systeem", "/pauze"):
+        from jplh import overmind
+        st, ov = _overmind(config, home, market, now)
+        if cmd == "/aandacht":
+            return overmind.attention_text(ov)
+        if cmd == "/veranderd":
+            return overmind.changes_text(ov)
+        if cmd == "/systeem":
+            return overmind.pulse_text(ov)
+        want = DESK_ALIASES.get(parts[1].lower()) if len(parts) > 1 else None
+        if want is None:
+            stil = [d["name"] for d in st["desks"] if d.get("paused_reason")]
+            return ("Welke afdeling? Kies uit: crypto, meme, aandelen, metalen, fx. "
+                    + (f"Nu stil: {', '.join(stil)}." if stil else "Er staat nu niets stil."))
+        return overmind.pause_text(ov, st, want)
     if cmd in ("/stand", "/briefing"):
         st = _state(config, home, market, now)
         h = health(st)

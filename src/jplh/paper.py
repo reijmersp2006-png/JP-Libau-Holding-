@@ -16,7 +16,7 @@ from jplh.desks import ALL_CANDIDATES, open_desks, rebalance_desks
 from jplh.models import Candle
 from jplh.notify import notify
 from jplh.scouts import scan
-from jplh.site import build_state, write_site
+from jplh.site import build_overmind, build_state, write_site
 from jplh.store import Store
 
 
@@ -73,7 +73,10 @@ def paper_round(config: HoldingConfig, home: Path, site_dir: Path | None = None,
     maybe_run_arena(config, market, [d.holding.store for d in desks.values()], now, log)
     if site_dir is not None:
         state = build_state(config, desks, market, home, now, problems=problems)
-        write_site(state, site_dir)
+        om_problems: list[str] = []
+        write_site(state, site_dir, build_overmind(state, config, desks, market, home, now, om_problems))
+        for p in om_problems:
+            log(f"dashboard  {p}")
         notify(state, market, now, log=log)
         log(f"Dashboard bijgewerkt in {site_dir}")
     return failed
@@ -131,5 +134,6 @@ def build_demo(config: HoldingConfig, home: Path, hours: int = 96, now: datetime
     maybe_study(desks, market, config, ALL_CANDIDATES, now, log=lambda *_: None)
     maybe_coach(market, config, now, market.get_state("academy"), log=lambda *_: None)
     site = home / "site"
-    write_site(build_state(config, desks, market, home, now, demo=True), site)
+    state = build_state(config, desks, market, home, now, demo=True)
+    write_site(state, site, build_overmind(state, config, desks, market, home, now))
     return site

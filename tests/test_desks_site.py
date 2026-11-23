@@ -88,7 +88,8 @@ def test_demo_world(tmp_path):
     site = build_demo(load_config(None), tmp_path / "demo", hours=6, now=NOW, history_days=10)
     state = json.loads((site / "state.json").read_text())
     assert state["demo"] is True
-    assert (site / "index.html").read_text().count("JP-libau") >= 1
+    assert (site / "index.html").read_text().lower().count("jp-libau") >= 1   # merknaam: "JP-Libau Holding" (9.0)
+    assert (site / "stad.html").read_text().lower().count("jp-libau") >= 1
 
 
 def test_two_rounds_in_one_hour_do_not_double_the_total(tmp_path):
