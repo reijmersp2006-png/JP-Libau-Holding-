@@ -218,12 +218,25 @@ def notify(state: dict, market: Store, now: datetime, log=print, token: str | No
     tg = client or Telegram(token)
     memory = market.get_state("telegram", {})
     try:
-        chat = os.environ.get("TELEGRAM_CHAT_ID") or memory.get("chat") or tg.find_chat()
+        from_env = os.environ.get("TELEGRAM_CHAT_ID")
+        chat = from_env or memory.get("chat")
+        if not chat and memory.get("connected"):
+            # Eerder al verbonden maar de chat-id ontbreekt (geheim weg?): nooit zomaar de laatste
+            # afzender als eigenaar aannemen.
+            log("Telegram: chat-id ontbreekt (zet het geheim TELEGRAM_CHAT_ID terug)")
+            return 0
+        chat = chat or tg.find_chat()
         if not chat:
             log("Telegram: nog geen chat gevonden. Stuur je bot eerst een bericht.")
             return 0
-        first = "chat" not in memory
-        memory["chat"] = chat
+        first = "chat" not in memory and not memory.get("connected")
+        memory["connected"] = True
+        if from_env:
+            # 9.1: staat de chat-id als geheim klaar, dan bewaren we hem niet meer in de stand
+            # (die staat op de publieke branch paper-data).
+            memory.pop("chat", None)
+        else:
+            memory["chat"] = chat
         msgs = messages(state, memory, now)
         if first:
             msgs.insert(0, "🤖 Jarvis van JP-libau Holding is verbonden. Je krijgt hier trades, "

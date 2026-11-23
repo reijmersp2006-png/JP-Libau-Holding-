@@ -17,6 +17,8 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -q
       - run: jplh selftest
+      - name: Geheimenscan (9.1, toont nooit waarden)
+        run: jplh secret-scan $(git ls-files)
 
   databronnen:
     # Controleert vanaf GitHub of alle databronnen echt bereikbaar zijn en haalt één

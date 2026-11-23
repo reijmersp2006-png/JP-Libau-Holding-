@@ -8,6 +8,7 @@ Een alarm is alleen een melding: het koopt of verkoopt nooit iets."""
 from __future__ import annotations
 
 import json
+import os
 import math
 from datetime import UTC, datetime
 from pathlib import Path
@@ -457,7 +458,7 @@ def listen(config: HoldingConfig, home: Path, client, log=print, now: datetime |
         from jplh.data import live_sources
         sources = live_sources()
     market = Store(home / "data" / "holding.sqlite3")
-    chat = market.get_state("telegram", {}).get("chat")
+    chat = os.environ.get("TELEGRAM_CHAT_ID") or market.get_state("telegram", {}).get("chat")
     if not chat:
         log("Jarvis: nog geen chat verbonden")
         return 0
