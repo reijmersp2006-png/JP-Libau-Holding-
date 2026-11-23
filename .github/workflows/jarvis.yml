@@ -43,10 +43,20 @@ jobs:
             url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           fi
           git clone --depth 30 --branch paper-data "$url" state
+          # 9.2: is de stand verhuisd naar de privé-opslag, dan nooit verder met de oude publieke kopie.
+          if [ -z "$STATE_REPO" ] && [ -f state/MOVED ]; then echo "Stand is verhuisd naar de privé-opslag: zet de variabele STATE_REPO"; exit 1; fi
           mkdir -p data
           cp -r state/data/. data/
           [ -f state/KILL ] && cp state/KILL KILL || true
           [ -f state/jarvis.json ] && cp state/jarvis.json jarvis.json || true
+
+      - name: Beveiligingsinstellingen (alleen ja/nee, nooit waarden)
+        run: jplh config-check
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATE_REPO: ${{ vars.STATE_REPO }}
+          STATE_TOKEN: ${{ secrets.STATE_TOKEN }}
 
       - name: Commando's beantwoorden
         run: jplh jarvis

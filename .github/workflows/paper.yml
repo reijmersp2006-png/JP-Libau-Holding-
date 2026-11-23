@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy2.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,6 +50,8 @@ jobs:
           else
             mkdir state && git -C state init -b paper-data && git -C state remote add origin "$url"
           fi
+          # 9.2: is de stand verhuisd naar de privé-opslag, dan nooit verder met de oude publieke kopie.
+          if [ -z "$STATE_REPO" ] && [ -f state/MOVED ]; then echo "Stand is verhuisd naar de privé-opslag: zet de variabele STATE_REPO"; exit 1; fi
           mkdir -p data logs
           [ -d state/data ] && cp -r state/data/. data/ || true
           [ -d state/logs ] && cp -r state/logs/. logs/ || true
@@ -95,6 +97,13 @@ jobs:
         with:
           path: site
       - id: deploy
+        uses: actions/deploy-pages@v4
+        continue-on-error: true      # 9.2: GitHub vindt het artefact soms nét niet; tweede poging hieronder
+      - name: Publiceren - tweede poging
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 30
+      - id: deploy2
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
       - name: Wachter - melden als de ronde mislukt

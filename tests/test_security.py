@@ -1,6 +1,7 @@
 """Master Prompt 9.1: publieke export alleen via allowlist, geen geheimen, chat-id uit de stand."""
 
 import json
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -143,3 +144,28 @@ def test_tracked_repository_files_contain_no_secrets():
     except (OSError, subprocess.CalledProcessError):
         pytest.skip("geen git-checkout")
     assert scan_paths([root / f for f in files.split()]) == []
+
+
+def test_a_mistyped_chat_secret_never_locks_phil_out(tmp_path, monkeypatch):
+    market = Store(tmp_path / "m.sqlite3")
+    market.set_state("telegram", {"chat": CHAT, "seen_ts": NOW.isoformat()})
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "1111111111")              # typefout
+    logs = []
+    tg = FakeTelegram()
+    notify(_quiet_state(), market, NOW, log=logs.append, client=tg)
+    assert market.get_state("telegram")["chat"] == CHAT                # koppeling blijft
+    assert all(c == CHAT for c, _ in tg.sent)
+    assert any("wijkt af" in m for m in logs) and not any("1111111111" in m for m in logs)
+
+
+def test_config_check_prints_only_yes_no(tmp_path, monkeypatch, capsys):
+    st = Store(tmp_path / "data" / "holding.sqlite3")
+    st.set_state("telegram", {"chat": CHAT})
+    st.close()
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", CHAT)
+    monkeypatch.setenv("STATE_TOKEN", "geheim-token-waarde-123")
+    monkeypatch.delenv("STATE_REPO", raising=False)
+    assert main(["--home", str(tmp_path), "config-check"]) == 0
+    out = capsys.readouterr().out
+    assert CHAT not in out and "geheim-token" not in out
+    assert "geheim klopt met gekoppelde chat" in out and re.search(r"STATE_TOKEN aanwezig +ja", out)

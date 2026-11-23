@@ -1,0 +1,142 @@
+name: Stand verhuizen
+
+# Master Prompt 9.2: de stand van de bot (branch paper-data) veilig naar een privé-repo verhuizen.
+# Alleen met de hand te starten. Drie standen:
+#   controle  - test lezen en schrijven in de privé-repo op een tijdelijke branch en bewijst met
+#               hashes dat een kopie identiek is. Raakt de echte stand niet aan.
+#   verhuizen - kopieert paper-data met de hele geschiedenis naar de privé-repo, zet een MOVED-markering
+#               op de publieke branch (zodat rondes daar nooit meer op verder bouwen) en bewijst dat
+#               beide kopieën identiek zijn. Daarna zet Phil de variabele STATE_REPO.
+#   terugzetten - het omgekeerde (rollback): privé-stand terug naar de publieke branch, markering weg.
+# Er wordt nooit iets gewist, nooit een lege stand over een volle gezet en nooit geforceerd gepusht.
+
+on:
+  workflow_dispatch:
+    inputs:
+      stand:
+        description: "controle, verhuizen of terugzetten"
+        required: true
+        default: controle
+        type: choice
+        options: [controle, verhuizen, terugzetten]
+      doel:
+        description: "privé-repo, bijv. eigenaar/jplh-state"
+        required: true
+      bevestiging:
+        description: "typ VERHUIS (bij verhuizen) of TERUG (bij terugzetten); leeg bij controle"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: paper            # nooit tegelijk met een handelsronde
+  cancel-in-progress: false
+
+jobs:
+  verhuizen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      STAND: ${{ inputs.stand }}
+      DOEL: ${{ inputs.doel }}
+      BEVESTIGING: ${{ inputs.bevestiging }}
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      STATE_TOKEN: ${{ secrets.STATE_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      - name: Voorwaarden
+        run: |
+          [ -n "$STATE_TOKEN" ] || { echo "Geheim STATE_TOKEN ontbreekt"; exit 1; }
+          echo "$DOEL" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || { echo "Doel moet eigenaar/naam zijn"; exit 1; }
+          [ "$DOEL" != "$GITHUB_REPOSITORY" ] || { echo "Doel mag niet deze publieke repo zijn"; exit 1; }
+          if [ "$STAND" = verhuizen ] && [ "$BEVESTIGING" != VERHUIS ]; then echo "Bevestig met VERHUIS"; exit 1; fi
+          if [ "$STAND" = terugzetten ] && [ "$BEVESTIGING" != TERUG ]; then echo "Bevestig met TERUG"; exit 1; fi
+          pub="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          priv="https://x-access-token:${STATE_TOKEN}@github.com/${DOEL}.git"
+          git ls-remote "$priv" >/dev/null 2>&1 || { echo "Privé-repo niet bereikbaar met STATE_TOKEN (naam of rechten?)"; exit 1; }
+          vis=$(GH_TOKEN="$STATE_TOKEN" gh api "repos/$DOEL" --jq .private 2>/dev/null || echo onbekend)
+          [ "$vis" = "true" ] || { echo "Doel is niet aantoonbaar privé ($vis): geweigerd"; exit 1; }
+          echo "Privé-repo bereikbaar; branch paper-data daar: $(git ls-remote --heads "$priv" paper-data | wc -l)"
+          git config --global user.name "jplh-bot"
+          git config --global user.email "jplh-bot@users.noreply.github.com"
+          echo "PUB=$pub" >> "$GITHUB_ENV"; echo "PRIV=$priv" >> "$GITHUB_ENV"
+
+      - name: Wachten tot Jarvis klaar is
+        run: |
+          for i in $(seq 1 60); do
+            busy=$(gh run list --workflow jarvis.yml --repo "$GITHUB_REPOSITORY" --status in_progress --json databaseId --jq length)
+            [ "$busy" = "0" ] && exit 0
+            sleep 10
+          done
+          echo "Jarvis blijft bezig: later opnieuw"; exit 1
+
+      - name: Controle - tijdelijke kopie, echte stand onaangeroerd
+        if: inputs.stand == 'controle'
+        run: |
+          git clone -q --branch paper-data "$PUB" pub
+          jplh --home pub state-check --out pub.json > /dev/null
+          git -C pub push -q "$PRIV" HEAD:refs/heads/toegangstest
+          git clone -q --branch toegangstest "$PRIV" priv
+          jplh --home priv state-check --against pub.json
+          git -C pub push -q "$PRIV" :refs/heads/toegangstest
+          echo "Lezen, schrijven en opruimen in de privé-repo: gelukt. Tijdelijke branch weer verwijderd."
+          jplh --home pub state-check | python -c "import json,sys;d=json.load(sys.stdin);print('Vermogen', d['equity_eur'], '| pauzes', d['paused'], '| laatste ronde', d['last_round_at'], '| bestanden', d['files'], '| integriteit', d['integrity_ok'])"
+
+      - name: Verhuizen
+        if: inputs.stand == 'verhuizen'
+        run: |
+          git clone -q --branch paper-data "$PUB" pub
+          # Bestaat paper-data al privé, dan moet die een voorganger van de publieke zijn (nooit overschrijven).
+          if git ls-remote --exit-code --heads "$PRIV" paper-data >/dev/null; then
+            git -C pub fetch -q "$PRIV" paper-data:prive
+            git -C pub merge-base --is-ancestor prive HEAD || { echo "Privé heeft een afwijkende stand: gestopt, niets gewijzigd"; exit 1; }
+          fi
+          jplh --home pub state-check --out pub.json > /dev/null
+          if [ ! -f pub/MOVED ]; then
+            printf 'De stand van JP-Libau Holding staat sinds %s in een privé-repo.\nDeze branch wordt niet meer bijgewerkt. Zie docs/SECURITY-9.1.md.\n' "$(date -u +%Y-%m-%dT%H:%MZ)" > pub/MOVED
+            git -C pub add MOVED
+            git -C pub commit -qm "Stand verhuisd naar privé-opslag"
+            git -C pub push -q origin paper-data || { echo "Publieke branch veranderde tussendoor: start opnieuw"; exit 1; }
+          fi
+          git -C pub push -q "$PRIV" HEAD:refs/heads/paper-data
+          git clone -q --branch paper-data "$PRIV" priv
+          jplh --home priv state-check --against pub.json
+          echo "Publiek $(git -C pub rev-parse --short HEAD) = privé $(git -C priv rev-parse --short HEAD)"
+
+      - name: Laatkomers inhalen (Jarvis die vlak ervoor startte)
+        if: inputs.stand == 'verhuizen'
+        run: |
+          sleep 30
+          for i in $(seq 1 30); do
+            busy=$(gh run list --workflow jarvis.yml --repo "$GITHUB_REPOSITORY" --status in_progress --json databaseId --jq length)
+            [ "$busy" = "0" ] && break; sleep 10
+          done
+          git -C pub fetch -q origin paper-data
+          if [ "$(git -C pub rev-parse FETCH_HEAD)" != "$(git -C pub rev-parse HEAD)" ]; then
+            git -C pub merge -q --ff-only FETCH_HEAD && git -C pub push -q "$PRIV" HEAD:refs/heads/paper-data
+            echo "Late publieke commit meegenomen naar privé"
+          fi
+          echo "Klaar. Zet nu de variabele STATE_REPO op de naam van de privé-repo."
+
+      - name: Terugzetten (rollback)
+        if: inputs.stand == 'terugzetten'
+        run: |
+          git clone -q --branch paper-data "$PRIV" priv
+          git -C priv fetch -q "$PUB" paper-data:publiek
+          git -C priv merge-base --is-ancestor publiek HEAD || { echo "Publieke branch is niet ouder dan de privé-stand: gestopt"; exit 1; }
+          jplh --home priv state-check --out priv.json > /dev/null
+          if [ -f priv/MOVED ]; then git -C priv rm -q MOVED && git -C priv commit -qm "Stand terug naar publieke branch"; fi
+          git -C priv push -q "$PRIV" HEAD:refs/heads/paper-data
+          git -C priv push -q "$PUB" HEAD:refs/heads/paper-data
+          git clone -q --branch paper-data "$PUB" pub
+          jplh --home pub state-check --against priv.json
+          echo "Klaar. Maak nu de variabele STATE_REPO leeg."
