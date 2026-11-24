@@ -1,0 +1,88 @@
+name: Noodstop
+
+# Master Prompt 9.3: een noodstop die ook werkt als Telegram plat ligt. Alleen met de hand te starten,
+# alleen door de eigenaar. Zet of haalt het bestand KILL in de stand (publiek of privé, net als de ronde).
+# KILL blokkeert elke order, ook verkopen: posities blijven staan, er wordt niets geliquideerd.
+# Hervatten kan alleen met het woord HERVAT; pauzes van afdelingen blijven altijd ongemoeid.
+# Elke actie komt in noodstop-log.jsonl (wie, wanneer, waarom) en in de git-geschiedenis.
+
+on:
+  workflow_dispatch:
+    inputs:
+      actie:
+        description: "stop, hervat of status"
+        required: true
+        default: stop
+        type: choice
+        options: [stop, hervat, status]
+      reden:
+        description: "korte reden (komt in het logboek; geen geheimen)"
+        required: true
+        default: "handmatige noodstop"
+      bevestiging:
+        description: "typ HERVAT om te hervatten; leeg bij stop en status"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paper            # nooit tegelijk met een handelsronde
+  cancel-in-progress: false
+
+jobs:
+  noodstop:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ACTIE: ${{ inputs.actie }}
+      REDEN: ${{ inputs.reden }}
+      BEVESTIGING: ${{ inputs.bevestiging }}
+      DOOR: ${{ github.actor }}
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      STATE_REPO: ${{ vars.STATE_REPO }}
+      STATE_TOKEN: ${{ secrets.STATE_TOKEN }}
+    steps:
+      - name: Stand ophalen
+        run: |
+          if [ "$ACTIE" = hervat ] && [ "$BEVESTIGING" != HERVAT ]; then echo "Hervatten alleen met bevestiging HERVAT"; exit 1; fi
+          if [ -n "$STATE_REPO" ]; then
+            url="https://x-access-token:${STATE_TOKEN}@github.com/${STATE_REPO}.git"
+          else
+            url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git clone -q --depth 5 --branch paper-data "$url" state || { echo "Stand niet bereikbaar: noodstop NIET gezet"; exit 1; }
+          if [ -z "$STATE_REPO" ] && [ -f state/MOVED ]; then echo "Stand is verhuisd: zet eerst STATE_REPO"; exit 1; fi
+          git -C state config user.name "jplh-bot"
+          git -C state config user.email "jplh-bot@users.noreply.github.com"
+          echo "Noodstop nu: $([ -f state/KILL ] && echo AAN || echo uit)"
+
+      - name: Noodstop zetten of opheffen
+        if: inputs.actie != 'status'
+        run: |
+          cd state
+          was=$([ -f KILL ] && echo true || echo false)
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if [ "$ACTIE" = stop ]; then
+            printf 'noodstop via GitHub-werkflow %s\n' "$now" > KILL
+          else
+            rm -f KILL
+          fi
+          nu=$([ -f KILL ] && echo true || echo false)
+          python3 -c 'import json,os,sys; print(json.dumps({"ts": sys.argv[1], "actie": os.environ["ACTIE"], "door": os.environ["DOOR"], "reden": os.environ["REDEN"][:200], "kanaal": "github", "run": os.environ["GITHUB_RUN_ID"], "was_aan": sys.argv[2] == "true", "nu_aan": sys.argv[3] == "true"}, ensure_ascii=False))' "$now" "$was" "$nu" >> noodstop-log.jsonl
+          git add -A
+          git commit -qm "Noodstop: $ACTIE via werkflow ($now)"
+          for i in 1 2 3 4; do git push -q origin paper-data && break; sleep 5; git pull -q --rebase origin paper-data; done
+
+      - name: Controleren dat het echt staat
+        run: |
+          rm -rf check
+          if [ -n "$STATE_REPO" ]; then url="https://x-access-token:${STATE_TOKEN}@github.com/${STATE_REPO}.git"; else url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"; fi
+          git clone -q --depth 1 --branch paper-data "$url" check
+          aan=$([ -f check/KILL ] && echo true || echo false)
+          echo "Noodstop in de opgeslagen stand: $([ "$aan" = true ] && echo AAN || echo uit)"
+          if [ "$ACTIE" = stop ] && [ "$aan" != true ]; then echo "NOODSTOP NIET BEVESTIGD"; exit 1; fi
+          if [ "$ACTIE" = hervat ] && [ "$aan" != false ]; then echo "HERVATTEN NIET BEVESTIGD"; exit 1; fi
+          echo "Laatste regels logboek:"; tail -n 3 check/noodstop-log.jsonl 2>/dev/null || echo "(leeg)"

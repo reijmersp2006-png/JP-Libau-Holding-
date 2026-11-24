@@ -69,6 +69,8 @@ jobs:
           u=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $STATE_TOKEN" https://api.github.com/user)
           r=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $STATE_TOKEN" "https://api.github.com/repos/$DOEL")
           echo "GitHub met STATE_TOKEN: token-check HTTP $u (200 = geldig), repo-check HTTP $r (200 = toegang; 404 = naam onjuist of repo niet aan de token gekoppeld)"
+          # 9.3: één oorzaak per toestand (token ongeldig, niet gekoppeld, verkeerde naam, rechten, leeg = in orde)
+          jplh access-check --repo "$DOEL" || true
           git ls-remote "$priv" >/dev/null 2>git.err || { echo "git zegt: $(head -c 300 git.err)"; echo "Privé-repo niet bereikbaar met STATE_TOKEN (naam of rechten?)"; exit 1; }
           vis=$(GH_TOKEN="$STATE_TOKEN" gh api "repos/$DOEL" --jq .private 2>/dev/null || echo onbekend)
           [ "$vis" = "true" ] || { echo "Doel is niet aantoonbaar privé ($vis): geweigerd"; exit 1; }
