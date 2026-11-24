@@ -209,7 +209,7 @@ def test_resume_needs_explicit_confirmation(state_repo):
 
 def test_emergency_workflow_is_owner_only_manual_and_never_concurrent_with_a_round():
     assert set(NOOD.get(True, NOOD.get("on"))) == {"workflow_dispatch"}        # yaml leest 'on' als True
-    assert NOOD["concurrency"]["group"] == "paper"
+    assert NOOD["concurrency"]["group"] == "noodstop"     # niet "paper": daar kan een ronde hem annuleren
     assert "github.repository_owner" in NOOD["jobs"]["noodstop"]["if"]
     text = (ROOT / ".github" / "workflows" / "noodstop.yml").read_text()
     assert "${{" not in "".join(NSTEPS.values())                     # invoer alleen via env, nooit in de shell
@@ -222,3 +222,77 @@ def test_fingerprint_includes_the_emergency_log(tmp_path):
     a = fingerprint(home, summary=False)
     (home / "noodstop-log.jsonl").write_text("{}\n")
     assert fingerprint(home, summary=False)["digest"] != a["digest"]
+
+
+PAPER = yaml.safe_load((ROOT / ".github" / "workflows" / "paper.yml").read_text())
+PSTEPS = {s.get("name"): s.get("run") for s in PAPER["jobs"]["ronde"]["steps"]}
+
+
+def _round_clone(tmp, bare, name):
+    """Een ronde die de stand ophaalde vóórdat de noodstop gezet werd."""
+    work = tmp / name
+    work.mkdir()
+    subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", "paper-data", str(bare), "state"], cwd=work,
+                   check=True)
+    shutil.copytree(work / "state" / "data", work / "data")
+    (work / "logs").mkdir()
+    return work
+
+
+def _paper(step, cwd):
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@t"}
+    return subprocess.run(["bash", "-e", "-c", PSTEPS[step]], cwd=cwd, env=env, capture_output=True, text=True)
+
+
+@needs_git
+@pytest.mark.parametrize("reread", [True, False])
+def test_a_round_running_during_the_stop_can_never_undo_it(state_repo, reread):
+    tmp, bare = state_repo
+    rnd = _round_clone(tmp, bare, "ronde")
+    assert not (rnd / "KILL").exists()
+    assert run_all(tmp / "stop", bare, "stop")[0] == 0              # noodstop terwijl de ronde loopt
+    if reread:                                                      # ronde komt nu pas bij het handelen
+        r = _paper("Noodstop vlak voor het handelen opnieuw lezen", rnd)
+        assert r.returncode == 0, r.stderr
+        assert (rnd / "KILL").exists() and "geen orders" in r.stdout
+    (rnd / "logs" / "ronde.jsonl").write_text("{}\n")             # wat de ronde verder bewaart
+    r = _paper("Stand bewaren", rnd)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert show(bare, "KILL") is not None                           # noodstop staat er nog
+    assert show(bare, "logs/ronde.jsonl") == "{}\n"                # en de ronde is ook bewaard
+    assert len(show(bare, "noodstop-log.jsonl").splitlines()) == 1
+
+
+def test_telegram_network_errors_are_retried_and_explained_without_the_token(monkeypatch):
+    import io
+    import socket
+    import urllib.error
+
+    from jplh.notify import Telegram
+
+    calls = []
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def flaky(req, timeout=None, context=None):
+        calls.append(1)
+        if len(calls) < 3:
+            raise urllib.error.URLError(socket.timeout("timed out"))
+        return Resp(b'{"ok": true, "result": []}')
+
+    monkeypatch.setattr("urllib.request.urlopen", flaky)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert Telegram(GOOD).call("getUpdates")["ok"] and len(calls) == 3
+    calls.clear()
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: (_ for _ in ()).throw(
+        urllib.error.URLError(ConnectionResetError(104, "Connection reset by peer"))))
+    with pytest.raises(RuntimeError) as err:
+        Telegram(GOOD).call("getUpdates")
+    msg = str(err.value)
+    assert "URLError" in msg and "Connection reset" in msg and GOOD not in msg

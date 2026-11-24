@@ -144,3 +144,20 @@ Daarnaast geldt:
   - twee diagnose-commando's;
   - een alleen-lezen gezondheidsstap;
   - een handmatige werkflow die pas iets doet als jij hem start.
+
+## Uitvoering (24-11-2026, gemeten)
+
+| Controle | Bron | Uitkomst |
+|---|---|---|
+| Telegram-token | Jarvis 45455330029 (18:03), stap Gezondheid | `HEALTHY token geldig, geen webhook` (was 404 tot 17:53) |
+| getUpdates | Jarvis 45455330029 (18:03) | eenmalig `URLError` (netwerk); daarom nu 3 pogingen en de reden in de melding |
+| getUpdates | Jarvis 45457172542 (18:13) | geslaagd; 0 wachtende berichten, offset ongewijzigd, "niets veranderd" |
+| Chat-koppeling | config-check 18:13 | chat-id uit het geheim; niet meer in de stand; `connected` aanwezig |
+| Health-monitor | 18:03 en 18:13 | totaal DEGRADED, alleen door "Privé-opslag nog niet in gebruik" (verwacht) |
+| Stand | `state-check` op `paper-data` 85190db (17:45) | 26 bestanden, 6 databases ok, 19 journals / 84 regels, €904,13, pauzes crypto + metals, geen KILL |
+
+**Gevonden en opgelost na PR #38:**
+
+1. De noodstop zat in concurrency-groep `paper`. GitHub houdt per groep maar één wachtende run aan en annuleert de oudere, dus een door de wachter gestarte ronde kon een wachtende noodstop stil annuleren. De noodstop heeft nu een eigen groep.
+2. Een ronde die al liep op het moment van de noodstop, handelde nog op de oude stand. De ronde leest KILL nu vlak vóór het handelen opnieuw uit de opgeslagen stand. Bij het bewaren zet git rebase de ronde bovenop de noodstop, zodat KILL blijft staan. Een test voert beide volgordes uit met de echte stappen uit `paper.yml` en `noodstop.yml`.
+3. Telegram-netwerkfouten krijgen nu 3 pogingen. De melding noemt de reden (bijv. `timed out`) en nooit de token.

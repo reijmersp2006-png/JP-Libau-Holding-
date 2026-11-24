@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -76,7 +77,18 @@ class Telegram:
         self.token = token
         self.timeout = timeout
 
-    def call(self, method: str, params: dict | None = None) -> dict:
+    def call(self, method: str, params: dict | None = None, attempts: int = 3) -> dict:
+        """Netwerkfouten krijgen nog twee kansen (na 2 en 4 s); een HTTP-antwoord van Telegram niet."""
+        for i in range(attempts):
+            try:
+                return self._call(method, params)
+            except RuntimeError as exc:
+                if "HTTP " in str(exc) or "geweigerd" in str(exc) or i == attempts - 1:
+                    raise
+                time.sleep(2 * (i + 1))
+        raise AssertionError("onbereikbaar")
+
+    def _call(self, method: str, params: dict | None = None) -> dict:
         url = API.format(token=self.token, method=method)
         data = urllib.parse.urlencode(params or {}).encode()
         req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT})
@@ -93,7 +105,11 @@ class Telegram:
             desc = desc.replace(self.token, "***") if self.token else desc
             raise RuntimeError(f"Telegram {method} mislukt: HTTP {exc.code} {desc}".rstrip()) from None
         except Exception as exc:   # de token staat in de url: nooit de url in een foutmelding
-            raise RuntimeError(f"Telegram {method} mislukt: {type(exc).__name__}") from None
+            # 9.3: bij een netwerkfout de reden tonen (bijv. "timed out", "Connection reset"), zonder token.
+            reason = getattr(exc, "reason", None)
+            why = f"{type(reason).__name__}: {str(reason)[:120]}" if reason is not None else str(exc)[:120]
+            why = why.replace(self.token, "***") if self.token else why
+            raise RuntimeError(f"Telegram {method} mislukt: {type(exc).__name__} ({why})") from None
         if not out.get("ok"):
             raise RuntimeError(f"Telegram {method} geweigerd: {out.get('description', '?')}")
         return out

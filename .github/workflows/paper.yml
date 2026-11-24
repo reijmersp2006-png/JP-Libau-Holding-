@@ -64,6 +64,14 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
+      - name: Noodstop vlak voor het handelen opnieuw lezen
+        # 9.3: een noodstop die tijdens het ophalen werd gezet (werkflow Noodstop of Jarvis) telt meteen mee.
+        run: |
+          if git -C state fetch -q --depth 1 origin paper-data 2>/dev/null && git -C state cat-file -e FETCH_HEAD:KILL 2>/dev/null; then
+            git -C state show FETCH_HEAD:KILL > KILL
+            echo "Noodstop staat aan: deze ronde plaatst geen orders"
+          fi
+
       - name: Paper-ronde
         run: jplh run
         env:
