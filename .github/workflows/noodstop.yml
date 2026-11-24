@@ -27,8 +27,12 @@ on:
 permissions:
   contents: write
 
+# Bewust een eigen groep, niet "paper": GitHub houdt per groep maar één wachtende run aan en annuleert
+# de oudere. In de groep "paper" zou een door de wachter gestarte ronde een wachtende noodstop dus
+# stilletjes kunnen annuleren. Gelijktijdigheid met een ronde is veilig: de ronde leest KILL vlak voor
+# het handelen opnieuw, en bij het bewaren zet git rebase de ronde bovenop de noodstop (KILL blijft).
 concurrency:
-  group: paper            # nooit tegelijk met een handelsronde
+  group: noodstop
   cancel-in-progress: false
 
 jobs:
