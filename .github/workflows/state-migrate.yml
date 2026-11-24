@@ -62,7 +62,14 @@ jobs:
           if [ "$STAND" = terugzetten ] && [ "$BEVESTIGING" != TERUG ]; then echo "Bevestig met TERUG"; exit 1; fi
           pub="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           priv="https://x-access-token:${STATE_TOKEN}@github.com/${DOEL}.git"
-          git ls-remote "$priv" >/dev/null 2>&1 || { echo "Privé-repo niet bereikbaar met STATE_TOKEN (naam of rechten?)"; exit 1; }
+          # 9.2 diagnose zonder waarden: vorm van de token, en wat GitHub zegt.
+          case "$STATE_TOKEN" in github_pat_*) vorm="fine-grained";; ghp_*) vorm="classic";; *) vorm="onbekend begin";; esac
+          echo "STATE_TOKEN: vorm $vorm, ${#STATE_TOKEN} tekens"
+          if printf '%s' "$STATE_TOKEN" | grep -q '[[:space:]]'; then echo "STATE_TOKEN bevat een spatie of regeleinde: opnieuw plakken"; fi
+          u=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $STATE_TOKEN" https://api.github.com/user)
+          r=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $STATE_TOKEN" "https://api.github.com/repos/$DOEL")
+          echo "GitHub met STATE_TOKEN: token-check HTTP $u (200 = geldig), repo-check HTTP $r (200 = toegang; 404 = naam onjuist of repo niet aan de token gekoppeld)"
+          git ls-remote "$priv" >/dev/null 2>git.err || { echo "git zegt: $(head -c 300 git.err)"; echo "Privé-repo niet bereikbaar met STATE_TOKEN (naam of rechten?)"; exit 1; }
           vis=$(GH_TOKEN="$STATE_TOKEN" gh api "repos/$DOEL" --jq .private 2>/dev/null || echo onbekend)
           [ "$vis" = "true" ] || { echo "Doel is niet aantoonbaar privé ($vis): geweigerd"; exit 1; }
           echo "Privé-repo bereikbaar; branch paper-data daar: $(git ls-remote --heads "$priv" paper-data | wc -l)"

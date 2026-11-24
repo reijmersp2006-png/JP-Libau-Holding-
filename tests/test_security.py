@@ -169,3 +169,22 @@ def test_config_check_prints_only_yes_no(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert CHAT not in out and "geheim-token" not in out
     assert "geheim klopt met gekoppelde chat" in out and re.search(r"STATE_TOKEN aanwezig +ja", out)
+
+
+def test_telegram_http_errors_show_status_and_reason_but_never_the_token(monkeypatch):
+    import io
+    import urllib.error
+
+    from jplh.notify import Telegram
+
+    token = "123456789:" + "B" * 35
+
+    def boom(req, timeout=None, context=None):
+        body = io.BytesIO(b'{"ok":false,"error_code":409,"description":"Conflict: can\'t use getUpdates method while webhook is active"}')
+        raise urllib.error.HTTPError(req.full_url, 409, "Conflict", {}, body)
+
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    with pytest.raises(RuntimeError) as err:
+        Telegram(token).call("getUpdates")
+    msg = str(err.value)
+    assert "HTTP 409" in msg and "webhook is active" in msg and token not in msg and "B" * 35 not in msg
