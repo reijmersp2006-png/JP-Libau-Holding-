@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
@@ -82,6 +83,15 @@ class Telegram:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout, context=ssl_context()) as resp:
                 out = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            # 9.2: Telegram zegt in de body wát er mis is (bijv. 401 Unauthorized, 409 Conflict: webhook
+            # actief). Die tekst bevat nooit de token; voor de zekerheid wordt hij toch weggepoetst.
+            try:
+                desc = str(json.loads(exc.read() or b"{}").get("description", ""))[:200]
+            except Exception:  # noqa: BLE001
+                desc = ""
+            desc = desc.replace(self.token, "***") if self.token else desc
+            raise RuntimeError(f"Telegram {method} mislukt: HTTP {exc.code} {desc}".rstrip()) from None
         except Exception as exc:   # de token staat in de url: nooit de url in een foutmelding
             raise RuntimeError(f"Telegram {method} mislukt: {type(exc).__name__}") from None
         if not out.get("ok"):
