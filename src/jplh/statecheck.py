@@ -26,7 +26,7 @@ def _sha(path: Path) -> str:
 
 def _files(home: Path) -> list[Path]:
     out = [p for d in ("data", "logs") for p in sorted((home / d).rglob("*")) if p.is_file()]
-    out += [home / n for n in ("jarvis.json", "KILL") if (home / n).is_file()]
+    out += [home / n for n in ("jarvis.json", "KILL", "noodstop-log.jsonl") if (home / n).is_file()]
     return out
 
 

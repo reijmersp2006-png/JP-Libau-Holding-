@@ -315,6 +315,68 @@ def cmd_config_check(args) -> int:
     return 0
 
 
+def cmd_telegram_check(args) -> int:
+    """9.3: is de bottoken geldig en staat er geen webhook? Toont nooit de token."""
+    import os
+
+    from jplh.health import HEALTHY, check_telegram
+    c = check_telegram(os.environ.get("TELEGRAM_TOKEN"))
+    print(f"Telegram: {c.status}  {c.detail}")
+    for k, v in c.facts.items():
+        print(f"  {k:<22} {v}")
+    return 0 if c.status == HEALTHY else 1
+
+
+def cmd_access_check(args) -> int:
+    """9.3: waarom wel of geen toegang tot de privé-repo? Lezen en schrijven (dry-run), niets wordt geschreven."""
+    import os
+
+    from jplh.health import check_repo_access
+    r = check_repo_access(args.repo, os.environ.get("STATE_TOKEN"))
+    for k, v in r.items():
+        print(f"{k:<12} {v}")
+    return 0 if r["oorzaak"] in ("OK", "LEEG_OK") else 1
+
+
+def cmd_health(args) -> int:
+    """9.3: gezondheid van alle onderdelen (HEALTHY/DEGRADED/OFFLINE/CRITICAL). Alleen lezen."""
+    import json
+    import os
+
+    from jplh import health as H
+    now = datetime.now(tz=UTC)
+    gh = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    hdr = {"Authorization": f"Bearer {gh}", "Accept": "application/vnd.github+json"} if gh else {}
+    tg = H.check_telegram(os.environ.get("TELEGRAM_TOKEN"))
+    comps = [tg]
+    if repo and gh:
+        code, _ = H.http(f"https://api.github.com/repos/{repo}", hdr)
+        comps.append(H.check_github_auth(code))
+        dcode, deps = H.http(f"https://api.github.com/repos/{repo}/deployments?environment=github-pages&per_page=1", hdr)
+        state = age = None
+        if dcode == 200 and isinstance(deps, list) and deps:
+            scode, sts = H.http(deps[0]["statuses_url"] + "?per_page=1", hdr)
+            if scode == 200 and isinstance(sts, list) and sts:
+                state = sts[0].get("state")
+                created = datetime.fromisoformat(sts[0]["created_at"].replace("Z", "+00:00"))
+                age = (now - created).total_seconds() / 60
+        comps.append(H.check_pages(state, age))
+    state_repo = os.environ.get("STATE_REPO")
+    access = H.check_repo_access(state_repo, os.environ.get("STATE_TOKEN")) if state_repo else None
+    comps.append(H.check_state_storage(state_repo, access))
+    comps.append(H.check_scheduler(args.last_round, now))
+    comps.append(H.check_database(args.home))
+    comps.append(H.emergency_channels(tg, Path(".github/workflows/noodstop.yml").is_file()))
+    comps.append(H.check_ai_gateway())
+    print(H.report(comps, now))
+    if args.out:
+        args.out.write_text(json.dumps({"at": now.isoformat(), "overall": H.overall(comps),
+                                        "components": [{"name": c.name, "status": c.status, "detail": c.detail,
+                                                        "counts": c.counts} for c in comps]}, indent=1))
+    return 1 if args.strict and H.overall(comps) == H.CRITICAL else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jplh", description="JP-libau Holding: trading- en onderzoeksbot (paper)")
     p.add_argument("--version", action="version", version=f"jplh {__version__}")
@@ -362,6 +424,16 @@ def build_parser() -> argparse.ArgumentParser:
     ss = sub.add_parser("secret-scan", help="zoek naar tokens en sleutels in bestanden")
     ss.add_argument("paths", nargs="*", help="bestanden om te scannen")
     ss.set_defaults(fn=cmd_secret_scan)
+    sub.add_parser("telegram-check", help="is de bottoken geldig, staat er een webhook (nooit de token)").set_defaults(
+        fn=cmd_telegram_check)
+    ac = sub.add_parser("access-check", help="toegang tot de privé-repo: oorzaak per toestand")
+    ac.add_argument("--repo", required=True, help="eigenaar/naam")
+    ac.set_defaults(fn=cmd_access_check)
+    he = sub.add_parser("health", help="gezondheid per onderdeel: HEALTHY/DEGRADED/OFFLINE/CRITICAL")
+    he.add_argument("--last-round", type=float, help="tijdstip (epoch) van de laatste paper-ronde")
+    he.add_argument("--out", type=Path, help="uitkomst als JSON bewaren")
+    he.add_argument("--strict", action="store_true", help="exitcode 1 bij CRITICAL")
+    he.set_defaults(fn=cmd_health)
     return p
 
 
