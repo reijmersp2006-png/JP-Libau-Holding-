@@ -139,7 +139,7 @@ def check_repo_access(repo: str, token: str | None, get=http, git=_git) -> dict:
     if not token:
         return {"token": shape, "oorzaak": "GEEN_TOKEN", "uitleg": "geheim STATE_TOKEN ontbreekt"}
     h = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-    ucode, _ = get("https://api.github.com/user", h)
+    ucode, ubody = get("https://api.github.com/user", h)
     rcode, rbody = get(f"https://api.github.com/repos/{repo}", h)
     private = rbody.get("private") if rcode == 200 else None
     similar = None
@@ -149,11 +149,25 @@ def check_repo_access(repo: str, token: str | None, get=http, git=_git) -> dict:
         stem = repo.split("/")[-1].strip("-_.").lower()
         similar = [n for n in names if stem and stem[:6] in n.lower()]
     read_ok = heads = write_ok = None
+    extra: dict = {}
     if rcode == 200 and private:
         url = f"https://x-access-token:{token}@github.com/{repo}.git"
         rc, out = git(["ls-remote", "--heads", url])
         read_ok = rc == 0
         heads = len([ln for ln in out.splitlines() if "refs/heads/" in ln]) if read_ok else None
+        if not read_ok:
+            # 9.3: git zegt bij ontbrekende Contents-rechten "Repository not found". De API onderscheidt het
+            # wel: zonder Contents-rechten 403, met rechten 200 (of 404 "This repository is empty").
+            ccode, cbody = get(f"https://api.github.com/repos/{repo}/contents/", h)
+            msg = str(cbody.get("message", "")) if isinstance(cbody, dict) else ""
+            contents = "geweigerd" if ccode == 403 else "ok" if ccode == 200 or "empty" in msg.lower() else f"HTTP {ccode}"
+            login = ubody.get("login") if isinstance(ubody, dict) else None
+            alt_ok = False
+            if contents == "ok" and login:            # rechten in orde: dan ligt het aan de git-gebruikersnaam?
+                alt = f"https://{login}:{token}@github.com/{repo}.git"
+                rc2, out2 = git(["ls-remote", "--heads", alt])
+                alt_ok = rc2 == 0
+            extra = {"contents_api": contents, "git_met_eigen_naam": alt_ok if contents == "ok" else None}
         if read_ok:
             with tempfile.TemporaryDirectory() as tmp:
                 git(["init", "-q", tmp])
@@ -161,8 +175,14 @@ def check_repo_access(repo: str, token: str | None, get=http, git=_git) -> dict:
                 rc, _ = git(["push", "--dry-run", "-q", url, "HEAD:refs/heads/toegangstest"], Path(tmp))
                 write_ok = rc == 0
     cause, text = classify_repo_access(ucode, rcode, private, read_ok, heads, write_ok, similar)
+    if extra.get("contents_api") == "geweigerd":
+        text = ("GitHub bevestigt: de token heeft geen Contents-rechten op deze repo (API 403). Zet bij de token "
+                "Repository permissions > Contents op 'Read and write' en klik Update")
+    elif extra.get("contents_api") == "ok":
+        cause, text = ("GIT_GEBRUIKERSNAAM", "rechten in orde; git werkt wel met de eigen gebruikersnaam") if extra[
+            "git_met_eigen_naam"] else ("GIT_ONBEKEND", "API-rechten in orde, maar git weigert; git-melding nodig")
     return {"token": shape, "token_http": ucode, "repo_http": rcode, "prive": private, "lezen": read_ok,
-            "schrijven": write_ok, "branches": heads, "oorzaak": cause, "uitleg": text}
+            "schrijven": write_ok, "branches": heads, **extra, "oorzaak": cause, "uitleg": text}
 
 
 # ---------------------------------------------------------------- overige onderdelen

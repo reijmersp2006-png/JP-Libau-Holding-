@@ -296,3 +296,38 @@ def test_telegram_network_errors_are_retried_and_explained_without_the_token(mon
         Telegram(GOOD).call("getUpdates")
     msg = str(err.value)
     assert "URLError" in msg and "Connection reset" in msg and GOOD not in msg
+
+
+def test_git_not_found_is_split_into_missing_contents_or_username():
+    git_fail = lambda args, cwd=None: (128, "remote: Repository not found.")  # noqa: E731
+    base = {"/user": (200, {"login": "eigenaar"}), "/repos/o/jplh-state-": (200, {"private": True})}
+    r = H.check_repo_access("o/jplh-state-", "github_pat_z",
+                            get=fake({"/contents/": (403, {"message": "Resource not accessible by personal access token"}),
+                                      **base}), git=git_fail)
+    assert r["oorzaak"] == "RECHTEN" and r["contents_api"] == "geweigerd" and "Contents" in r["uitleg"]
+
+    def git_user(args, cwd=None):
+        return (0, "") if any(a.startswith("https://eigenaar:") for a in args) else (128, "not found")
+    r = H.check_repo_access("o/jplh-state-", "github_pat_z",
+                            get=fake({"/contents/": (404, {"message": "This repository is empty."}), **base}),
+                            git=git_user)
+    assert r["oorzaak"] == "GIT_GEBRUIKERSNAAM" and r["git_met_eigen_naam"] is True
+    assert "github_pat_z" not in json.dumps(r)
+
+
+@needs_git
+def test_a_stop_set_while_the_round_is_trading_reaches_it_within_seconds(state_repo):
+    tmp, bare = state_repo
+    rnd = _round_clone(tmp, bare, "ronde")
+    assert run_all(tmp / "stopnu", bare, "stop")[0] == 0           # noodstop terwijl de ronde al handelt
+    # "jplh run" wordt een ronde die per 'order' naar KILL kijkt, zoals de risicocheck doet
+    fake_run = "for i in $(seq 1 40); do [ -f KILL ] && exit 0; sleep 0.25; done; exit 9"
+    script = PSTEPS["Paper-ronde"].replace("sleep 5", "sleep 1").replace("jplh run", f"( {fake_run} )")
+    r = subprocess.run(["bash", "-e", "-c", script], cwd=rnd, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr                   # de 'ronde' zag KILL binnen 10 s
+    assert (rnd / "KILL").read_text().startswith("noodstop via GitHub") and "stond aan" in r.stdout
+
+
+def test_round_watcher_never_hides_a_failed_round():
+    text = PSTEPS["Paper-ronde"]
+    assert "jplh run || rc=$?" in text and 'exit "$rc"' in text and 'kill "$wachter"' in text

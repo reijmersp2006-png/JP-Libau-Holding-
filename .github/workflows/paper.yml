@@ -67,13 +67,31 @@ jobs:
       - name: Noodstop vlak voor het handelen opnieuw lezen
         # 9.3: een noodstop die tijdens het ophalen werd gezet (werkflow Noodstop of Jarvis) telt meteen mee.
         run: |
-          if git -C state fetch -q --depth 1 origin paper-data 2>/dev/null && git -C state cat-file -e FETCH_HEAD:KILL 2>/dev/null; then
+          if ! git -C state fetch -q --depth 1 origin paper-data 2>/dev/null; then
+            echo "Waarschuwing: opgeslagen stand niet bereikbaar; noodstop van het ophalen geldt"
+          elif git -C state cat-file -e FETCH_HEAD:KILL 2>/dev/null; then
             git -C state show FETCH_HEAD:KILL > KILL
             echo "Noodstop staat aan: deze ronde plaatst geen orders"
           fi
 
       - name: Paper-ronde
-        run: jplh run
+        # 9.3: tijdens de ronde kijkt een wachter elke 5 seconden of er een noodstop is gezet. De risicocheck
+        # leest KILL vóór elke order opnieuw, dus een noodstop telt binnen enkele seconden mee.
+        run: |
+          (
+            while sleep 5; do
+              if git -C state fetch -q --depth 1 origin paper-data 2>/dev/null && git -C state cat-file -e FETCH_HEAD:KILL 2>/dev/null; then
+                git -C state show FETCH_HEAD:KILL > KILL.tmp && mv KILL.tmp KILL
+              fi
+            done
+          ) &
+          wachter=$!
+          rc=0
+          jplh run || rc=$?
+          kill "$wachter" 2>/dev/null || true
+          wait "$wachter" 2>/dev/null || true
+          [ -f KILL ] && echo "Noodstop stond aan tijdens of na de ronde"
+          exit "$rc"
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
